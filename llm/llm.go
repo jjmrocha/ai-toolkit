@@ -1,7 +1,7 @@
 // Package llm provides a provider-agnostic client for chat-based large language
 // models. Construct an [LLM] with [New], then call [LLM.Chat] to exchange
-// messages and [LLM.ModelInfo] to query model metadata. OpenRouter is the
-// currently supported provider.
+// messages and [LLM.ModelInfo] to query model metadata. OpenRouter and Ollama
+// are the supported providers.
 package llm
 
 import "context"
@@ -30,6 +30,13 @@ func New(cfg Config) (*LLM, error) {
 	switch cfg.Provider {
 	case ProviderOpenRouter:
 		p, err := newOpenRouter(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		provider = p
+	case ProviderOllama:
+		p, err := newOllama(cfg)
 		if err != nil {
 			return nil, err
 		}

@@ -4,8 +4,8 @@ A small, provider-agnostic client for chat-based large language models in Go.
 The `llm` package gives you one consistent API for sending messages, calling
 tools, and reading token usage, regardless of the backend.
 
-OpenRouter is the currently supported provider. The design isolates each
-provider behind an internal interface, so additional backends can be added
+**OpenRouter** and **Ollama** are the supported providers. The design isolates
+each provider behind an internal interface, so additional backends can be added
 without changing the public API.
 
 Requires **Go 1.26+**. HTTP transport is handled by
@@ -62,7 +62,8 @@ func main() {
 ## Concepts
 
 **Client.** An [`LLM`](#api-reference) is created with [`New`](#api-reference) from a
-[`Config`](#config). `Provider`, `APIKey`, and `Model` are required; `BaseURL`
+[`Config`](#config). `Provider` and `Model` are always required; `APIKey` is
+required for OpenRouter but unused by Ollama (typically a local server); `BaseURL`
 defaults to the provider's standard endpoint. The client is safe for concurrent
 use.
 
@@ -82,20 +83,31 @@ your code executes the work and returns the result as a `ToolMessage`.
 
 ## Usage
 
-### Configuration
+OpenRouter (hosted, requires an API key):
 
 ```go
 client, err := llm.New(llm.Config{
-	Provider: llm.ProviderOpenRouter,        // required
-	APIKey:   os.Getenv("OPENROUTER_API_KEY"), // required
-	Model:    "openai/gpt-4o",               // required
-	BaseURL:  "",                            // optional — defaults to the provider endpoint
+	Provider: llm.ProviderOpenRouter,          // required
+	APIKey:   os.Getenv("OPENROUTER_API_KEY"), // required for OpenRouter
+	Model:    "openai/gpt-4o",                 // required
+	BaseURL:  "",                              // optional — defaults to https://openrouter.ai/api/v1
 })
 ```
 
-`New` returns [`ErrMissingProvider`](#errors), [`ErrMissingModel`](#errors), or
-[`ErrMissingAPIKey`](#errors) when a required field is empty, and
-[`ErrUnsupportedProvider`](#errors) when the provider is not recognized.
+Ollama (local, no API key):
+
+```go
+client, err := llm.New(llm.Config{
+	Provider: llm.ProviderOllama, // required
+	Model:    "llama3.2",         // required
+	BaseURL:  "",                 // optional — defaults to http://localhost:11434
+})
+```
+
+`New` returns [`ErrMissingProvider`](#errors) or [`ErrMissingModel`](#errors) when a
+required field is empty, [`ErrMissingAPIKey`](#errors) when OpenRouter is selected
+without a key, and [`ErrUnsupportedProvider`](#errors) when the provider is not
+recognized.
 
 ### Chat
 
@@ -146,7 +158,8 @@ if len(reply.ToolCalls) > 0 {
 	for _, call := range reply.ToolCalls {
 		result := runTool(call.Name, call.Arguments) // your code
 		messages = append(messages, llm.ToolMessage{
-			ToolCallID: call.ID, // must match the call
+			ToolCallID: call.ID,   // OpenRouter correlates by call id
+			ToolName:   call.Name, // Ollama correlates by tool name
 			Content:    result,
 		})
 	}
@@ -198,10 +211,10 @@ Constructor: `New(cfg Config) (*LLM, error)`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| Provider | `Provider` | Backend to use. Required (`ProviderOpenRouter`). |
-| APIKey | `string` | Provider API key. Required. |
-| Model | `string` | Provider-specific model id, e.g. `"openai/gpt-4o"`. Required. |
-| BaseURL | `string` | Override the provider endpoint. Optional. |
+| Provider | `Provider` | Backend to use: `ProviderOpenRouter` or `ProviderOllama`. Required. |
+| APIKey | `string` | Provider API key. Required for OpenRouter; unused by Ollama. |
+| Model | `string` | Provider-specific model id, e.g. `"openai/gpt-4o"` or `"llama3.2"`. Required. |
+| BaseURL | `string` | Override the provider endpoint. Optional (defaults per provider). |
 
 ### Messages
 
@@ -212,9 +225,11 @@ Constructor: `New(cfg Config) (*LLM, error)`.
 | `SystemMessage` | `Content string` |
 | `UserMessage` | `Content string` |
 | `AssistantMessage` | `Content string`, `ToolCalls []ToolCall`, `Stats Stats` |
-| `ToolMessage` | `ToolCallID string`, `Content string` |
+| `ToolMessage` | `ToolCallID string`, `ToolName string`, `Content string` |
 
 Role constants: `SystemRole`, `UserRole`, `AssistantRole`, `ToolRole` (type `RoleName`).
+
+On a `ToolMessage`, set `ToolCallID` for OpenRouter (id-based correlation) or `ToolName` for Ollama (name-based).
 
 ### Tools
 
@@ -229,7 +244,7 @@ Role constants: `SystemRole`, `UserRole`, `AssistantRole`, `ToolRole` (type `Rol
 |------|--------|-------------|
 | `ModelInfo` | `Name string`, `ContextSize int` | Model metadata (`ContextSize` in tokens). |
 | `Stats` | `PromptTokens`, `OutputTokens`, `TotalTokens int` | Token usage for a response. |
-| `Provider` | — | Provider identifier; `ProviderOpenRouter`. |
+| `Provider` | — | Provider identifier: `ProviderOpenRouter`, `ProviderOllama`. |
 
 ### Errors
 
@@ -237,7 +252,7 @@ Role constants: `SystemRole`, `UserRole`, `AssistantRole`, `ToolRole` (type `Rol
 |-------|-------------|------|
 | `ErrMissingProvider` | `New` | `Config.Provider` is empty. |
 | `ErrMissingModel` | `New` | `Config.Model` is empty. |
-| `ErrMissingAPIKey` | `New` | `Config.APIKey` is empty. |
+| `ErrMissingAPIKey` | `New` | `Config.APIKey` is empty (OpenRouter only). |
 | `ErrUnsupportedProvider` | `New` | `Config.Provider` is not recognized. |
 | `ErrModelNotFound` | `ModelInfo` | The configured model is not offered by the provider. |
 

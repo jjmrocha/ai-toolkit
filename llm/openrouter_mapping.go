@@ -12,15 +12,24 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 		switch m.Role() {
 		case SystemRole:
 			msg := m.(SystemMessage)
-			orMsg := orMessage{Role: string(SystemRole), Content: msg.Content}
+			orMsg := orMessage{
+				Role:    string(SystemRole),
+				Content: msg.Content,
+			}
 			convertedMessages = append(convertedMessages, orMsg)
 		case UserRole:
 			msg := m.(UserMessage)
-			orMsg := orMessage{Role: string(UserRole), Content: msg.Content}
+			orMsg := orMessage{
+				Role:    string(UserRole),
+				Content: msg.Content,
+			}
 			convertedMessages = append(convertedMessages, orMsg)
 		case AssistantRole:
 			msg := m.(AssistantMessage)
-			orMsg := orMessage{Role: string(AssistantRole), Content: msg.Content}
+			orMsg := orMessage{
+				Role:    string(AssistantRole),
+				Content: msg.Content,
+			}
 
 			for _, call := range msg.ToolCalls {
 				args, err := json.Marshal(call.Arguments)
@@ -29,9 +38,12 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 				}
 
 				toolCall := orToolCall{
-					ID:       call.ID,
-					Type:     "function",
-					Function: orToolCallFunction{Name: call.Name, Arguments: string(args)},
+					ID:   call.ID,
+					Type: "function",
+					Function: orToolCallFunction{
+						Name:      call.Name,
+						Arguments: string(args),
+					},
 				}
 				orMsg.ToolCalls = append(orMsg.ToolCalls, toolCall)
 			}
@@ -39,7 +51,11 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 			convertedMessages = append(convertedMessages, orMsg)
 		case ToolRole:
 			msg := m.(ToolMessage)
-			orMsg := orMessage{Role: string(ToolRole), Content: msg.Content, ToolCallID: msg.ToolCallID}
+			orMsg := orMessage{
+				Role:       string(ToolRole),
+				Content:    msg.Content,
+				ToolCallID: msg.ToolCallID,
+			}
 			convertedMessages = append(convertedMessages, orMsg)
 		}
 	}
@@ -69,7 +85,7 @@ func toORTools(tools []Tool) []orTool {
 	return toolList
 }
 
-func toAssistantMessage(resp orResponse) (*AssistantMessage, error) {
+func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
 	choice := resp.Choices[0].Message
 
 	result := AssistantMessage{
@@ -102,10 +118,13 @@ func toAssistantMessage(resp orResponse) (*AssistantMessage, error) {
 	return &result, nil
 }
 
-func toModelInfo(models []orModel, id string) (ModelInfo, error) {
+func fromORToModelInfo(models []orModel, id string) (ModelInfo, error) {
 	for _, m := range models {
 		if m.ID == id {
-			return ModelInfo{Name: m.Name, ContextSize: m.ContextLength}, nil
+			return ModelInfo{
+				Name:        m.Name,
+				ContextSize: m.ContextLength,
+			}, nil
 		}
 	}
 

@@ -122,15 +122,15 @@ func TestToORTools(t *testing.T) {
 	})
 }
 
-func TestToAssistantMessage(t *testing.T) {
+func TestFromORToAssistantMessage(t *testing.T) {
 	t.Run("maps content and usage stats", func(t *testing.T) {
 		// given
-		resp := orResponse{
+		resp := orChatResponse{
 			Choices: []orChoice{{Message: orResponseMessage{Content: "Hello there"}}},
 			Usage:   orUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		}
 		// when
-		result, err := toAssistantMessage(resp)
+		result, err := fromORToAssistantMessage(resp)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "Hello there", result.Content)
@@ -139,12 +139,12 @@ func TestToAssistantMessage(t *testing.T) {
 
 	t.Run("decodes tool call arguments from a JSON string", func(t *testing.T) {
 		// given
-		resp := orResponse{Choices: []orChoice{{Message: orResponseMessage{ToolCalls: []orToolCall{{
+		resp := orChatResponse{Choices: []orChoice{{Message: orResponseMessage{ToolCalls: []orToolCall{{
 			ID:       "call_1",
 			Function: orToolCallFunction{Name: "get_weather", Arguments: `{"city":"Lisbon"}`},
 		}}}}}}
 		// when
-		result, err := toAssistantMessage(resp)
+		result, err := fromORToAssistantMessage(resp)
 		// then
 		require.NoError(t, err)
 		expected := ToolCall{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"city": "Lisbon"}}
@@ -153,12 +153,12 @@ func TestToAssistantMessage(t *testing.T) {
 
 	t.Run("leaves arguments nil when the tool call has none", func(t *testing.T) {
 		// given
-		resp := orResponse{Choices: []orChoice{{Message: orResponseMessage{ToolCalls: []orToolCall{{
+		resp := orChatResponse{Choices: []orChoice{{Message: orResponseMessage{ToolCalls: []orToolCall{{
 			ID:       "call_1",
 			Function: orToolCallFunction{Name: "ping", Arguments: ""},
 		}}}}}}
 		// when
-		result, err := toAssistantMessage(resp)
+		result, err := fromORToAssistantMessage(resp)
 		// then
 		require.NoError(t, err)
 		assert.Nil(t, result.ToolCalls[0].Arguments)
@@ -166,19 +166,19 @@ func TestToAssistantMessage(t *testing.T) {
 
 	t.Run("returns an error when tool call arguments are malformed", func(t *testing.T) {
 		// given
-		resp := orResponse{Choices: []orChoice{{Message: orResponseMessage{ToolCalls: []orToolCall{{
+		resp := orChatResponse{Choices: []orChoice{{Message: orResponseMessage{ToolCalls: []orToolCall{{
 			ID:       "call_1",
 			Function: orToolCallFunction{Name: "get_weather", Arguments: "{not json"},
 		}}}}}}
 		// when
-		result, err := toAssistantMessage(resp)
+		result, err := fromORToAssistantMessage(resp)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "decoding tool call arguments")
 	})
 }
 
-func TestToModelInfo(t *testing.T) {
+func TestFromORToModelInfo(t *testing.T) {
 	models := []orModel{
 		{ID: "anthropic/claude-3", Name: "Claude 3", ContextLength: 200000},
 		{ID: "openai/gpt-4o", Name: "OpenAI: GPT-4o", ContextLength: 128000},
@@ -186,7 +186,7 @@ func TestToModelInfo(t *testing.T) {
 
 	t.Run("maps the matching model", func(t *testing.T) {
 		// when
-		result, err := toModelInfo(models, "openai/gpt-4o")
+		result, err := fromORToModelInfo(models, "openai/gpt-4o")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, result)
@@ -194,7 +194,7 @@ func TestToModelInfo(t *testing.T) {
 
 	t.Run("returns ErrModelNotFound when the id is absent", func(t *testing.T) {
 		// when
-		result, err := toModelInfo(models, "missing/model")
+		result, err := fromORToModelInfo(models, "missing/model")
 		// then
 		assert.Equal(t, ModelInfo{}, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
@@ -202,7 +202,7 @@ func TestToModelInfo(t *testing.T) {
 
 	t.Run("returns ErrModelNotFound for an empty list", func(t *testing.T) {
 		// when
-		result, err := toModelInfo(nil, "openai/gpt-4o")
+		result, err := fromORToModelInfo(nil, "openai/gpt-4o")
 		// then
 		assert.Equal(t, ModelInfo{}, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)

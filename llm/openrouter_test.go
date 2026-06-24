@@ -65,7 +65,7 @@ func TestChat(t *testing.T) {
 		assert.Equal(t, "/chat/completions", gotPath)
 		assert.Equal(t, "Bearer sk-test", gotAuth)
 
-		var sent orRequest
+		var sent orChatRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
 		assert.Equal(t, "openai/gpt-4o", sent.Model)
 		assert.Len(t, sent.Messages, 2)

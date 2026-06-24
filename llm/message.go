@@ -61,11 +61,16 @@ func (AssistantMessage) Role() RoleName {
 
 func (AssistantMessage) isMessage() {}
 
-// ToolMessage carries the result of a [ToolCall] back to the model. ToolCallID
-// must match the ID of the originating call.
+// ToolMessage carries the result of a [ToolCall] back to the model. Providers
+// correlate the result either by call ID (e.g. OpenRouter) or by tool name
+// (e.g. Ollama), so both fields are available; set whichever the provider uses.
 type ToolMessage struct {
+	// ToolCallID matches the ID of the originating [ToolCall].
 	ToolCallID string
-	Content    string
+	// ToolName is the name of the tool that produced the result.
+	ToolName string
+	// Content is the tool's result.
+	Content string
 }
 
 // Role returns [ToolRole].

@@ -47,9 +47,20 @@ func TestNew(t *testing.T) {
 		})
 	}
 
-	t.Run("valid config returns a configured LLM", func(t *testing.T) {
+	t.Run("valid openrouter config returns a configured LLM", func(t *testing.T) {
 		// given
 		cfg := Config{Provider: ProviderOpenRouter, Model: "openai/gpt-4o", APIKey: "sk-test"}
+		// when
+		result, err := New(cfg)
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, cfg, result.cfg)
+	})
+
+	t.Run("valid ollama config returns a configured LLM without an API key", func(t *testing.T) {
+		// given
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2"}
 		// when
 		result, err := New(cfg)
 		// then

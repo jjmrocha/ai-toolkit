@@ -6,6 +6,8 @@ type Provider string
 const (
 	// ProviderOpenRouter selects the OpenRouter backend (https://openrouter.ai).
 	ProviderOpenRouter Provider = "openrouter"
+	// ProviderOllama selects a local or remote Ollama backend (https://ollama.com).
+	ProviderOllama Provider = "ollama"
 )
 
 // Config configures an [LLM]. Provider, APIKey, and Model are required; BaseURL
