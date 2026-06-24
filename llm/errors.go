@@ -3,9 +3,15 @@ package llm
 import "errors"
 
 var (
-	ErrMissingProvider     = errors.New("missing provider")
+	// ErrMissingProvider is returned by [New] when Config.Provider is empty.
+	ErrMissingProvider = errors.New("missing provider")
+	// ErrUnsupportedProvider is returned by [New] when Config.Provider is not a recognized [Provider].
 	ErrUnsupportedProvider = errors.New("unsupported provider")
-	ErrMissingAPIKey       = errors.New("missing api_key")
-	ErrMissingModel        = errors.New("missing model")
-	ErrModelNotFound       = errors.New("model not found")
+	// ErrMissingAPIKey is returned by [New] when Config.APIKey is empty.
+	ErrMissingAPIKey = errors.New("missing api_key")
+	// ErrMissingModel is returned by [New] when Config.Model is empty.
+	ErrMissingModel = errors.New("missing model")
+	// ErrModelNotFound is returned by [LLM.ModelInfo] when the configured model
+	// is not offered by the provider.
+	ErrModelNotFound = errors.New("model not found")
 )
