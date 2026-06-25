@@ -2,7 +2,8 @@
 
 A small, provider-agnostic client for chat-based large language models in Go.
 The `llm` package gives you one consistent API for sending messages, calling
-tools, and reading token usage, regardless of the backend.
+tools, and reading token usage, regardless of the backend. The companion
+`tools` package helps you register tool handlers and build their JSON Schemas.
 
 **OpenRouter** and **Ollama** are the supported providers. The design isolates
 each provider behind an internal interface, so additional backends can be added
@@ -178,6 +179,80 @@ The `Schema` must be a JSON Schema object describing the parameters. Keep to the
 common subset (`type`, `properties`, `required`, `enum`, nested objects/arrays)
 for portability across providers.
 
+### The `tools` package
+
+Writing schema maps by hand and dispatching tool calls yourself gets tedious.
+The `tools` package removes both chores: `ObjectBuilder` constructs the
+parameter schema, and `ToolBox` registers each tool with the function that runs
+it, then dispatches a requested call for you.
+
+```go
+import "github.com/jjmrocha/ai-toolkit/tools"
+
+box := tools.NewToolBox()
+
+box.AddTool(
+	llm.Tool{
+		Name:        "get_weather",
+		Description: "Get the current weather for a city",
+		Schema: tools.NewObjectBuilder().
+			String("city", "the city to look up", true).
+			Build(),
+	},
+	func(args map[string]any) (string, error) {
+		city, _ := args["city"].(string) // arguments arrive with JSON types
+		return weatherFor(city)           // your code
+	},
+)
+
+messages := []llm.Message{llm.UserMessage{Content: "What's the weather in Lisbon?"}}
+
+reply, err := client.Chat(ctx, messages, box.GetTools()) // offer every registered tool
+if err != nil {
+	return err
+}
+
+if len(reply.ToolCalls) > 0 {
+	messages = append(messages, reply)
+
+	for _, call := range reply.ToolCalls {
+		msg, err := box.ExecuteTool(call) // looks up and runs the handler
+		if err != nil {
+			return err
+		}
+		messages = append(messages, *msg)
+	}
+
+	reply, err = client.Chat(ctx, messages, box.GetTools())
+	if err != nil {
+		return err
+	}
+}
+
+fmt.Println(reply.Content)
+```
+
+`ExecuteTool` returns [`ErrToolNotFound`](#errors) if the model names a tool that
+was never registered. A `ToolBox` is safe for concurrent `GetTools`/`ExecuteTool`
+once all tools are registered, but registration itself is not — set it up before
+serving requests.
+
+`ObjectBuilder` covers scalars (`String`, `Integer`, `Number`, `Boolean`),
+arrays of each (`ArrayOfStrings`, …), and nesting. Nested objects and arrays of
+objects take their own `*ObjectBuilder`, so any depth composes:
+
+```go
+address := tools.NewObjectBuilder().
+	String("street", "street name", true).
+	String("city", "city name", true)
+
+schema := tools.NewObjectBuilder().
+	String("name", "full name", true).
+	Object("address", "mailing address", true, address).
+	ArrayOfStrings("tags", "labels", false).
+	Build()
+```
+
 ### Model info
 
 `ModelInfo` reports metadata about the configured model.
@@ -255,6 +330,41 @@ On a `ToolMessage`, set `ToolCallID` for OpenRouter (id-based correlation) or `T
 | `ErrMissingAPIKey` | `New` | `Config.APIKey` is empty (OpenRouter only). |
 | `ErrUnsupportedProvider` | `New` | `Config.Provider` is not recognized. |
 | `ErrModelNotFound` | `ModelInfo` | The configured model is not offered by the provider. |
+
+### `tools` package
+
+Import `github.com/jjmrocha/ai-toolkit/tools`. Full docs at
+[pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools).
+
+`ToolBox` — registry mapping tools to their handlers:
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| NewToolBox | `NewToolBox() *ToolBox` | Create an empty registry. |
+| AddTool | `AddTool(tool llm.Tool, handler Handler)` | Register a tool and its handler (keyed by `tool.Name`; re-registering replaces). |
+| RemoveTool | `RemoveTool(name string)` | Unregister a tool; no-op if absent. |
+| GetTools | `GetTools() []llm.Tool` | All registered tool definitions, for passing to `Chat`. |
+| ExecuteTool | `ExecuteTool(call llm.ToolCall) (*llm.ToolMessage, error)` | Run the handler for a call and wrap the result; returns `ErrToolNotFound` if unknown. |
+
+`Handler` — `func(map[string]any) (string, error)`. Receives the model's decoded
+arguments (JSON types: numbers arrive as `float64`) and returns the result
+string or an error.
+
+`ObjectBuilder` — fluent builder for a parameter schema. Every `Add*` method
+returns the builder for chaining; `Build() map[string]any` produces the schema:
+
+| Method | Adds |
+|--------|------|
+| `String` / `Integer` / `Number` / `Boolean` | A scalar field. |
+| `ArrayOfStrings` / `ArrayOfIntegers` / `ArrayOfNumbers` / `ArrayOfBooleans` | An array of that scalar. |
+| `Object(name, desc string, required bool, spec *ObjectBuilder)` | A nested object. |
+| `ArrayOfObjects(name, desc string, required bool, spec *ObjectBuilder)` | An array of objects. |
+
+All `Add*` methods share the leading signature `(name, desc string, required bool)`.
+
+| Error | Returned by | When |
+|-------|-------------|------|
+| `ErrToolNotFound` | `ToolBox.ExecuteTool` | No registered tool matches the call name. |
 
 ## License
 

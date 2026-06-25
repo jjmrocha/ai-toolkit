@@ -1,0 +1,94 @@
+// Package tools helps wire model tool calls to Go code. It provides a ToolBox
+// that pairs each llm.Tool definition with the function that runs it, and an
+// ObjectBuilder for constructing the JSON Schema that describes a tool's
+// parameters without hand-writing nested maps.
+package tools
+
+import (
+	"fmt"
+
+	"github.com/jjmrocha/ai-toolkit/llm"
+)
+
+// Handler executes a tool call. It receives the decoded arguments from the
+// model (values arrive with JSON types, so numbers are float64) and returns the
+// result string sent back to the model, or an error.
+type Handler func(map[string]any) (string, error)
+
+type fn struct {
+	tool    llm.Tool
+	handler Handler
+}
+
+// ToolBox is a registry that pairs llm.Tool definitions with the functions that
+// execute them, bridging a tool call requested by the model and your code:
+// register tools with AddTool, expose their definitions to the model with
+// GetTools, and run a requested call with ExecuteTool.
+//
+// A ToolBox is not safe for concurrent modification. Register every tool during
+// setup, then treat it as read-only; concurrent ExecuteTool/GetTools calls are
+// then safe.
+type ToolBox struct {
+	tools map[string]fn
+}
+
+// NewToolBox returns an empty ToolBox ready for tool registration.
+func NewToolBox() *ToolBox {
+	return &ToolBox{
+		tools: make(map[string]fn),
+	}
+}
+
+// AddTool registers tool together with the handler that executes it. The
+// handler is keyed by tool.Name; registering a tool whose name already exists
+// replaces the previous entry.
+func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) {
+	t := fn{
+		tool:    tool,
+		handler: handler,
+	}
+	tb.tools[tool.Name] = t
+}
+
+// RemoveTool unregisters the tool with the given name. It is a no-op if no such
+// tool is registered.
+func (tb *ToolBox) RemoveTool(name string) {
+	delete(tb.tools, name)
+}
+
+// GetTools returns the definitions of all registered tools, suitable for
+// passing to llm.LLM.Chat. The order is unspecified.
+func (tb *ToolBox) GetTools() []llm.Tool {
+	tools := make([]llm.Tool, 0, len(tb.tools))
+
+	for _, t := range tb.tools {
+		tools = append(tools, t.tool)
+	}
+
+	return tools
+}
+
+// ExecuteTool runs the handler for the requested tool call and wraps its result
+// in an llm.ToolMessage ready to append to the conversation. It returns
+// ErrToolNotFound if no tool matches call.Name, or a wrapped error if the
+// handler itself fails. The returned message correlates by both ToolCallID and
+// ToolName so it works with either provider.
+func (tb *ToolBox) ExecuteTool(call llm.ToolCall) (*llm.ToolMessage, error) {
+	fn, ok := tb.tools[call.Name]
+	if !ok {
+		return nil, ErrToolNotFound
+	}
+
+	handler := fn.handler
+
+	result, err := handler(call.Arguments)
+	if err != nil {
+		return nil, fmt.Errorf("error executing tool %s: %w", call.Name, err)
+	}
+
+	return &llm.ToolMessage{
+		ToolCallID: call.ID,
+		ToolName:   call.Name,
+		Content:    result,
+	}, nil
+}
