@@ -200,8 +200,11 @@ box.AddTool(
 			Build(),
 	},
 	func(args map[string]any) (string, error) {
-		city, _ := args["city"].(string) // arguments arrive with JSON types
-		return weatherFor(city)           // your code
+		city, err := tools.NewArguments(args).GetString("city") // typed, validated access
+		if err != nil {
+			return "", err
+		}
+		return weatherFor(city) // your code
 	},
 )
 
@@ -251,6 +254,36 @@ schema := tools.NewObjectBuilder().
 	Object("address", "mailing address", true, address).
 	ArrayOfStrings("tags", "labels", false).
 	Build()
+```
+
+Inside a handler, `Arguments` is the read-side counterpart to `ObjectBuilder`:
+it wraps the decoded `map[string]any` and reads fields back with typed accessors
+that validate the type and report a clear error instead of panicking. Because
+JSON numbers decode as `float64`, `GetInt` also accepts a `float64` (truncated)
+and `GetFloat64` also accepts an `int`. Nested objects and arrays of objects come
+back as `*Arguments`, mirroring the schema:
+
+```go
+func(raw map[string]any) (string, error) {
+	args := tools.NewArguments(raw)
+
+	name, err := args.GetString("name")
+	if err != nil {
+		return "", err
+	}
+
+	address, err := args.GetObject("address") // nested object → *Arguments
+	if err != nil {
+		return "", err
+	}
+	city, err := address.GetString("city")
+	if err != nil {
+		return "", err
+	}
+
+	tags, _ := args.GetArrayOfStrings("tags") // optional field; ignore the error
+	return register(name, city, tags)         // your code
+}
 ```
 
 ### Model info
@@ -361,6 +394,22 @@ returns the builder for chaining; `Build() map[string]any` produces the schema:
 | `ArrayOfObjects(name, desc string, required bool, spec *ObjectBuilder)` | An array of objects. |
 
 All `Add*` methods share the leading signature `(name, desc string, required bool)`.
+
+`Arguments` — typed reader for a tool call's decoded arguments. Wrap the
+handler's `map[string]any` with `NewArguments(map[string]any) *Arguments`, then
+read fields:
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `GetString` / `GetBool` | `(string, error)` / `(bool, error)` | Exact type required. |
+| `GetInt` | `(int, error)` | Accepts `float64` (truncated) or `int`. |
+| `GetFloat64` | `(float64, error)` | Accepts `float64` or `int`. |
+| `GetObject` | `(*Arguments, error)` | Nested object. |
+| `GetArrayOfStrings` / `GetArrayOfInts` / `GetArrayOfFloat64s` / `GetArrayOfBools` | `([]T, error)` | Per-element type-checked; numeric arrays follow the scalar rules above. |
+| `GetArrayOfObjects` | `([]*Arguments, error)` | Array of nested objects. |
+
+Every accessor returns an error when the field is missing, has the wrong type, or
+(for arrays) holds a wrong-typed element — never a panic.
 
 | Error | Returned by | When |
 |-------|-------------|------|
