@@ -7,6 +7,9 @@ var (
 	ErrNameRequired = errors.New("MCP name is required")
 	// ErrCommandRequired is returned by NewClient when ClientConfig.Command is empty.
 	ErrCommandRequired = errors.New("MCP command is required")
+	// ErrAlreadyRegistered is returned by RegisterTools when the client has
+	// already registered its tools in a ToolBox.
+	ErrAlreadyRegistered = errors.New("MCP tools already registered")
 	// ErrMCPConnectionClosed is returned when the server closes its stdout
 	// before answering a request.
 	ErrMCPConnectionClosed = errors.New("MCP connection closed")

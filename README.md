@@ -94,16 +94,16 @@ Connects a stdio-based [MCP](https://modelcontextprotocol.io) server to a
 box := tools.NewToolBox()
 
 mcpClient, err := mcp.NewClient(ctx, mcp.ClientConfig{
-	Name:    "files",
-	Command: "mcp-server-filesystem",
-	Args:    []string{"/data"},
-}, box)
+	Name:    "playwright",
+	Command: "npx",
+	Args:    []string{"@playwright/mcp@latest"},
+})
 if err != nil {
 	log.Fatal(err)
 }
 defer mcpClient.Close()
 
-if err := mcpClient.RegisterTools(ctx); err != nil {
+if err := mcpClient.RegisterTools(ctx, box); err != nil {
 	log.Fatal(err)
 }
 
@@ -112,8 +112,8 @@ reply, err := client.Chat(ctx, messages, box.GetTools()) // MCP tools included
 
 `NewClient` launches the server as a child process and completes the handshake.
 `RegisterTools` discovers the server's tools and adds them to the `ToolBox`,
-namespaced as `"<Name>.<tool>"` (e.g. `files.read_file`). `Close` removes them
-and shuts the process down.
+namespaced as `"<Name>.<tool>"` (e.g. `playwright.browser_navigate`). `Close`
+removes them and shuts the process down.
 
 ## License
 

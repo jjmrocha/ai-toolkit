@@ -36,11 +36,12 @@ type Client struct {
 }
 
 // NewClient launches the MCP server described by cfg and completes the protocol
-// handshake, returning a Client bound to tb. ctx bounds the startup handshake
-// only. It returns ErrNameRequired or ErrCommandRequired if cfg is incomplete,
-// or an error if the server fails to start, the handshake fails, or the server
-// speaks an unsupported protocol version. The server runs until Close is called.
-func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Client, error) {
+// handshake. ctx bounds the startup handshake only. It returns ErrNameRequired
+// or ErrCommandRequired if cfg is incomplete, or an error if the server fails to
+// start, the handshake fails, or the server speaks an unsupported protocol
+// version. The server runs until Close is called. Call RegisterTools to bind the
+// client to a ToolBox.
+func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameRequired
 	}
@@ -56,7 +57,6 @@ func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Clien
 
 	return &Client{
 		config:    cfg,
-		toolBox:   tb,
 		transport: t,
 	}, nil
 }
@@ -70,18 +70,26 @@ func (c *Client) Close() error {
 		return nil
 	}
 
-	for _, tool := range c.tools {
-		c.toolBox.RemoveTool(tool)
+	if c.toolBox != nil {
+		for _, tool := range c.tools {
+			c.toolBox.RemoveTool(tool)
+		}
 	}
 
 	return c.transport.close()
 }
 
-// RegisterTools queries the server for its tools and registers each one in the
-// ToolBox, namespaced as "<ClientConfig.Name>.<tool>" and backed by a handler
-// that forwards the call to the server. ctx bounds the tools/list request. Tools
-// registered here are removed again by Close.
-func (c *Client) RegisterTools(ctx context.Context) error {
+// RegisterTools queries the server for its tools and registers each one in tb,
+// namespaced as "<ClientConfig.Name>.<tool>" and backed by a handler that
+// forwards the call to the server. ctx bounds the tools/list request. Tools
+// registered here are removed again by Close. It may be called only once per
+// client and returns ErrAlreadyRegistered on a later call.
+func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
+	if c.toolBox != nil {
+		return ErrAlreadyRegistered
+	}
+
+	c.toolBox = tb
 	result, err := c.transport.Request(ctx, "tools/list", nil)
 	if err != nil {
 		return err

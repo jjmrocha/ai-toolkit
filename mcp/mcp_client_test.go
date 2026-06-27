@@ -19,7 +19,6 @@ func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *b
 	tb := tools.NewToolBox()
 	c := &Client{
 		config:    ClientConfig{Name: name},
-		toolBox:   tb,
 		transport: &stdio{in: in, out: strings.NewReader(strings.Join(responses, ""))},
 	}
 	return c, tb, in
@@ -28,7 +27,7 @@ func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *b
 func TestNewClient(t *testing.T) {
 	t.Run("returns ErrNameRequired when the name is empty", func(t *testing.T) {
 		// when
-		result, err := NewClient(t.Context(), ClientConfig{Command: "server"}, tools.NewToolBox())
+		result, err := NewClient(t.Context(), ClientConfig{Command: "server"})
 		// then
 		assert.ErrorIs(t, err, ErrNameRequired)
 		assert.Nil(t, result)
@@ -36,7 +35,7 @@ func TestNewClient(t *testing.T) {
 
 	t.Run("returns ErrCommandRequired when the command is empty", func(t *testing.T) {
 		// when
-		result, err := NewClient(t.Context(), ClientConfig{Name: "srv"}, tools.NewToolBox())
+		result, err := NewClient(t.Context(), ClientConfig{Name: "srv"})
 		// then
 		assert.ErrorIs(t, err, ErrCommandRequired)
 		assert.Nil(t, result)
@@ -50,7 +49,7 @@ func TestRegisterTools(t *testing.T) {
 			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo","description":"Echoes input","inputSchema":{"type":"object"}}]}}`+"\n",
 		)
 		// when
-		err := c.RegisterTools(t.Context())
+		err := c.RegisterTools(t.Context(), tb)
 		// then
 		require.NoError(t, err)
 		registered := tb.GetTools()
@@ -66,7 +65,7 @@ func TestRegisterTools(t *testing.T) {
 			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n",
 			`{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"hello"},{"type":"text","text":"world"}]}}`+"\n",
 		)
-		require.NoError(t, c.RegisterTools(t.Context()))
+		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		// when
 		result, err := tb.ExecuteTool(llm.ToolCall{Name: "srv.echo", Arguments: map[string]any{"city": "Lisbon"}})
 		// then
@@ -82,10 +81,20 @@ func TestRegisterTools(t *testing.T) {
 		// given
 		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`+"\n")
 		// when
-		err := c.RegisterTools(t.Context())
+		err := c.RegisterTools(t.Context(), tb)
 		// then
 		require.NoError(t, err)
 		assert.Empty(t, tb.GetTools())
+	})
+
+	t.Run("returns ErrAlreadyRegistered on a second call", func(t *testing.T) {
+		// given
+		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`+"\n")
+		require.NoError(t, c.RegisterTools(t.Context(), tb))
+		// when
+		err := c.RegisterTools(t.Context(), tools.NewToolBox())
+		// then
+		assert.ErrorIs(t, err, ErrAlreadyRegistered)
 	})
 }
 
@@ -93,7 +102,7 @@ func TestClientClose(t *testing.T) {
 	t.Run("removes the client's tools from the toolbox", func(t *testing.T) {
 		// given
 		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n")
-		require.NoError(t, c.RegisterTools(t.Context()))
+		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		require.Len(t, tb.GetTools(), 1)
 		// when
 		err := c.Close()
