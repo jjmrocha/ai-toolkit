@@ -1,0 +1,124 @@
+package mcp
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// newMemClient builds a Client whose transport is backed by in-memory streams,
+// serving the given newline-terminated responses in order. Writes land in the
+// returned buffer.
+func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *bytes.Buffer) {
+	in := &bytes.Buffer{}
+	tb := tools.NewToolBox()
+	c := &Client{
+		config:    ClientConfig{Name: name},
+		toolBox:   tb,
+		transport: &stdio{in: in, out: strings.NewReader(strings.Join(responses, ""))},
+	}
+	return c, tb, in
+}
+
+func TestNewClient(t *testing.T) {
+	t.Run("returns ErrNameRequired when the name is empty", func(t *testing.T) {
+		// when
+		result, err := NewClient(t.Context(), ClientConfig{Command: "server"}, tools.NewToolBox())
+		// then
+		assert.ErrorIs(t, err, ErrNameRequired)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns ErrCommandRequired when the command is empty", func(t *testing.T) {
+		// when
+		result, err := NewClient(t.Context(), ClientConfig{Name: "srv"}, tools.NewToolBox())
+		// then
+		assert.ErrorIs(t, err, ErrCommandRequired)
+		assert.Nil(t, result)
+	})
+}
+
+func TestRegisterTools(t *testing.T) {
+	t.Run("registers each tool namespaced with the client name", func(t *testing.T) {
+		// given
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo","description":"Echoes input","inputSchema":{"type":"object"}}]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context())
+		// then
+		require.NoError(t, err)
+		registered := tb.GetTools()
+		require.Len(t, registered, 1)
+		assert.Equal(t, "srv.echo", registered[0].Name)
+		assert.Equal(t, "Echoes input", registered[0].Description)
+		assert.Equal(t, map[string]any{"type": "object"}, registered[0].Schema)
+	})
+
+	t.Run("registers a handler that forwards the call and returns the text", func(t *testing.T) {
+		// given
+		c, tb, in := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n",
+			`{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"hello"},{"type":"text","text":"world"}]}}`+"\n",
+		)
+		require.NoError(t, c.RegisterTools(t.Context()))
+		// when
+		result, err := tb.ExecuteTool(llm.ToolCall{Name: "srv.echo", Arguments: map[string]any{"city": "Lisbon"}})
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "hello\nworld", result.Content)
+		sent := sentMessages(t, in)
+		require.Len(t, sent, 2)
+		assert.Equal(t, "tools/call", sent[1]["method"])
+		assert.Equal(t, map[string]any{"name": "echo", "arguments": map[string]any{"city": "Lisbon"}}, sent[1]["params"])
+	})
+
+	t.Run("registers nothing when the server returns no tools", func(t *testing.T) {
+		// given
+		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`+"\n")
+		// when
+		err := c.RegisterTools(t.Context())
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, tb.GetTools())
+	})
+}
+
+func TestClientClose(t *testing.T) {
+	t.Run("removes the client's tools from the toolbox", func(t *testing.T) {
+		// given
+		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n")
+		require.NoError(t, c.RegisterTools(t.Context()))
+		require.Len(t, tb.GetTools(), 1)
+		// when
+		err := c.Close()
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, tb.GetTools())
+	})
+}
+
+func TestExtractText(t *testing.T) {
+	t.Run("joins the text parts with newlines", func(t *testing.T) {
+		// given
+		result := map[string]any{"content": []any{
+			map[string]any{"type": "text", "text": "a"},
+			map[string]any{"type": "image", "data": "..."},
+			map[string]any{"type": "text", "text": "b"},
+		}}
+		// then
+		assert.Equal(t, "a\nb", extractText(result))
+	})
+
+	t.Run("falls back to JSON when there is no text content", func(t *testing.T) {
+		// given
+		result := map[string]any{"isError": true}
+		// then
+		assert.JSONEq(t, `{"isError":true}`, extractText(result))
+	})
+}

@@ -1,0 +1,165 @@
+// Package mcp connects a stdio-based MCP (Model Context Protocol) server to a
+// tools.ToolBox. A Client launches the server as a child process, discovers the
+// tools it offers, and registers each one in the ToolBox so a model can call
+// them like any other tool.
+//
+// A Client drives exactly one MCP server over its stdin/stdout. Tool calls are
+// serialized by the transport, so at most one request is in flight at a time.
+// Context cancellation is best-effort: a request blocked waiting on a silent
+// server is not interrupted by its deadline — call Close to abort it.
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/tools"
+)
+
+// callToolTimeout bounds a single tools/call. It is best-effort: it only takes
+// effect between reads, so a server that goes silent mid-call is not
+// interrupted until Close tears the connection down.
+const callToolTimeout = 30 * time.Second
+
+// Client registers the tools exposed by a single MCP server into a ToolBox and
+// owns the lifetime of that server's process. Create one with NewClient and
+// always pair it with a deferred Close.
+type Client struct {
+	config    ClientConfig
+	toolBox   *tools.ToolBox
+	transport *stdio
+	tools     []string
+}
+
+// NewClient launches the MCP server described by cfg and completes the protocol
+// handshake, returning a Client bound to tb. ctx bounds the startup handshake
+// only. It returns ErrNameRequired or ErrCommandRequired if cfg is incomplete,
+// or an error if the server fails to start, the handshake fails, or the server
+// speaks an unsupported protocol version. The server runs until Close is called.
+func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Client, error) {
+	if cfg.Name == "" {
+		return nil, ErrNameRequired
+	}
+
+	if cfg.Command == "" {
+		return nil, ErrCommandRequired
+	}
+
+	t, err := NewStdIO(ctx, cfg.Command, cfg.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		config:    cfg,
+		toolBox:   tb,
+		transport: t,
+	}, nil
+}
+
+// Close removes this client's tools from the ToolBox and shuts the server
+// process down. Because it does not wait on an in-flight Request, Close also
+// aborts a tool call that is stuck waiting on the server. It is safe to call
+// more than once.
+func (c *Client) Close() error {
+	if c.transport == nil {
+		return nil
+	}
+
+	for _, tool := range c.tools {
+		c.toolBox.RemoveTool(tool)
+	}
+
+	return c.transport.close()
+}
+
+// RegisterTools queries the server for its tools and registers each one in the
+// ToolBox, namespaced as "<ClientConfig.Name>.<tool>" and backed by a handler
+// that forwards the call to the server. ctx bounds the tools/list request. Tools
+// registered here are removed again by Close.
+func (c *Client) RegisterTools(ctx context.Context) error {
+	result, err := c.transport.Request(ctx, "tools/list", nil)
+	if err != nil {
+		return err
+	}
+
+	list, _ := result["tools"].([]any)
+	for _, item := range list {
+		spec, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		name, _ := spec["name"].(string)
+		if name == "" {
+			continue
+		}
+
+		description, _ := spec["description"].(string)
+		schema, _ := spec["inputSchema"].(map[string]any)
+
+		tool := llm.Tool{
+			Name:        fmt.Sprintf("%s.%s", c.config.Name, name),
+			Description: description,
+			Schema:      schema,
+		}
+
+		c.toolBox.AddTool(tool, c.makeHandler(name))
+		c.tools = append(c.tools, tool.Name)
+	}
+
+	return nil
+}
+
+func (c *Client) makeHandler(name string) tools.Handler {
+	return func(args map[string]any) (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), callToolTimeout)
+		defer cancel()
+
+		result, err := c.transport.Request(ctx, "tools/call", map[string]any{
+			"name":      name,
+			"arguments": args,
+		})
+
+		if err != nil {
+			return "", err
+		}
+
+		return extractText(result), nil
+	}
+}
+
+func extractText(result map[string]any) string {
+	content, _ := result["content"].([]any)
+
+	parts := make([]string, 0, len(content))
+	for _, item := range content {
+		part, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if part["type"] != "text" {
+			continue
+		}
+
+		if text, ok := part["text"].(string); ok {
+			parts = append(parts, text)
+		}
+	}
+
+	if len(parts) > 0 {
+		return strings.Join(parts, "\n")
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return ""
+	}
+
+	return string(encoded)
+}
