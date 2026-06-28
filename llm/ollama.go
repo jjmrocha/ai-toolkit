@@ -59,7 +59,7 @@ func (o *ollama) chat(ctx context.Context, messages []Message, tools []Tool) (*A
 	return fromOllamaToAssistantMessage(apiResp), nil
 }
 
-func (o *ollama) modelInfo(ctx context.Context) (ModelInfo, error) {
+func (o *ollama) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	var apiResp ollamaShowResponse
 	resp, err := o.client.R().
 		SetContext(ctx).
@@ -67,20 +67,20 @@ func (o *ollama) modelInfo(ctx context.Context) (ModelInfo, error) {
 		SetResult(&apiResp).
 		Post(ollamaShowEndpoint)
 	if err != nil {
-		return ModelInfo{}, fmt.Errorf("ollama: sending request: %w", err)
+		return nil, fmt.Errorf("ollama: sending request: %w", err)
 	}
 
 	if resp.StatusCode() == http.StatusNotFound {
-		return ModelInfo{}, fmt.Errorf("ollama: %w: %q", ErrModelNotFound, o.cfg.Model)
+		return nil, fmt.Errorf("ollama: %w: %q", ErrModelNotFound, o.cfg.Model)
 	}
 
 	if resp.IsError() {
-		return ModelInfo{}, fmt.Errorf("ollama: unexpected status %d: %s", resp.StatusCode(), resp.String())
+		return nil, fmt.Errorf("ollama: unexpected status %d: %s", resp.StatusCode(), resp.String())
 	}
 
 	if apiResp.Error != "" {
-		return ModelInfo{}, fmt.Errorf("ollama: api error: %s", apiResp.Error)
+		return nil, fmt.Errorf("ollama: api error: %s", apiResp.Error)
 	}
 
-	return fromOllamaToModelInfo(apiResp, o.cfg.Model), nil
+	return fromOllamaToModelInfo(apiResp, o.cfg.Model)
 }

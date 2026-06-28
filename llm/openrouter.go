@@ -74,18 +74,18 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 	return fromORToAssistantMessage(apiResp)
 }
 
-func (o *openrouter) modelInfo(ctx context.Context) (ModelInfo, error) {
+func (o *openrouter) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	var apiResp orModelsResponse
 	resp, err := o.client.R().
 		SetContext(ctx).
 		SetResult(&apiResp).
 		Get(modelsEndpoint)
 	if err != nil {
-		return ModelInfo{}, fmt.Errorf("openrouter: sending request: %w", err)
+		return nil, fmt.Errorf("openrouter: sending request: %w", err)
 	}
 
 	if resp.IsError() {
-		return ModelInfo{}, fmt.Errorf("openrouter: unexpected status %d: %s", resp.StatusCode(), resp.String())
+		return nil, fmt.Errorf("openrouter: unexpected status %d: %s", resp.StatusCode(), resp.String())
 	}
 
 	return fromORToModelInfo(apiResp.Data, o.cfg.Model)

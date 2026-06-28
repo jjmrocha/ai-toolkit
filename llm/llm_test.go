@@ -113,9 +113,9 @@ func TestLLMChat(t *testing.T) {
 func TestLLMModelInfo(t *testing.T) {
 	t.Run("delegates to the provider and returns its result", func(t *testing.T) {
 		// given
-		expected := ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}
+		expected := &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}
 		llm := &LLM{provider: fakeProvider{
-			modelInfoFunc: func(context.Context) (ModelInfo, error) {
+			modelInfoFunc: func(context.Context) (*ModelInfo, error) {
 				return expected, nil
 			},
 		}}
@@ -130,14 +130,14 @@ func TestLLMModelInfo(t *testing.T) {
 		// given
 		expectedErr := errors.New("boom")
 		llm := &LLM{provider: fakeProvider{
-			modelInfoFunc: func(context.Context) (ModelInfo, error) {
-				return ModelInfo{}, expectedErr
+			modelInfoFunc: func(context.Context) (*ModelInfo, error) {
+				return nil, expectedErr
 			},
 		}}
 		// when
 		result, err := llm.ModelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, expectedErr)
 	})
 }
@@ -146,13 +146,13 @@ func TestLLMModelInfo(t *testing.T) {
 // per-test via function fields.
 type fakeProvider struct {
 	chatFunc      func(context.Context, []Message, []Tool) (*AssistantMessage, error)
-	modelInfoFunc func(context.Context) (ModelInfo, error)
+	modelInfoFunc func(context.Context) (*ModelInfo, error)
 }
 
 func (f fakeProvider) chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
 	return f.chatFunc(ctx, messages, tools)
 }
 
-func (f fakeProvider) modelInfo(ctx context.Context) (ModelInfo, error) {
+func (f fakeProvider) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	return f.modelInfoFunc(ctx)
 }

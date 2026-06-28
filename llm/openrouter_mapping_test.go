@@ -189,14 +189,14 @@ func TestFromORToModelInfo(t *testing.T) {
 		result, err := fromORToModelInfo(models, "openai/gpt-4o")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, result)
+		assert.Equal(t, &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, result)
 	})
 
 	t.Run("returns ErrModelNotFound when the id is absent", func(t *testing.T) {
 		// when
 		result, err := fromORToModelInfo(models, "missing/model")
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
 	})
 
@@ -204,7 +204,7 @@ func TestFromORToModelInfo(t *testing.T) {
 		// when
 		result, err := fromORToModelInfo(nil, "openai/gpt-4o")
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
 	})
 }

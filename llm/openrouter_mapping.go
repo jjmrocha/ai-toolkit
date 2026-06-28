@@ -118,15 +118,15 @@ func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
 	return &result, nil
 }
 
-func fromORToModelInfo(models []orModel, id string) (ModelInfo, error) {
+func fromORToModelInfo(models []orModel, id string) (*ModelInfo, error) {
 	for _, m := range models {
 		if m.ID == id {
-			return ModelInfo{
+			return &ModelInfo{
 				Name:        m.Name,
 				ContextSize: m.ContextLength,
 			}, nil
 		}
 	}
 
-	return ModelInfo{}, fmt.Errorf("openrouter: %w: %q", ErrModelNotFound, id)
+	return nil, fmt.Errorf("openrouter: %w: %q", ErrModelNotFound, id)
 }

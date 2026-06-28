@@ -115,6 +115,45 @@ reply, err := client.Chat(ctx, messages, box.GetTools()) // MCP tools included
 namespaced as `"<Name>.<tool>"` (e.g. `playwright.browser_navigate`). `Close`
 removes them and shuts the process down.
 
+## `agent`
+
+Ties `llm` and `tools` together into a conversation loop: send user input, run
+whatever tools the model asks for, feed the results back, and repeat until the
+model returns a final answer — so you don't write the call-tool-feed-back loop
+yourself.
+
+```go
+agt, err := agent.New(agent.Config{MaxIterations: 10}, client, box)
+if err != nil {
+	log.Fatal(err)
+}
+defer agt.Close()
+
+agt.StartSession("You are a helpful weather assistant.")
+
+resp, err := agt.Process(ctx, "What should I wear in Lisbon today?")
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Println(resp.Content)
+fmt.Printf("%d tool calls, %d tokens\n",
+	resp.Metadata.ToolCalls, resp.Metadata.TotalTokens)
+```
+
+`New` pairs an `llm` client with a `tools.ToolBox` (a nil box is treated as
+empty). `StartSession` sets the system prompt; `Process` drives one turn,
+returning the final reply plus token-usage and timing `Metadata`. `Config`
+caps the loop with `MaxIterations`, and `CompactionThresholdPercent` sets when
+the conversation is compacted: once a completed turn's total tokens cross that
+percentage of the model's context window, the older turns are summarized into a
+single message while the recent turns and system prompt are kept verbatim. A
+failing tool is reported back to the model
+so it can recover instead of aborting the turn. `ResetSession` clears the
+conversation to the system prompt; `Close` ends the session. Pass your own
+`Feedback` to `NewWithFeedback` to observe lifecycle events (tool calls, session
+start/reset/close); the default prints them to stdout.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

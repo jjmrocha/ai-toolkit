@@ -1,5 +1,7 @@
 package llm
 
+import "fmt"
+
 func toOllamaMessages(messages []Message) []ollamaMessage {
 	convertedMessages := make([]ollamaMessage, 0, len(messages))
 
@@ -94,16 +96,16 @@ func fromOllamaToAssistantMessage(resp ollamaChatResponse) *AssistantMessage {
 	return &result
 }
 
-func fromOllamaToModelInfo(resp ollamaShowResponse, model string) ModelInfo {
-	info := ModelInfo{Name: model}
-
-	if arch, ok := resp.ModelInfo["general.architecture"]; ok {
-		archStr := arch.(string)
-		if ctxLen, ok := resp.ModelInfo[archStr+".context_length"]; ok {
-			ctxLenFloat := ctxLen.(float64)
-			info.ContextSize = int(ctxLenFloat)
-		}
+func fromOllamaToModelInfo(resp ollamaShowResponse, model string) (*ModelInfo, error) {
+	arch, ok := resp.ModelInfo["general.architecture"].(string)
+	if !ok {
+		return nil, fmt.Errorf("ollama: %w: %q", ErrMissingContextLength, model)
 	}
 
-	return info
+	ctxLen, ok := resp.ModelInfo[arch+".context_length"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("ollama: %w: %q", ErrMissingContextLength, model)
+	}
+
+	return &ModelInfo{Name: model, ContextSize: int(ctxLen)}, nil
 }

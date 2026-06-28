@@ -153,7 +153,7 @@ func TestOllamaModelInfo(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "/api/show", gotPath)
-		assert.Equal(t, ModelInfo{Name: "llama3.2", ContextSize: 8192}, result)
+		assert.Equal(t, &ModelInfo{Name: "llama3.2", ContextSize: 8192}, result)
 
 		var sent ollamaShowRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
@@ -169,7 +169,7 @@ func TestOllamaModelInfo(t *testing.T) {
 		// when
 		result, err := o.modelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
 	})
 
@@ -182,7 +182,7 @@ func TestOllamaModelInfo(t *testing.T) {
 		// when
 		result, err := o.modelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "bad request")
 	})
 
@@ -194,7 +194,7 @@ func TestOllamaModelInfo(t *testing.T) {
 		// when
 		result, err := o.modelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "something went wrong")
 	})
 }

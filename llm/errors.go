@@ -14,4 +14,7 @@ var (
 	// ErrModelNotFound is returned by [LLM.ModelInfo] when the configured model
 	// is not offered by the provider.
 	ErrModelNotFound = errors.New("model not found")
+	// ErrMissingContextLength is returned by [LLM.ModelInfo] when the provider's
+	// response does not report a context length for the configured model.
+	ErrMissingContextLength = errors.New("context length not found in model info")
 )

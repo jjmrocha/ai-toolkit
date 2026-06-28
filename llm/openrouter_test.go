@@ -229,7 +229,7 @@ func TestModelInfo(t *testing.T) {
 		result, err := o.modelInfo(t.Context())
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, result)
+		assert.Equal(t, &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, result)
 	})
 
 	t.Run("returns an error when the configured model is not listed", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestModelInfo(t *testing.T) {
 		// when
 		result, err := o.modelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
 	})
 
@@ -253,7 +253,7 @@ func TestModelInfo(t *testing.T) {
 		// when
 		result, err := o.modelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "invalid api key")
 	})
 
@@ -265,7 +265,7 @@ func TestModelInfo(t *testing.T) {
 		// when
 		result, err := o.modelInfo(t.Context())
 		// then
-		assert.Equal(t, ModelInfo{}, result)
+		assert.Nil(t, result)
 		assert.Error(t, err)
 	})
 }

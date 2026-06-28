@@ -116,17 +116,27 @@ func TestFromOllamaToModelInfo(t *testing.T) {
 			"llama.context_length": float64(8192),
 		}}
 		// when
-		result := fromOllamaToModelInfo(resp, "llama3.2")
+		result, err := fromOllamaToModelInfo(resp, "llama3.2")
 		// then
-		assert.Equal(t, ModelInfo{Name: "llama3.2", ContextSize: 8192}, result)
+		require.NoError(t, err)
+		assert.Equal(t, &ModelInfo{Name: "llama3.2", ContextSize: 8192}, result)
 	})
 
-	t.Run("leaves context size zero when the key is absent", func(t *testing.T) {
+	t.Run("returns an error when the context length key is absent", func(t *testing.T) {
 		// given
 		resp := ollamaShowResponse{ModelInfo: map[string]any{"general.architecture": "llama"}}
 		// when
-		result := fromOllamaToModelInfo(resp, "llama3.2")
+		_, err := fromOllamaToModelInfo(resp, "llama3.2")
 		// then
-		assert.Equal(t, ModelInfo{Name: "llama3.2", ContextSize: 0}, result)
+		assert.ErrorIs(t, err, ErrMissingContextLength)
+	})
+
+	t.Run("returns an error when the architecture key is absent", func(t *testing.T) {
+		// given
+		resp := ollamaShowResponse{ModelInfo: map[string]any{}}
+		// when
+		_, err := fromOllamaToModelInfo(resp, "llama3.2")
+		// then
+		assert.ErrorIs(t, err, ErrMissingContextLength)
 	})
 }
