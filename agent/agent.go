@@ -31,23 +31,15 @@ type Agent struct {
 	messages         []llm.Message
 	contextSize      int
 	compactThreshold int
+	modelName        string
 }
 
 // New creates an [Agent] from cfg, an [llm.LLM], and a [tools.ToolBox], using a
 // default [Feedback] that reports lifecycle events to standard output. It
 // returns [ErrNoLLM] when llm is nil and [ErrInvalidThreshold] when
 // Config.CompactionThresholdPercent is outside 0–100; a nil toolBox is treated
-// as an empty one. To supply your own [Feedback], use [NewWithFeedback].
+// as an empty one.
 func New(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox) (*Agent, error) {
-	fb := newStdoutFeedback()
-	return NewWithFeedback(cfg, llm, toolBox, fb)
-}
-
-// NewWithFeedback is like [New] but routes lifecycle events to the supplied
-// [Feedback] instead of the default stdout reporter. It returns [ErrNoLLM] when
-// llm is nil and [ErrInvalidThreshold] when Config.CompactionThresholdPercent
-// is outside 0–100; a nil toolBox is treated as an empty one.
-func NewWithFeedback(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox, fb Feedback) (*Agent, error) {
 	if llm == nil {
 		return nil, ErrNoLLM
 	}
@@ -60,11 +52,13 @@ func NewWithFeedback(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox, fb Feedba
 		toolBox = tools.NewToolBox()
 	}
 
+	feedback := &defaultFeedback{}
+
 	return &Agent{
 		config:  cfg,
 		llm:     llm,
 		toolBox: toolBox,
-		fb:      fb,
+		fb:      feedback,
 	}, nil
 }
 
@@ -176,6 +170,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 					ToolCalls:        callCount,
 					LLMDuration:      llmDuration,
 					ToolDuration:     toolDuration,
+					ModelName:        a.modelName,
 					ModelContextSize: a.contextSize,
 				},
 			}, nil
@@ -245,6 +240,7 @@ func (a *Agent) loadModelLimits(ctx context.Context) {
 		return
 	}
 
+	a.modelName = info.Name
 	a.contextSize = info.ContextSize
 	a.compactThreshold = compactionThreshold(info.ContextSize, a.config.CompactionThresholdPercent)
 }

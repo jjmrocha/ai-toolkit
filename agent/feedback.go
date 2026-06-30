@@ -18,6 +18,14 @@ type Feedback interface {
 	SessionClosed()
 }
 
+// --------------------------------------------------------------------------------------------
+
+// NewStdoutFeedback returns a [Feedback] implementation that prints each event
+// to standard output. It is the default used by [New].
+func NewStdoutFeedback() Feedback {
+	return newStdoutFeedback()
+}
+
 type stdoutFeedback struct{}
 
 func newStdoutFeedback() stdoutFeedback {
@@ -42,4 +50,23 @@ func (stdoutFeedback) SessionStarted() {
 
 func (stdoutFeedback) SessionClosed() {
 	println("Session closed")
+}
+
+// --------------------------------------------------------------------------------------------
+
+type defaultFeedback struct{}
+
+func (defaultFeedback) ToolCalled(_ string) {
+}
+
+func (defaultFeedback) ContextCompacted() {
+}
+
+func (defaultFeedback) SessionReset() {
+}
+
+func (defaultFeedback) SessionStarted() {
+}
+
+func (defaultFeedback) SessionClosed() {
 }

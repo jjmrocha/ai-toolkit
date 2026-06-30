@@ -22,6 +22,9 @@ type Metadata struct {
 	// ModelContextSize is the model's context window in tokens, or 0 if it
 	// could not be determined.
 	ModelContextSize int
+	// ModelName is the human-readable name of the model serving the
+	// conversation, or "" if it could not be determined.
+	ModelName string
 }
 
 // Response is the result of an [Agent.Process] call: the model's final answer

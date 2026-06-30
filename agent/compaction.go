@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	defaultKeepRecentTurns            = 1
+	defaultKeepRecentTurns            = 2
 	defaultCompactionThresholdPercent = 85
 	summaryPrefix                     = "Summary of the conversation so far:\n"
 	summarySystemPrompt               = "You compress a conversation into a concise summary. " +
