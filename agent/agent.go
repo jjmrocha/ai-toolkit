@@ -100,6 +100,17 @@ func (a *Agent) Close() {
 	a.fb.SessionClosed()
 }
 
+// SetFeedback replaces the agent's lifecycle event sink, letting a caller — such
+// as a chat UI — install its own [Feedback] after construction. A nil fb is
+// ignored, keeping the current sink. Like the rest of [Agent], it is not safe
+// for concurrent use; do not call it while a [Agent.Process] is in flight.
+func (a *Agent) SetFeedback(fb Feedback) {
+	if fb == nil {
+		return
+	}
+	a.fb = fb
+}
+
 // Process runs one round of the conversation: it appends userInput (when
 // non-empty) and repeatedly calls the model, executing every tool the model
 // requests and feeding the results back, until the model replies without

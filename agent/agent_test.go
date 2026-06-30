@@ -183,6 +183,32 @@ func TestClose(t *testing.T) {
 	})
 }
 
+func TestSetFeedback(t *testing.T) {
+	t.Run("routes later events to the new sink, not the old one", func(t *testing.T) {
+		// given
+		old := &recordingFeedback{}
+		replacement := &recordingFeedback{}
+		agt := newTestAgent(t, Config{}, old)
+		// when
+		agt.SetFeedback(replacement)
+		agt.StartSession("sys")
+		// then
+		assert.Empty(t, old.events)
+		assert.Equal(t, []string{"SessionStarted"}, replacement.events)
+	})
+
+	t.Run("keeps the existing sink when fb is nil", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		agt := newTestAgent(t, Config{}, fb)
+		// when
+		agt.SetFeedback(nil)
+		agt.StartSession("sys")
+		// then
+		assert.Equal(t, []string{"SessionStarted"}, fb.events)
+	})
+}
+
 func TestProcess(t *testing.T) {
 	t.Run("returns ErrNoSession when no session has started", func(t *testing.T) {
 		// given
