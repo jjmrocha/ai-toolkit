@@ -13,11 +13,14 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// model is the slice of [llm.LLM] behavior the agent depends on, so a test can
+// modelInterface is the slice of [llm.LLM] behavior the agent depends on, so a test can
 // supply a double in its place. *llm.LLM satisfies it.
-type model interface {
+type modelInterface interface {
 	Chat(ctx context.Context, messages []llm.Message, tools []llm.Tool) (*llm.AssistantMessage, error)
 	ModelInfo(ctx context.Context) (*llm.ModelInfo, error)
+	AvailableModels() []string
+	ChangeModel(model string) error
+	CurrentModel() string
 }
 
 // Agent runs a tool-calling chat loop against an LLM, holding the conversation
@@ -25,7 +28,7 @@ type model interface {
 // calls to Process, StartSession, ResetSession, and Close.
 type Agent struct {
 	config           Config
-	llm              model
+	llm              modelInterface
 	toolBox          *tools.ToolBox
 	fb               Feedback
 	messages         []llm.Message
@@ -200,6 +203,34 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 
 		iteration++
 	}
+}
+
+// CurrentModel returns the identifier of the model the agent is currently using.
+func (a *Agent) CurrentModel() string {
+	return a.modelName
+}
+
+// AvailableModels returns the model identifiers the agent can switch to via
+// [Agent.ChangeModel]. It returns nil when the underlying client was configured
+// without a model list.
+func (a *Agent) AvailableModels() []string {
+	return a.llm.AvailableModels()
+}
+
+// ChangeModel switches the agent to model, which must be one of
+// [Agent.AvailableModels]. On success the context window is re-derived on the
+// next turn; it propagates the underlying client's error on failure, leaving the
+// current model in place.
+func (a *Agent) ChangeModel(model string) error {
+	if err := a.llm.ChangeModel(model); err != nil {
+		return err
+	}
+
+	a.modelName = model
+	a.contextSize = 0 // force reload on next turn
+	a.compactThreshold = 0
+
+	return nil
 }
 
 func (a *Agent) compactMessages(ctx context.Context) {

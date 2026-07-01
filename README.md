@@ -43,6 +43,10 @@ fmt.Printf("tokens: %d\n", reply.Stats.TotalTokens)
 backends — Ollama needs no API key). `Chat` sends an ordered `[]Message` and
 returns the assistant's reply; pass `[]Tool` as the third argument to offer tools.
 
+List the models the client may switch between in `Config.Models`. `AvailableModels`
+returns that list, `CurrentModel` reports the active one, and `ChangeModel` switches
+to another entry from the list (returning `ErrModelNotFound` for anything outside it).
+
 ## `tools`
 
 Helpers that remove the two chores of tool calling: building parameter schemas
@@ -150,8 +154,10 @@ percentage of the model's context window, the older turns are summarized into a
 single message while the recent turns and system prompt are kept verbatim. A
 failing tool is reported back to the model
 so it can recover instead of aborting the turn. `ResetSession` clears the
-conversation to the system prompt; `Close` ends the session. Pass your own
-`Feedback` to `NewWithFeedback` to observe lifecycle events (tool calls, session
+conversation to the system prompt; `Close` ends the session. `AvailableModels`,
+`CurrentModel`, and `ChangeModel` mirror the `llm` client to switch models
+mid-conversation — the context window is re-derived on the next turn. Pass your
+own `Feedback` to `SetFeedback` to observe lifecycle events (tool calls, session
 start/reset/close); the default prints them to stdout.
 
 ## License

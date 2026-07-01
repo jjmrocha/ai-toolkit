@@ -19,6 +19,9 @@ type fakeLLM struct {
 	info      *llm.ModelInfo
 	infoErr   error
 	chatCalls int
+	models    []string
+	current   string
+	changeErr error
 }
 
 func (f *fakeLLM) Chat(_ context.Context, _ []llm.Message, _ []llm.Tool) (*llm.AssistantMessage, error) {
@@ -37,9 +40,21 @@ func (f *fakeLLM) ModelInfo(context.Context) (*llm.ModelInfo, error) {
 	return f.info, nil
 }
 
+func (f *fakeLLM) AvailableModels() []string { return f.models }
+
+func (f *fakeLLM) CurrentModel() string { return f.current }
+
+func (f *fakeLLM) ChangeModel(model string) error {
+	if f.changeErr != nil {
+		return f.changeErr
+	}
+	f.current = model
+	return nil
+}
+
 // agentWithLLM builds an Agent backed by a model double, bypassing the
 // constructor's *llm.LLM requirement.
-func agentWithLLM(m model, tb *tools.ToolBox, fb Feedback, cfg Config) *Agent {
+func agentWithLLM(m modelInterface, tb *tools.ToolBox, fb Feedback, cfg Config) *Agent {
 	if tb == nil {
 		tb = tools.NewToolBox()
 	}
@@ -74,8 +89,9 @@ func testLLM(t *testing.T) *llm.LLM {
 
 func newTestAgent(t *testing.T, cfg Config, fb Feedback) *Agent {
 	t.Helper()
-	agt, err := NewWithFeedback(cfg, testLLM(t), nil, fb)
+	agt, err := New(cfg, testLLM(t), nil)
 	require.NoError(t, err)
+	agt.SetFeedback(fb)
 	return agt
 }
 
@@ -95,20 +111,10 @@ func TestNew(t *testing.T) {
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrNoLLM)
 	})
-}
-
-func TestNewWithFeedback(t *testing.T) {
-	t.Run("returns ErrNoLLM when llm is nil", func(t *testing.T) {
-		// when
-		result, err := NewWithFeedback(Config{}, nil, nil, &recordingFeedback{})
-		// then
-		assert.Nil(t, result)
-		assert.ErrorIs(t, err, ErrNoLLM)
-	})
 
 	t.Run("returns ErrInvalidThreshold when the percent is negative", func(t *testing.T) {
 		// when
-		result, err := NewWithFeedback(Config{CompactionThresholdPercent: -1}, testLLM(t), nil, &recordingFeedback{})
+		result, err := New(Config{CompactionThresholdPercent: -1}, testLLM(t), nil)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -116,7 +122,7 @@ func TestNewWithFeedback(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent exceeds one hundred", func(t *testing.T) {
 		// when
-		result, err := NewWithFeedback(Config{CompactionThresholdPercent: 101}, testLLM(t), nil, &recordingFeedback{})
+		result, err := New(Config{CompactionThresholdPercent: 101}, testLLM(t), nil)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -125,7 +131,7 @@ func TestNewWithFeedback(t *testing.T) {
 	t.Run("succeeds for percents within range", func(t *testing.T) {
 		for _, pct := range []int{0, 50, 100} {
 			// when
-			result, err := NewWithFeedback(Config{CompactionThresholdPercent: pct}, testLLM(t), nil, &recordingFeedback{})
+			result, err := New(Config{CompactionThresholdPercent: pct}, testLLM(t), nil)
 			// then
 			require.NoError(t, err, "pct=%d", pct)
 			assert.NotNil(t, result, "pct=%d", pct)
@@ -330,5 +336,53 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err2)
 		assert.Contains(t, fb.events, "ContextCompacted")
 		assert.Equal(t, 3, fake.chatCalls) // two turns plus one summarization
+	})
+}
+
+func TestAvailableModels(t *testing.T) {
+	t.Run("returns the underlying client's model list", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{models: []string{"m1", "m2"}}
+		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		// when
+		result := agt.AvailableModels()
+		// then
+		assert.Equal(t, []string{"m1", "m2"}, result)
+	})
+}
+
+func TestChangeModel(t *testing.T) {
+	t.Run("updates the current model and resets the context window", func(t *testing.T) {
+		// given: an agent whose limits were loaded for a 1000-token model
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 1}}},
+			info:    &llm.ModelInfo{Name: "old", ContextSize: 1000},
+			models:  []string{"m2"},
+		}
+		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt.StartSession("sys")
+		_, err := agt.Process(context.Background(), "hi")
+		require.NoError(t, err)
+		require.Equal(t, 1000, agt.contextSize)
+		// when
+		err = agt.ChangeModel("m2")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "m2", agt.CurrentModel())
+		assert.Equal(t, "m2", fake.current)
+		assert.Zero(t, agt.contextSize)      // forced reload on next turn
+		assert.Zero(t, agt.compactThreshold) // forced reload on next turn
+	})
+
+	t.Run("propagates the client error and keeps the current model", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{changeErr: errors.New("boom"), current: "old"}
+		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt.modelName = "old"
+		// when
+		err := agt.ChangeModel("m2")
+		// then
+		assert.ErrorContains(t, err, "boom")
+		assert.Equal(t, "old", agt.CurrentModel())
 	})
 }

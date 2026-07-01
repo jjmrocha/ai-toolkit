@@ -90,3 +90,12 @@ func (o *openrouter) modelInfo(ctx context.Context) (*ModelInfo, error) {
 
 	return fromORToModelInfo(apiResp.Data, o.cfg.Model)
 }
+
+func (o *openrouter) changeModel(model string) error {
+	o.cfg.Model = model
+	return nil
+}
+
+func (o *openrouter) currentModel() string {
+	return o.cfg.Model
+}

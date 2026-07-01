@@ -8,7 +8,7 @@ type Config struct {
 	MaxIterations int
 	// CompactionThresholdPercent is the percentage of the model's context
 	// window at which [Agent.Process] summarizes the older turns. Zero selects
-	// the default of 85%. Must be between 0 and 100; otherwise [New] and
-	// [NewWithFeedback] return [ErrInvalidThreshold].
+	// the default of 85%. Must be between 0 and 100; otherwise [New] returns
+	// [ErrInvalidThreshold].
 	CompactionThresholdPercent int
 }

@@ -19,6 +19,8 @@ type Config struct {
 	BaseURL string
 	// APIKey authenticates requests to the provider. Required.
 	APIKey string `json:"-"`
-	// Model is the provider-specific model identifier, e.g. "openai/gpt-4o". Required.
+	// Model name selects the LLM model to use. Required.
 	Model string
+	// Models lists the available LLM models for the provider. Optional.
+	Models []string
 }

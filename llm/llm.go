@@ -4,12 +4,15 @@
 // are the supported providers.
 package llm
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // LLM is a configured client for a single model on a single provider. Create
 // one with [New]; it is safe for concurrent use.
 type LLM struct {
-	cfg      Config
+	config   Config
 	provider llmProvider
 }
 
@@ -47,7 +50,7 @@ func New(cfg Config) (*LLM, error) {
 	}
 
 	return &LLM{
-		cfg:      cfg,
+		config:   cfg,
 		provider: provider,
 	}, nil
 }
@@ -66,4 +69,31 @@ func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*Assi
 // cancellation and deadline.
 func (l *LLM) ModelInfo(ctx context.Context) (*ModelInfo, error) {
 	return l.provider.modelInfo(ctx)
+}
+
+// CurrentModel returns the identifier of the model the client is currently
+// configured to use.
+func (l *LLM) CurrentModel() string {
+	return l.provider.currentModel()
+}
+
+// AvailableModels returns the model identifiers configured in Config.Models. It
+// returns nil when none were provided.
+func (l *LLM) AvailableModels() []string {
+	return l.config.Models
+}
+
+// ChangeModel switches the client to model, which must be one of the
+// identifiers in Config.Models. It returns [ErrMissingModel] when model is
+// empty and [ErrModelNotFound] when it is not in Config.Models.
+func (l *LLM) ChangeModel(model string) error {
+	if model == "" {
+		return ErrMissingModel
+	}
+
+	if !slices.Contains(l.config.Models, model) {
+		return ErrModelNotFound
+	}
+
+	return l.provider.changeModel(model)
 }

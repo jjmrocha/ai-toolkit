@@ -84,3 +84,12 @@ func (o *ollama) modelInfo(ctx context.Context) (*ModelInfo, error) {
 
 	return fromOllamaToModelInfo(apiResp, o.cfg.Model)
 }
+
+func (o *ollama) changeModel(model string) error {
+	o.cfg.Model = model
+	return nil
+}
+
+func (o *ollama) currentModel() string {
+	return o.cfg.Model
+}
