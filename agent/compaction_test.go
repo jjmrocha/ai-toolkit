@@ -45,21 +45,22 @@ func TestCompactionThreshold(t *testing.T) {
 }
 
 func TestIndexOfTheBeginningOfTurnToKeep(t *testing.T) {
-	// defaultKeepRecentTurns is 1, so the result is the last user-message index.
+	// defaultKeepRecentTurns is 2, so the result is the start of the second-to-last
+	// turn — the earliest message the two most recent turns keep.
 
-	t.Run("returns the last user-message index across several turns", func(t *testing.T) {
+	t.Run("keeps the last two turns, returning the earlier kept turn's user index", func(t *testing.T) {
 		// given
 		msgs := []llm.Message{llm.SystemMessage{Content: "sys"}}
 		msgs = append(msgs, turn("u1", "a1")...)
 		msgs = append(msgs, turn("u2", "a2")...)
 		// when
 		result := indexOfTheBeginningOfTurnToKeep(msgs)
-		// then: "u2" sits at index 3
-		assert.Equal(t, 3, result)
+		// then: keeping "u1" and "u2" starts at "u1", index 1
+		assert.Equal(t, 1, result)
 		assert.IsType(t, llm.UserMessage{}, msgs[result])
 	})
 
-	t.Run("points past a tool-call turn to the last user message", func(t *testing.T) {
+	t.Run("keeps a tool-call turn when it is within the two most recent turns", func(t *testing.T) {
 		// given
 		msgs := []llm.Message{
 			llm.SystemMessage{Content: "sys"},
@@ -72,8 +73,8 @@ func TestIndexOfTheBeginningOfTurnToKeep(t *testing.T) {
 		}
 		// when
 		result := indexOfTheBeginningOfTurnToKeep(msgs)
-		// then: "u2" sits at index 5, so the tool pair stays in the older window
-		assert.Equal(t, 5, result)
+		// then: the two kept turns start at "u1", index 1, so the tool pair is kept
+		assert.Equal(t, 1, result)
 	})
 
 	t.Run("returns the only user-message index for a single turn", func(t *testing.T) {

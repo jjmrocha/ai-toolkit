@@ -45,6 +45,13 @@ func New(cfg Config) (*LLM, error) {
 		}
 
 		provider = p
+	case ProviderAnthropic:
+		p, err := newAnthropic(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		provider = p
 	default:
 		return nil, ErrUnsupportedProvider
 	}

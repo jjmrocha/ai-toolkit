@@ -8,6 +8,8 @@ const (
 	ProviderOpenRouter Provider = "openrouter"
 	// ProviderOllama selects a local or remote Ollama backend (https://ollama.com).
 	ProviderOllama Provider = "ollama"
+	// ProviderAnthropic selects the Anthropic backend (https://www.anthropic.com).
+	ProviderAnthropic Provider = "anthropic"
 )
 
 // Config configures an [LLM]. Provider, APIKey, and Model are required; BaseURL
@@ -23,4 +25,8 @@ type Config struct {
 	Model string
 	// Models lists the available LLM models for the provider. Optional.
 	Models []string
+	// MaxTokens caps the tokens generated per response. When zero, OpenRouter
+	// and Ollama omit the cap and let the model decide, while Anthropic (which
+	// requires the field) applies its own default.
+	MaxTokens int
 }

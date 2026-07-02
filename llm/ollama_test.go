@@ -26,7 +26,7 @@ func TestNewOllama(t *testing.T) {
 		result, err := newOllama(Config{Model: "llama3.2"})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, defaultOllamaBaseURL, result.cfg.BaseURL)
+		assert.Equal(t, ollamaBaseURL, result.cfg.BaseURL)
 	})
 }
 
@@ -57,6 +57,40 @@ func TestOllamaChat(t *testing.T) {
 		assert.Equal(t, "llama3.2", sent.Model)
 		assert.False(t, sent.Stream)
 		assert.Len(t, sent.Messages, 1)
+	})
+
+	t.Run("includes num_predict when max tokens is configured", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"ok"},"done":true}`)
+		}))
+		t.Cleanup(server.Close)
+		o, err := newOllama(Config{Model: "llama3.2", BaseURL: server.URL, MaxTokens: 256})
+		require.NoError(t, err)
+		// when
+		_, err = o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		var sent ollamaChatRequest
+		require.NoError(t, json.Unmarshal(gotBody, &sent))
+		require.NotNil(t, sent.Options)
+		assert.Equal(t, 256, sent.Options.NumPredict)
+	})
+
+	t.Run("omits options when max tokens is not configured", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"ok"},"done":true}`)
+		})
+		// when
+		_, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.NotContains(t, string(gotBody), "options")
 	})
 
 	t.Run("returns content and summed token stats", func(t *testing.T) {

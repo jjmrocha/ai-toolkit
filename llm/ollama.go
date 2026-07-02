@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	defaultOllamaBaseURL = "http://localhost:11434"
-	ollamaChatEndpoint   = "/api/chat"
-	ollamaShowEndpoint   = "/api/show"
+	ollamaBaseURL      = "http://localhost:11434"
+	ollamaChatEndpoint = "/api/chat"
+	ollamaShowEndpoint = "/api/show"
 )
 
 type ollama struct {
@@ -21,7 +21,7 @@ type ollama struct {
 
 func newOllama(cfg Config) (*ollama, error) {
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = defaultOllamaBaseURL
+		cfg.BaseURL = ollamaBaseURL
 	}
 
 	return &ollama{
@@ -36,6 +36,10 @@ func (o *ollama) chat(ctx context.Context, messages []Message, tools []Tool) (*A
 		Messages: toOllamaMessages(messages),
 		Tools:    toOllamaTools(tools),
 		Stream:   false,
+	}
+
+	if o.cfg.MaxTokens > 0 {
+		request.Options = &ollamaOptions{NumPredict: o.cfg.MaxTokens}
 	}
 
 	var apiResp ollamaChatResponse

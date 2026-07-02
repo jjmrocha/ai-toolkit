@@ -315,27 +315,31 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("compacts older turns once the threshold is crossed", func(t *testing.T) {
-		// given: a small first turn, a second turn that trips 90% of the 1000-token
-		// window, and a third Chat call that is the summarization inside compaction.
+		// given: two small turns, then a third that trips 90% of the 1000-token
+		// window, plus a fourth Chat call that is the summarization inside compaction.
+		// defaultKeepRecentTurns is 2, so three turns are needed for an older turn to exist.
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
 				{Content: "a1", Stats: llm.Stats{TotalTokens: 100}},
-				{Content: "a2", Stats: llm.Stats{TotalTokens: 950}},
+				{Content: "a2", Stats: llm.Stats{TotalTokens: 100}},
+				{Content: "a3", Stats: llm.Stats{TotalTokens: 950}},
 				{Content: "SUMMARY"},
 			},
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
 		agt := agentWithLLM(fake, nil, fb, Config{CompactionThresholdPercent: 90})
 		agt.StartSession("sys")
-		// when: two turns build enough history for compaction to have older turns
+		// when: three turns build enough history for compaction to have an older turn
 		_, err1 := agt.Process(context.Background(), "u1")
 		_, err2 := agt.Process(context.Background(), "u2")
+		_, err3 := agt.Process(context.Background(), "u3")
 		// then
 		require.NoError(t, err1)
 		require.NoError(t, err2)
+		require.NoError(t, err3)
 		assert.Contains(t, fb.events, "ContextCompacted")
-		assert.Equal(t, 3, fake.chatCalls) // two turns plus one summarization
+		assert.Equal(t, 4, fake.chatCalls) // three turns plus one summarization
 	})
 }
 

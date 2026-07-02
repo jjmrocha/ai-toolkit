@@ -25,7 +25,7 @@ func TestNewOpenRouter(t *testing.T) {
 		result, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o"})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, defaultBaseURL, result.cfg.BaseURL)
+		assert.Equal(t, openrouterBaseURL, result.cfg.BaseURL)
 	})
 
 	t.Run("keeps the configured base URL", func(t *testing.T) {
@@ -86,6 +86,39 @@ func TestChat(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.NotContains(t, string(gotBody), "tools")
+	})
+
+	t.Run("includes max_tokens when configured", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+		}))
+		t.Cleanup(server.Close)
+		o, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o", BaseURL: server.URL, MaxTokens: 256})
+		require.NoError(t, err)
+		// when
+		_, err = o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		var sent orChatRequest
+		require.NoError(t, json.Unmarshal(gotBody, &sent))
+		assert.Equal(t, 256, sent.MaxTokens)
+	})
+
+	t.Run("omits max_tokens when not configured", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+		})
+		// when
+		_, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.NotContains(t, string(gotBody), "max_tokens")
 	})
 
 	t.Run("returns the assistant content and usage stats", func(t *testing.T) {

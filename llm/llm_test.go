@@ -55,7 +55,7 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, cfg, result.cfg)
+		assert.Equal(t, cfg, result.config)
 	})
 
 	t.Run("valid ollama config returns a configured LLM without an API key", func(t *testing.T) {
@@ -66,7 +66,18 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Equal(t, cfg, result.cfg)
+		assert.Equal(t, cfg, result.config)
+	})
+
+	t.Run("valid anthropic config returns a configured LLM", func(t *testing.T) {
+		// given
+		cfg := Config{Provider: ProviderAnthropic, Model: "claude-opus-4-8", APIKey: "sk-test"}
+		// when
+		result, err := New(cfg)
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, cfg, result.config)
 	})
 }
 
@@ -159,7 +170,7 @@ func TestLLMAvailableModels(t *testing.T) {
 	t.Run("returns the configured model list", func(t *testing.T) {
 		// given
 		expected := []string{"m1", "m2"}
-		llm := &LLM{cfg: Config{Models: expected}}
+		llm := &LLM{config: Config{Models: expected}}
 		// when
 		result := llm.AvailableModels()
 		// then
@@ -181,7 +192,7 @@ func TestLLMChangeModel(t *testing.T) {
 		// given
 		var changed string
 		llm := &LLM{
-			cfg: Config{Models: []string{"m1", "m2"}},
+			config: Config{Models: []string{"m1", "m2"}},
 			provider: fakeProvider{
 				changeModelFunc: func(m string) error { changed = m; return nil },
 			},
@@ -195,7 +206,7 @@ func TestLLMChangeModel(t *testing.T) {
 
 	t.Run("returns ErrMissingModel when model is empty", func(t *testing.T) {
 		// given
-		llm := &LLM{cfg: Config{Models: []string{"m1"}}}
+		llm := &LLM{config: Config{Models: []string{"m1"}}}
 		// when
 		err := llm.ChangeModel("")
 		// then
@@ -204,7 +215,7 @@ func TestLLMChangeModel(t *testing.T) {
 
 	t.Run("returns ErrModelNotFound when model is not in the configured list", func(t *testing.T) {
 		// given
-		llm := &LLM{cfg: Config{Models: []string{"m1"}}}
+		llm := &LLM{config: Config{Models: []string{"m1"}}}
 		// when
 		err := llm.ChangeModel("m2")
 		// then

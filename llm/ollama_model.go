@@ -7,6 +7,11 @@ type ollamaChatRequest struct {
 	Messages []ollamaMessage `json:"messages"`
 	Tools    []ollamaTool    `json:"tools,omitempty"`
 	Stream   bool            `json:"stream"`
+	Options  *ollamaOptions  `json:"options,omitempty"`
+}
+
+type ollamaOptions struct {
+	NumPredict int `json:"num_predict,omitempty"`
 }
 
 type ollamaMessage struct {

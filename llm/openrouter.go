@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://openrouter.ai/api/v1"
-	chatEndpoint   = "/chat/completions"
-	modelsEndpoint = "/models"
+	openrouterBaseURL        = "https://openrouter.ai/api/v1"
+	openrouterChatEndpoint   = "/chat/completions"
+	openrouterModelsEndpoint = "/models"
 )
 
 type openrouter struct {
@@ -25,7 +25,7 @@ func newOpenRouter(cfg Config) (*openrouter, error) {
 	}
 
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = defaultBaseURL
+		cfg.BaseURL = openrouterBaseURL
 	}
 
 	client := newRestyClient(cfg.BaseURL).
@@ -44,9 +44,10 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 	}
 
 	request := orChatRequest{
-		Model:    o.cfg.Model,
-		Messages: convertedMessages,
-		Tools:    toORTools(tools),
+		Model:     o.cfg.Model,
+		Messages:  convertedMessages,
+		Tools:     toORTools(tools),
+		MaxTokens: o.cfg.MaxTokens,
 	}
 
 	var apiResp orChatResponse
@@ -54,7 +55,7 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 		SetContext(ctx).
 		SetBody(request).
 		SetResult(&apiResp).
-		Post(chatEndpoint)
+		Post(openrouterChatEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("openrouter: sending request: %w", err)
 	}
@@ -79,7 +80,7 @@ func (o *openrouter) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	resp, err := o.client.R().
 		SetContext(ctx).
 		SetResult(&apiResp).
-		Get(modelsEndpoint)
+		Get(openrouterModelsEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("openrouter: sending request: %w", err)
 	}
