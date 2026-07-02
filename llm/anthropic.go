@@ -20,7 +20,7 @@ const (
 )
 
 type anthropic struct {
-	cfg    Config
+	config Config
 	client *resty.Client
 }
 
@@ -42,18 +42,19 @@ func newAnthropic(cfg Config) (*anthropic, error) {
 		SetHeader("anthropic-version", anthropicVersion)
 
 	return &anthropic{
-		cfg:    cfg,
+		config: cfg,
 		client: client,
 	}, nil
 }
 
 func (a *anthropic) chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
 	request := anthropicChatRequest{
-		Model:     a.cfg.Model,
-		MaxTokens: a.cfg.MaxTokens,
+		Model:     a.config.Model,
+		MaxTokens: a.config.MaxTokens + a.config.Effort.tokenBudget(),
 		System:    toAnthropicSystem(messages),
 		Messages:  toAnthropicMessages(messages),
 		Tools:     toAnthropicTools(tools),
+		Thinking:  toAnthropicThinking(a.config.Effort),
 	}
 
 	var apiResp anthropicChatResponse
@@ -78,13 +79,13 @@ func (a *anthropic) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	resp, err := a.client.R().
 		SetContext(ctx).
 		SetResult(&apiResp).
-		Get(anthropicModelsEndpoint + "/" + a.cfg.Model)
+		Get(anthropicModelsEndpoint + "/" + a.config.Model)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic: sending request: %w", err)
 	}
 
 	if resp.StatusCode() == http.StatusNotFound {
-		return nil, fmt.Errorf("anthropic: %w: %q", ErrModelNotFound, a.cfg.Model)
+		return nil, fmt.Errorf("anthropic: %w: %q", ErrModelNotFound, a.config.Model)
 	}
 
 	if resp.IsError() {
@@ -95,10 +96,18 @@ func (a *anthropic) modelInfo(ctx context.Context) (*ModelInfo, error) {
 }
 
 func (a *anthropic) changeModel(model string) error {
-	a.cfg.Model = model
+	a.config.Model = model
 	return nil
 }
 
 func (a *anthropic) currentModel() string {
-	return a.cfg.Model
+	return a.config.Model
+}
+
+func (a *anthropic) effort() Effort {
+	return a.config.Effort
+}
+
+func (a *anthropic) changeEffort(e Effort) {
+	a.config.Effort = e
 }

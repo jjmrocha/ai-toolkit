@@ -31,11 +31,11 @@ type stdio struct {
 	mu        sync.Mutex
 }
 
-// NewStdIO launches command with args, wires its stdin and stdout, and performs
+// newStdIO launches command with args, wires its stdin and stdout, and performs
 // the MCP initialize handshake including protocol-version negotiation. The
 // child's stderr is discarded and ctx bounds the handshake. On any handshake
 // failure the process is terminated before returning.
-func NewStdIO(ctx context.Context, command string, args []string) (*stdio, error) {
+func newStdIO(ctx context.Context, command string, args []string) (*stdio, error) {
 	cmd := exec.Command(command, args...) //nolint:gosec // command and args are operator-provided server config
 
 	stdin, err := cmd.StdinPipe()
@@ -193,7 +193,7 @@ func (s *stdio) read(ctx context.Context, requestID int) (map[string]any, error)
 			return nil, err
 		}
 
-		line, err := ReadBytes(ctx, s.out, '\n')
+		line, err := readBytes(ctx, s.out, '\n')
 
 		var message map[string]any
 		if json.Unmarshal(line, &message) == nil && message["id"] == float64(requestID) {

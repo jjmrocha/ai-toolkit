@@ -63,6 +63,15 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 	return convertedMessages, nil
 }
 
+func toORReasoning(e Effort) *orReasoning {
+	if e == EffortOff {
+		disabled := false
+		return &orReasoning{Enabled: &disabled}
+	}
+
+	return &orReasoning{Effort: e.reasoningLevel()}
+}
+
 func toORTools(tools []Tool) []orTool {
 	if len(tools) == 0 {
 		return nil

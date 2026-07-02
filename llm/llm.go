@@ -1,7 +1,7 @@
 // Package llm provides a provider-agnostic client for chat-based large language
 // models. Construct an [LLM] with [New], then call [LLM.Chat] to exchange
-// messages and [LLM.ModelInfo] to query model metadata. OpenRouter and Ollama
-// are the supported providers.
+// messages and [LLM.ModelInfo] to query model metadata. OpenRouter, Ollama, and
+// Anthropic are the supported providers.
 package llm
 
 import (
@@ -17,8 +17,10 @@ type LLM struct {
 }
 
 // New creates an [LLM] backed by the provider named in cfg. It returns
-// [ErrMissingProvider] or [ErrMissingModel] when those fields are empty, and
-// [ErrUnsupportedProvider] when the provider is not recognized.
+// [ErrMissingProvider] or [ErrMissingModel] when those fields are empty,
+// [ErrUnsupportedProvider] when the provider is not recognized, and
+// [ErrInvalidEffort] when Config.Effort is not a recognized [Effort]. An empty
+// Config.Effort defaults to [EffortOff].
 func New(cfg Config) (*LLM, error) {
 	if cfg.Provider == "" {
 		return nil, ErrMissingProvider
@@ -26,6 +28,14 @@ func New(cfg Config) (*LLM, error) {
 
 	if cfg.Model == "" {
 		return nil, ErrMissingModel
+	}
+
+	if cfg.Effort == "" {
+		cfg.Effort = EffortOff
+	}
+
+	if !cfg.Effort.valid() {
+		return nil, ErrInvalidEffort
 	}
 
 	var provider llmProvider
@@ -103,4 +113,14 @@ func (l *LLM) ChangeModel(model string) error {
 	}
 
 	return l.provider.changeModel(model)
+}
+
+// Effort reports the reasoning effort the client currently applies to requests.
+func (l *LLM) Effort() Effort {
+	return l.provider.effort()
+}
+
+// ChangeEffort sets the reasoning effort applied to subsequent requests.
+func (l *LLM) ChangeEffort(e Effort) {
+	l.provider.changeEffort(e)
 }

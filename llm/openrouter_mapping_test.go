@@ -81,6 +81,37 @@ func TestToORMessages(t *testing.T) {
 	})
 }
 
+func TestToORReasoning(t *testing.T) {
+	t.Run("off disables reasoning explicitly", func(t *testing.T) {
+		// when
+		result := toORReasoning(EffortOff)
+		// then
+		require.NotNil(t, result)
+		require.NotNil(t, result.Enabled)
+		assert.False(t, *result.Enabled)
+		assert.Empty(t, result.Effort)
+	})
+
+	tests := []struct {
+		name     string
+		input    Effort
+		expected string
+	}{
+		{name: "low maps to the low effort", input: EffortLow, expected: "low"},
+		{name: "medium maps to the medium effort", input: EffortMedium, expected: "medium"},
+		{name: "max maps to high, the strongest effort OpenRouter accepts", input: EffortMax, expected: "high"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// when
+			result := toORReasoning(tc.input)
+			// then
+			assert.Equal(t, &orReasoning{Effort: tc.expected}, result)
+		})
+	}
+}
+
 func TestToORTools(t *testing.T) {
 	t.Run("nil tools yields nil", func(t *testing.T) {
 		// when

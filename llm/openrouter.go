@@ -15,7 +15,7 @@ const (
 )
 
 type openrouter struct {
-	cfg    Config
+	config Config
 	client *resty.Client
 }
 
@@ -32,7 +32,7 @@ func newOpenRouter(cfg Config) (*openrouter, error) {
 		SetAuthToken(cfg.APIKey)
 
 	return &openrouter{
-		cfg:    cfg,
+		config: cfg,
 		client: client,
 	}, nil
 }
@@ -44,10 +44,11 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 	}
 
 	request := orChatRequest{
-		Model:     o.cfg.Model,
+		Model:     o.config.Model,
 		Messages:  convertedMessages,
 		Tools:     toORTools(tools),
-		MaxTokens: o.cfg.MaxTokens,
+		MaxTokens: o.config.MaxTokens,
+		Reasoning: toORReasoning(o.config.Effort),
 	}
 
 	var apiResp orChatResponse
@@ -89,14 +90,22 @@ func (o *openrouter) modelInfo(ctx context.Context) (*ModelInfo, error) {
 		return nil, fmt.Errorf("openrouter: unexpected status %d: %s", resp.StatusCode(), resp.String())
 	}
 
-	return fromORToModelInfo(apiResp.Data, o.cfg.Model)
+	return fromORToModelInfo(apiResp.Data, o.config.Model)
 }
 
 func (o *openrouter) changeModel(model string) error {
-	o.cfg.Model = model
+	o.config.Model = model
 	return nil
 }
 
 func (o *openrouter) currentModel() string {
-	return o.cfg.Model
+	return o.config.Model
+}
+
+func (o *openrouter) effort() Effort {
+	return o.config.Effort
+}
+
+func (o *openrouter) changeEffort(e Effort) {
+	o.config.Effort = e
 }

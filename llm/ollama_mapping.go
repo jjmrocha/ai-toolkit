@@ -53,6 +53,14 @@ func toOllamaMessages(messages []Message) []ollamaMessage {
 	return convertedMessages
 }
 
+func toOllamaThink(e Effort) any {
+	if e == EffortOff {
+		return false
+	}
+
+	return e.reasoningLevel()
+}
+
 func toOllamaTools(tools []Tool) []ollamaTool {
 	if len(tools) == 0 {
 		return nil

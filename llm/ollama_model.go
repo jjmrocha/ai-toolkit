@@ -8,6 +8,7 @@ type ollamaChatRequest struct {
 	Tools    []ollamaTool    `json:"tools,omitempty"`
 	Stream   bool            `json:"stream"`
 	Options  *ollamaOptions  `json:"options,omitempty"`
+	Think    any             `json:"think,omitempty"`
 }
 
 type ollamaOptions struct {

@@ -50,7 +50,7 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		return nil, ErrCommandRequired
 	}
 
-	t, err := NewStdIO(ctx, cfg.Command, cfg.Args)
+	t, err := newStdIO(ctx, cfg.Command, cfg.Args)
 	if err != nil {
 		return nil, err
 	}

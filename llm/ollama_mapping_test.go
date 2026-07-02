@@ -59,6 +59,28 @@ func TestToOllamaMessages(t *testing.T) {
 	})
 }
 
+func TestToOllamaThink(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    Effort
+		expected any
+	}{
+		{name: "off disables thinking", input: EffortOff, expected: false},
+		{name: "low maps to the low level", input: EffortLow, expected: "low"},
+		{name: "medium maps to the medium level", input: EffortMedium, expected: "medium"},
+		{name: "max maps to high, the strongest level Ollama accepts", input: EffortMax, expected: "high"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// when
+			result := toOllamaThink(tc.input)
+			// then
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func TestToOllamaTools(t *testing.T) {
 	t.Run("nil tools yields nil", func(t *testing.T) {
 		assert.Nil(t, toOllamaTools(nil))

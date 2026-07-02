@@ -127,6 +127,46 @@ func TestToAnthropicMessages(t *testing.T) {
 	})
 }
 
+func TestToAnthropicThinking(t *testing.T) {
+	t.Run("returns nil when effort is off", func(t *testing.T) {
+		// when
+		result := toAnthropicThinking(EffortOff)
+		// then
+		assert.Nil(t, result)
+	})
+
+	tests := []struct {
+		name     string
+		input    Effort
+		expected *anthropicThinking
+	}{
+		{
+			name:     "low effort enables thinking with the low budget",
+			input:    EffortLow,
+			expected: &anthropicThinking{Type: "enabled", BudgetTokens: 2000},
+		},
+		{
+			name:     "medium effort enables thinking with the medium budget",
+			input:    EffortMedium,
+			expected: &anthropicThinking{Type: "enabled", BudgetTokens: 4000},
+		},
+		{
+			name:     "max effort enables thinking with the max budget",
+			input:    EffortMax,
+			expected: &anthropicThinking{Type: "enabled", BudgetTokens: 16000},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// when
+			result := toAnthropicThinking(tc.input)
+			// then
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func TestToAnthropicTools(t *testing.T) {
 	t.Run("nil tools yields nil", func(t *testing.T) {
 		// when

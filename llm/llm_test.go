@@ -35,6 +35,11 @@ func TestNew(t *testing.T) {
 			cfg:         Config{Provider: ProviderOpenRouter, Model: "openai/gpt-4o"}, // no API key
 			expectedErr: ErrMissingAPIKey,
 		},
+		{
+			name:        "unknown effort is rejected",
+			cfg:         Config{Provider: ProviderOllama, Model: "llama3.2", Effort: "ultra"},
+			expectedErr: ErrInvalidEffort,
+		},
 	}
 
 	for _, tc := range errorCases {
@@ -55,6 +60,7 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		cfg.Effort = EffortOff // New defaults an unset effort
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -66,6 +72,7 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		cfg.Effort = EffortOff // New defaults an unset effort
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -77,6 +84,7 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		cfg.Effort = EffortOff // New defaults an unset effort
 		assert.Equal(t, cfg, result.config)
 	})
 }
@@ -230,6 +238,8 @@ type fakeProvider struct {
 	modelInfoFunc    func(context.Context) (*ModelInfo, error)
 	changeModelFunc  func(string) error
 	currentModelFunc func() string
+	effortFunc       func() Effort
+	changeEffortFunc func(Effort)
 }
 
 func (f fakeProvider) chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
@@ -252,4 +262,18 @@ func (f fakeProvider) currentModel() string {
 		return ""
 	}
 	return f.currentModelFunc()
+}
+
+func (f fakeProvider) effort() Effort {
+	if f.effortFunc == nil {
+		return EffortOff
+	}
+	return f.effortFunc()
+}
+
+func (f fakeProvider) changeEffort(e Effort) {
+	if f.changeEffortFunc == nil {
+		return
+	}
+	f.changeEffortFunc(e)
 }

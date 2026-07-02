@@ -3,10 +3,16 @@ package llm
 // OpenAI-compatible wire types exchanged with the OpenRouter API.
 
 type orChatRequest struct {
-	Model     string      `json:"model"`
-	Messages  []orMessage `json:"messages"`
-	Tools     []orTool    `json:"tools,omitempty"`
-	MaxTokens int         `json:"max_tokens,omitempty"`
+	Model     string       `json:"model"`
+	Messages  []orMessage  `json:"messages"`
+	Tools     []orTool     `json:"tools,omitempty"`
+	MaxTokens int          `json:"max_tokens,omitempty"`
+	Reasoning *orReasoning `json:"reasoning,omitempty"`
+}
+
+type orReasoning struct {
+	Effort  string `json:"effort,omitempty"`
+	Enabled *bool  `json:"enabled,omitempty"`
 }
 
 type orMessage struct {

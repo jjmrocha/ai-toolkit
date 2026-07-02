@@ -25,7 +25,7 @@ func TestNewOpenRouter(t *testing.T) {
 		result, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o"})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, openrouterBaseURL, result.cfg.BaseURL)
+		assert.Equal(t, openrouterBaseURL, result.config.BaseURL)
 	})
 
 	t.Run("keeps the configured base URL", func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestNewOpenRouter(t *testing.T) {
 		result, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o", BaseURL: baseURL})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, baseURL, result.cfg.BaseURL)
+		assert.Equal(t, baseURL, result.config.BaseURL)
 	})
 }
 
@@ -119,6 +119,27 @@ func TestChat(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.NotContains(t, string(gotBody), "max_tokens")
+	})
+
+	t.Run("does not set max_tokens when only effort is set", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+		}))
+		t.Cleanup(server.Close)
+		o, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o", BaseURL: server.URL, Effort: EffortMax})
+		require.NoError(t, err)
+		// when
+		_, err = o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		var sent orChatRequest
+		require.NoError(t, json.Unmarshal(gotBody, &sent))
+		assert.Zero(t, sent.MaxTokens) // effort must not impose a max_tokens cap
+		require.NotNil(t, sent.Reasoning)
+		assert.Equal(t, "high", sent.Reasoning.Effort)
 	})
 
 	t.Run("returns the assistant content and usage stats", func(t *testing.T) {

@@ -29,4 +29,7 @@ type Config struct {
 	// and Ollama omit the cap and let the model decide, while Anthropic (which
 	// requires the field) applies its own default.
 	MaxTokens int
+	// Effort controls how much reasoning the model does before answering.
+	// Optional; when empty it defaults to [EffortOff].
+	Effort Effort
 }

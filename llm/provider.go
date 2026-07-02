@@ -7,4 +7,6 @@ type llmProvider interface {
 	modelInfo(context.Context) (*ModelInfo, error)
 	changeModel(model string) error
 	currentModel() string
+	effort() Effort
+	changeEffort(e Effort)
 }

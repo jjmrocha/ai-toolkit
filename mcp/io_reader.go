@@ -5,12 +5,12 @@ import (
 	"io"
 )
 
-// ReadBytes reads from r until delim is found, returning the bytes read up to
+// readBytes reads from r until delim is found, returning the bytes read up to
 // and including delim. ctx is checked before each read, so a cancelled context
 // stops it between reads; a read already blocked inside r is not interrupted. On
 // error it returns the bytes read so far together with the error, which is often
 // io.EOF for a final line that lacks a trailing delim.
-func ReadBytes(ctx context.Context, r io.Reader, delim byte) ([]byte, error) {
+func readBytes(ctx context.Context, r io.Reader, delim byte) ([]byte, error) {
 	var line []byte
 	b := make([]byte, 1)
 

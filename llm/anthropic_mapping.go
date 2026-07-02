@@ -73,6 +73,14 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 	return result
 }
 
+func toAnthropicThinking(e Effort) *anthropicThinking {
+	if e == EffortOff {
+		return nil
+	}
+
+	return &anthropicThinking{Type: "enabled", BudgetTokens: e.tokenBudget()}
+}
+
 func toAnthropicTools(tools []Tool) []anthropicTool {
 	if len(tools) == 0 {
 		return nil

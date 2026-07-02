@@ -15,7 +15,7 @@ const (
 )
 
 type ollama struct {
-	cfg    Config
+	config Config
 	client *resty.Client
 }
 
@@ -25,21 +25,22 @@ func newOllama(cfg Config) (*ollama, error) {
 	}
 
 	return &ollama{
-		cfg:    cfg,
+		config: cfg,
 		client: newRestyClient(cfg.BaseURL),
 	}, nil
 }
 
 func (o *ollama) chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
 	request := ollamaChatRequest{
-		Model:    o.cfg.Model,
+		Model:    o.config.Model,
 		Messages: toOllamaMessages(messages),
 		Tools:    toOllamaTools(tools),
 		Stream:   false,
+		Think:    toOllamaThink(o.config.Effort),
 	}
 
-	if o.cfg.MaxTokens > 0 {
-		request.Options = &ollamaOptions{NumPredict: o.cfg.MaxTokens}
+	if o.config.MaxTokens > 0 {
+		request.Options = &ollamaOptions{NumPredict: o.config.MaxTokens}
 	}
 
 	var apiResp ollamaChatResponse
@@ -67,7 +68,7 @@ func (o *ollama) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	var apiResp ollamaShowResponse
 	resp, err := o.client.R().
 		SetContext(ctx).
-		SetBody(ollamaShowRequest{Model: o.cfg.Model}).
+		SetBody(ollamaShowRequest{Model: o.config.Model}).
 		SetResult(&apiResp).
 		Post(ollamaShowEndpoint)
 	if err != nil {
@@ -75,7 +76,7 @@ func (o *ollama) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	}
 
 	if resp.StatusCode() == http.StatusNotFound {
-		return nil, fmt.Errorf("ollama: %w: %q", ErrModelNotFound, o.cfg.Model)
+		return nil, fmt.Errorf("ollama: %w: %q", ErrModelNotFound, o.config.Model)
 	}
 
 	if resp.IsError() {
@@ -86,14 +87,22 @@ func (o *ollama) modelInfo(ctx context.Context) (*ModelInfo, error) {
 		return nil, fmt.Errorf("ollama: api error: %s", apiResp.Error)
 	}
 
-	return fromOllamaToModelInfo(apiResp, o.cfg.Model)
+	return fromOllamaToModelInfo(apiResp, o.config.Model)
 }
 
 func (o *ollama) changeModel(model string) error {
-	o.cfg.Model = model
+	o.config.Model = model
 	return nil
 }
 
 func (o *ollama) currentModel() string {
-	return o.cfg.Model
+	return o.config.Model
+}
+
+func (o *ollama) effort() Effort {
+	return o.config.Effort
+}
+
+func (o *ollama) changeEffort(e Effort) {
+	o.config.Effort = e
 }

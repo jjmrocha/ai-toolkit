@@ -26,7 +26,7 @@ func TestNewOllama(t *testing.T) {
 		result, err := newOllama(Config{Model: "llama3.2"})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, ollamaBaseURL, result.cfg.BaseURL)
+		assert.Equal(t, ollamaBaseURL, result.config.BaseURL)
 	})
 }
 
@@ -91,6 +91,26 @@ func TestOllamaChat(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.NotContains(t, string(gotBody), "options")
+	})
+
+	t.Run("does not cap generation when only effort is set", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"ok"},"done":true}`)
+		}))
+		t.Cleanup(server.Close)
+		o, err := newOllama(Config{Model: "llama3.2", BaseURL: server.URL, Effort: EffortMax})
+		require.NoError(t, err)
+		// when
+		_, err = o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		var sent ollamaChatRequest
+		require.NoError(t, json.Unmarshal(gotBody, &sent))
+		assert.Nil(t, sent.Options) // effort must not impose a num_predict cap
+		assert.Equal(t, "high", sent.Think)
 	})
 
 	t.Run("returns content and summed token stats", func(t *testing.T) {

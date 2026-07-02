@@ -11,6 +11,9 @@ var (
 	ErrMissingAPIKey = errors.New("missing api_key")
 	// ErrMissingModel is returned by [New] when Config.Model is empty.
 	ErrMissingModel = errors.New("missing model")
+	// ErrInvalidEffort is returned by [New] when Config.Effort is not one of the
+	// recognized [Effort] values.
+	ErrInvalidEffort = errors.New("invalid effort")
 	// ErrModelNotFound is returned by [LLM.ModelInfo] when the configured model
 	// is not offered by the provider.
 	ErrModelNotFound = errors.New("model not found")

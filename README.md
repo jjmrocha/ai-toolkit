@@ -6,7 +6,8 @@ are more mature, better-supported libraries out there, and you should probably
 reach for one of those first. But if it happens to fit your needs as-is, feel
 free to use it.
 
-Requires **Go 1.26+**. Supported providers: **OpenRouter** and **Ollama**.
+Requires **Go 1.26+**. Supported providers: **OpenRouter**, **Ollama**, and
+**Anthropic**.
 
 ```bash
 go get github.com/jjmrocha/ai-toolkit
@@ -46,6 +47,12 @@ returns the assistant's reply; pass `[]Tool` as the third argument to offer tool
 List the models the client may switch between in `Config.Models`. `AvailableModels`
 returns that list, `CurrentModel` reports the active one, and `ChangeModel` switches
 to another entry from the list (returning `ErrModelNotFound` for anything outside it).
+
+Set `Config.Effort` to control how much the model reasons before answering —
+`EffortOff` (the default), `EffortLow`, `EffortMedium`, or `EffortMax`. It maps to
+each provider's native control (an Anthropic thinking-token budget, or an
+OpenRouter/Ollama reasoning level). `Effort` reads the current setting and
+`ChangeEffort` switches it on a live client.
 
 ## `tools`
 

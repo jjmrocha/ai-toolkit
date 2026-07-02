@@ -25,7 +25,7 @@ func TestNewAnthropic(t *testing.T) {
 		result, err := newAnthropic(Config{APIKey: "sk-test", Model: "claude-opus-4-8"})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, anthropicBaseURL, result.cfg.BaseURL)
+		assert.Equal(t, anthropicBaseURL, result.config.BaseURL)
 	})
 
 	t.Run("keeps the configured base URL", func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestNewAnthropic(t *testing.T) {
 		result, err := newAnthropic(Config{APIKey: "sk-test", Model: "claude-opus-4-8", BaseURL: baseURL})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, baseURL, result.cfg.BaseURL)
+		assert.Equal(t, baseURL, result.config.BaseURL)
 	})
 
 	t.Run("applies the default max tokens when none is provided", func(t *testing.T) {
@@ -43,7 +43,7 @@ func TestNewAnthropic(t *testing.T) {
 		result, err := newAnthropic(Config{APIKey: "sk-test", Model: "claude-opus-4-8"})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, defaultMaxTokens, result.cfg.MaxTokens)
+		assert.Equal(t, defaultMaxTokens, result.config.MaxTokens)
 	})
 
 	t.Run("keeps the configured max tokens", func(t *testing.T) {
@@ -51,7 +51,7 @@ func TestNewAnthropic(t *testing.T) {
 		result, err := newAnthropic(Config{APIKey: "sk-test", Model: "claude-opus-4-8", MaxTokens: 1024})
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, 1024, result.cfg.MaxTokens)
+		assert.Equal(t, 1024, result.config.MaxTokens)
 	})
 }
 

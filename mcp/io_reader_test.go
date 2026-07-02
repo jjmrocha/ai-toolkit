@@ -15,7 +15,7 @@ func TestReadBytes(t *testing.T) {
 		// given
 		r := strings.NewReader("hello\nworld\n")
 		// when
-		result, err := ReadBytes(t.Context(), r, '\n')
+		result, err := readBytes(t.Context(), r, '\n')
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, []byte("hello\n"), result)
@@ -25,7 +25,7 @@ func TestReadBytes(t *testing.T) {
 		// given
 		r := strings.NewReader("partial")
 		// when
-		result, err := ReadBytes(t.Context(), r, '\n')
+		result, err := readBytes(t.Context(), r, '\n')
 		// then
 		assert.ErrorIs(t, err, io.EOF)
 		assert.Equal(t, []byte("partial"), result)
@@ -35,7 +35,7 @@ func TestReadBytes(t *testing.T) {
 		// given
 		r := strings.NewReader("")
 		// when
-		result, err := ReadBytes(t.Context(), r, '\n')
+		result, err := readBytes(t.Context(), r, '\n')
 		// then
 		assert.ErrorIs(t, err, io.EOF)
 		assert.Empty(t, result)
@@ -46,7 +46,7 @@ func TestReadBytes(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		// when
-		result, err := ReadBytes(ctx, strings.NewReader("data\n"), '\n')
+		result, err := readBytes(ctx, strings.NewReader("data\n"), '\n')
 		// then
 		assert.ErrorIs(t, err, context.Canceled)
 		assert.Nil(t, result)
