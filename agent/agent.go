@@ -160,7 +160,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			a.loadModelLimits(ctx)
 
 			if a.compactThreshold != 0 && response.Stats.TotalTokens > a.compactThreshold {
-				a.compactMessages(ctx)
+				a.CompactContext(ctx)
 			}
 
 			return &Response{
@@ -233,7 +233,13 @@ func (a *Agent) ChangeModel(model string) error {
 	return nil
 }
 
-func (a *Agent) compactMessages(ctx context.Context) {
+// CompactContext summarizes the conversation up to the most recent turn, keeping
+// the system message and the last turn intact. It is called automatically when
+// a completed turn crosses Config.CompactionThresholdPercent of the model's
+// context window, but can also be called manually to reduce memory usage or
+// token cost. It does nothing if there are no turns to summarize or if the
+// model fails to produce a summary.
+func (a *Agent) CompactContext(ctx context.Context) {
 	keepFrom := indexOfTheBeginningOfTurnToKeep(a.messages)
 	if keepFrom <= 1 {
 		return // nothing older to summarize
