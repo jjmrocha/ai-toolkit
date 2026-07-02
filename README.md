@@ -40,6 +40,16 @@ fmt.Println(reply.Content)
 fmt.Printf("tokens: %d\n", reply.Stats.TotalTokens)
 ```
 
+**Features:**
+
+- Three backends behind one API — `ProviderOpenRouter`, `ProviderOllama`, and `ProviderAnthropic` — selected by `Config.Provider`.
+- `Chat` exchanges an ordered `[]Message` (`SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolMessage`) and returns the assistant's reply.
+- Tool calling: pass `[]Tool` to `Chat` and read the model's requests from `AssistantMessage.ToolCalls`.
+- Token accounting on every reply via `Stats` (prompt, output, and total tokens).
+- Model management — `AvailableModels`, `CurrentModel`, and `ChangeModel` switch between the models in `Config.Models`; `ModelInfo` reports a model's name and context window.
+- Reasoning control — `Config.Effort` (`EffortOff`, `EffortLow`, `EffortMedium`, `EffortMax`), read with `Effort` and changed live with `ChangeEffort`.
+- Optional output cap via `Config.MaxTokens` and endpoint override via `Config.BaseURL`.
+
 `New` builds a client from a `Config` (swap `Provider`/`Model` to change
 backends — Ollama needs no API key). `Chat` sends an ordered `[]Message` and
 returns the assistant's reply; pass `[]Tool` as the third argument to offer tools.
@@ -90,6 +100,12 @@ for _, call := range reply.ToolCalls {
 }
 ```
 
+**Features:**
+
+- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `AddTool`, `RemoveTool`, `GetTools` (feed to `Chat`), and `ExecuteTool` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
+- `ObjectBuilder` builds a tool's JSON Schema with a fluent API: scalars (`String`, `Integer`, `Number`, `Boolean`), arrays (`ArrayOfStrings`, `ArrayOfIntegers`, `ArrayOfNumbers`, `ArrayOfBooleans`, `ArrayOfObjects`), nested `Object`, then `Build`.
+- `Arguments` reads a call's decoded arguments with type-checked accessors — `GetString`, `GetInt`, `GetFloat64`, `GetBool`, `GetObject`, and the `GetArrayOf…` family — returning an error instead of panicking on a type mismatch.
+
 `ObjectBuilder` builds a tool's JSON Schema with a fluent API (scalars, arrays,
 nested objects). `ToolBox` registers each tool with the function that runs it;
 `GetTools` feeds them to `Chat` and `ExecuteTool` dispatches a requested call.
@@ -121,6 +137,13 @@ if err := mcpClient.RegisterTools(ctx, box); err != nil {
 reply, err := client.Chat(ctx, messages, box.GetTools()) // MCP tools included
 ```
 
+**Features:**
+
+- `NewClient` launches a stdio MCP server as a child process and completes the initialize handshake, including protocol-version negotiation.
+- `RegisterTools` discovers the server's tools and adds them to a `tools.ToolBox`, namespaced as `"<Name>.<tool>"`, so they are callable like any native tool.
+- `Close` removes the registered tools and shuts the child process down.
+- One server per `Client`, driven over its stdin/stdout; requests are serialized, so at most one is in flight at a time.
+
 `NewClient` launches the server as a child process and completes the handshake.
 `RegisterTools` discovers the server's tools and adds them to the `ToolBox`,
 namespaced as `"<Name>.<tool>"` (e.g. `playwright.browser_navigate`). `Close`
@@ -151,6 +174,17 @@ fmt.Println(resp.Content)
 fmt.Printf("%d tool calls, %d tokens\n",
 	resp.Metadata.ToolCalls, resp.Metadata.TotalTokens)
 ```
+
+**Features:**
+
+- Runs the whole call-tool-feed-back loop for you: `Process` sends the user input, executes every tool the model requests, feeds the results back, and repeats until the model answers without requesting tools.
+- A failing tool is reported back to the model as its error text so the model can recover instead of aborting the turn.
+- Automatic context compaction: once a completed turn crosses `Config.CompactionThresholdPercent` of the model's window, older turns are summarized while the system prompt and recent turns are kept; `CompactContext` also runs it on demand.
+- Session lifecycle — `StartSession`, `ResetSession`, and `Close`.
+- `Process` returns a `Response` whose `Metadata` reports token usage, per-phase timing (`LLMDuration`, `ToolDuration`), iteration and tool-call counts, and the active model.
+- Model and reasoning passthrough to the underlying client — `AvailableModels`, `CurrentModel`, `ChangeModel`, `Effort`, `ChangeEffort`.
+- Observe lifecycle events by installing a `Feedback` sink with `SetFeedback`; `NewStdoutFeedback` prints them to standard output.
+- `Config.MaxIterations` caps the model/tool rounds per `Process` call.
 
 `New` pairs an `llm` client with a `tools.ToolBox` (a nil box is treated as
 empty). `StartSession` sets the system prompt; `Process` drives one turn,
