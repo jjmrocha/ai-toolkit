@@ -73,7 +73,7 @@ by hand and dispatching tool calls yourself.
 
 **Features:**
 
-- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `AddTool`, `RemoveTool`, `GetTools` (feed to `Chat`), and `ExecuteTool` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
+- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `AddTool` (returns `ErrInvalidToolName` if the name is empty or contains anything other than letters, digits, `_`, or `-`, up to 128 chars), `RemoveTool`, `GetTools` (feed to `Chat`), and `ExecuteTool` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
 - `ObjectBuilder` builds a tool's JSON Schema with a fluent API: scalars (`String`, `Integer`, `Number`, `Boolean`), arrays (`ArrayOfStrings`, `ArrayOfIntegers`, `ArrayOfNumbers`, `ArrayOfBooleans`, `ArrayOfObjects`), nested `Object`, then `Build`.
 - `Arguments` reads a call's decoded arguments with type-checked accessors — `GetString`, `GetInt`, `GetFloat64`, `GetBool`, `GetObject`, and the `GetArrayOf…` family — returning an error instead of panicking on a type mismatch.
 
@@ -122,7 +122,7 @@ Connects a stdio-based [MCP](https://modelcontextprotocol.io) server to a
 **Features:**
 
 - `NewClient` launches a stdio MCP server as a child process and completes the initialize handshake, including protocol-version negotiation.
-- `RegisterTools` discovers the server's tools and adds them to a `tools.ToolBox`, namespaced as `"<Name>.<tool>"`, so they are callable like any native tool.
+- `RegisterTools` discovers the server's tools and adds them to a `tools.ToolBox`, namespaced as `"<Name>__<tool>"`, so they are callable like any native tool.
 - `Close` removes the registered tools and shuts the child process down.
 - One server per `Client`, driven over its stdin/stdout; requests are serialized, so at most one is in flight at a time.
 
@@ -148,7 +148,7 @@ reply, err := model.Chat(ctx, messages, toolBox.GetTools()) // MCP tools include
 
 `NewClient` launches the server as a child process and completes the handshake.
 `RegisterTools` discovers the server's tools and adds them to the `ToolBox`,
-namespaced as `"<Name>.<tool>"` (e.g. `playwright.browser_navigate`). `Close`
+namespaced as `"<Name>__<tool>"` (e.g. `playwright__browser_navigate`). `Close`
 removes them and shuts the process down.
 
 ## `agent`

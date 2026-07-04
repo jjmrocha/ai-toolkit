@@ -8,6 +8,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 )
@@ -42,15 +43,29 @@ func NewToolBox() *ToolBox {
 	}
 }
 
+// toolNamePattern matches the tool names accepted by the providers: 1 to 128
+// characters, each a letter, digit, underscore, or hyphen.
+var toolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
+
 // AddTool registers tool together with the handler that executes it. The
 // handler is keyed by tool.Name; registering a tool whose name already exists
 // replaces the previous entry.
-func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) {
+//
+// It returns ErrInvalidToolName without registering anything if tool.Name is
+// empty or contains a character the providers reject (only letters, digits,
+// underscore, and hyphen are allowed, up to 128 characters).
+func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) error {
+	if !toolNamePattern.MatchString(tool.Name) {
+		return fmt.Errorf("%w: %q", ErrInvalidToolName, tool.Name)
+	}
+
 	t := fn{
 		tool:    tool,
 		handler: handler,
 	}
 	tb.tools[tool.Name] = t
+
+	return nil
 }
 
 // RemoveTool unregisters the tool with the given name. It is a no-op if no such

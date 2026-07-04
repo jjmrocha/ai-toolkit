@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -13,17 +14,57 @@ import (
 func noopHandler(context.Context, map[string]any) (string, error) { return "", nil }
 
 func TestAddTool(t *testing.T) {
+	t.Run("registers a tool with a valid name", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		// when
+		err := box.AddTool(llm.Tool{Name: "srv__echo-1"}, noopHandler)
+		// then
+		require.NoError(t, err)
+		require.Len(t, box.GetTools(), 1)
+	})
+
 	t.Run("re-registering a name replaces the previous tool", func(t *testing.T) {
 		// given
 		box := NewToolBox()
 		box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "first", nil })
 		// when
-		box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "second", nil })
+		err := box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "second", nil })
 		// then
+		require.NoError(t, err)
 		require.Len(t, box.GetTools(), 1)
 		result, err := box.ExecuteTool(t.Context(), llm.ToolCall{Name: "x"})
 		require.NoError(t, err)
 		assert.Equal(t, "second", result.Content)
+	})
+
+	t.Run("rejects a name with an illegal character and does not register it", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		// when
+		err := box.AddTool(llm.Tool{Name: "srv.echo"}, noopHandler)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidToolName)
+		assert.Empty(t, box.GetTools())
+	})
+
+	t.Run("rejects an empty name", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		// when
+		err := box.AddTool(llm.Tool{Name: ""}, noopHandler)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidToolName)
+	})
+
+	t.Run("rejects a name longer than 128 characters", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		longName := strings.Repeat("a", 129)
+		// when
+		err := box.AddTool(llm.Tool{Name: longName}, noopHandler)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidToolName)
 	})
 }
 

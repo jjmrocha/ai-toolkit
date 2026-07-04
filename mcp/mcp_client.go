@@ -77,7 +77,7 @@ func (c *Client) Close() error {
 }
 
 // RegisterTools queries the server for its tools and registers each one in tb,
-// namespaced as "<ClientConfig.Name>.<tool>" and backed by a handler that
+// namespaced as "<ClientConfig.Name>__<tool>" and backed by a handler that
 // forwards the call to the server. ctx bounds the tools/list request. Tools
 // registered here are removed again by Close. It may be called only once per
 // client and returns ErrAlreadyRegistered on a later call.
@@ -109,12 +109,14 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 		schema, _ := spec["inputSchema"].(map[string]any)
 
 		tool := llm.Tool{
-			Name:        fmt.Sprintf("%s.%s", c.config.Name, name),
+			Name:        fmt.Sprintf("%s__%s", c.config.Name, name),
 			Description: description,
 			Schema:      schema,
 		}
 
-		c.toolBox.AddTool(tool, c.makeHandler(name))
+		if err := c.toolBox.AddTool(tool, c.makeHandler(name)); err != nil {
+			return err
+		}
 		c.tools = append(c.tools, tool.Name)
 	}
 

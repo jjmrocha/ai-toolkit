@@ -52,7 +52,7 @@ func TestRegisterTools(t *testing.T) {
 		require.NoError(t, err)
 		registered := tb.GetTools()
 		require.Len(t, registered, 1)
-		assert.Equal(t, "srv.echo", registered[0].Name)
+		assert.Equal(t, "srv__echo", registered[0].Name)
 		assert.Equal(t, "Echoes input", registered[0].Description)
 		assert.Equal(t, map[string]any{"type": "object"}, registered[0].Schema)
 	})
@@ -65,7 +65,7 @@ func TestRegisterTools(t *testing.T) {
 		)
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		// when
-		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv.echo", Arguments: map[string]any{"city": "Lisbon"}})
+		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv__echo", Arguments: map[string]any{"city": "Lisbon"}})
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hello\nworld", result.Content)
@@ -83,7 +83,7 @@ func TestRegisterTools(t *testing.T) {
 		)
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		// when
-		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv.echo"})
+		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv__echo"})
 		// then
 		assert.Nil(t, result)
 		require.Error(t, err)
