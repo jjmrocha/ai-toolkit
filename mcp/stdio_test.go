@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,7 +16,7 @@ func newMemStdio(responses ...string) (*stdio, *bytes.Buffer) {
 	in := &bytes.Buffer{}
 	s := &stdio{
 		in:  in,
-		out: strings.NewReader(strings.Join(responses, "")),
+		out: bufio.NewReader(strings.NewReader(strings.Join(responses, ""))),
 	}
 	return s, in
 }

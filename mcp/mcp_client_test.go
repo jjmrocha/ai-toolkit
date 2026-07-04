@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *b
 	tb := tools.NewToolBox()
 	c := &Client{
 		config:    ClientConfig{Name: name},
-		transport: &stdio{in: in, out: strings.NewReader(strings.Join(responses, ""))},
+		transport: &stdio{in: in, out: bufio.NewReader(strings.NewReader(strings.Join(responses, "")))},
 	}
 	return c, tb, in
 }

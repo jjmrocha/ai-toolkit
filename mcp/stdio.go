@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,7 +24,7 @@ const (
 type stdio struct {
 	cmd       *exec.Cmd
 	in        io.Writer
-	out       io.Reader
+	out       *bufio.Reader
 	messageID int
 	mu        sync.Mutex
 }
@@ -50,7 +51,7 @@ func newStdIO(ctx context.Context, command string, args []string) (*stdio, error
 	s := &stdio{
 		cmd: cmd,
 		in:  stdin,
-		out: stdout,
+		out: bufio.NewReader(stdout),
 	}
 
 	if err := s.initialize(ctx); err != nil {
@@ -176,7 +177,7 @@ func (s *stdio) read(ctx context.Context, requestID int) (map[string]any, error)
 			return nil, err
 		}
 
-		line, err := readBytes(ctx, s.out, '\n')
+		line, err := s.out.ReadBytes('\n')
 
 		var message map[string]any
 		if json.Unmarshal(line, &message) == nil && message["id"] == float64(requestID) {
