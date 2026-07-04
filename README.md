@@ -162,8 +162,8 @@ yourself.
 - A failing tool is reported back to the model as its error text so the model can recover instead of aborting the turn.
 - Automatic context compaction: once a completed turn crosses `Config.CompactionThresholdPercent` of the model's window, older turns are summarized while the system prompt and recent turns are kept; `CompactContext` also runs it on demand.
 - Session lifecycle — `StartSession`, `ResetSession`, and `Close`.
-- `Process` returns a `Response` whose `Metadata` reports token usage, per-phase timing (`LLMDuration`, `ToolDuration`), iteration and tool-call counts, and the active model.
-- Model and reasoning passthrough to the underlying client — `AvailableModels`, `CurrentModel`, `ChangeModel`, `Effort`, `ChangeEffort`.
+- `Process` returns a `Response` whose `Metadata` reports token usage, per-phase timing (`LLMDuration`, `ToolDuration`), and iteration and tool-call counts.
+- Model and reasoning control — `AvailableModels`, `ChangeModel`, and `ChangeEffort` switch models and reasoning on the underlying client; `ModelInfo` reports the active model's name, context window, and current effort as a `ModelInfo` struct.
 - Observe lifecycle events by installing a `Feedback` sink with `SetFeedback`; `NewStdoutFeedback` prints them to standard output.
 - `Config.MaxIterations` caps the model/tool rounds per `Process` call.
 
@@ -195,10 +195,11 @@ percentage of the model's context window, the older turns are summarized into a
 single message while the recent turns and system prompt are kept verbatim. A
 failing tool is reported back to the model
 so it can recover instead of aborting the turn. `ResetSession` clears the
-conversation to the system prompt; `Close` ends the session. `AvailableModels`,
-`CurrentModel`, and `ChangeModel` mirror the `llm` client to switch models
-mid-conversation — the context window is re-derived on the next turn. Pass your
-own `Feedback` to `SetFeedback` to observe lifecycle events (tool calls, session
+conversation to the system prompt; `Close` ends the session. `AvailableModels`
+and `ChangeModel` mirror the `llm` client to switch models mid-conversation —
+the context window is re-derived on the next turn — and `ModelInfo` reports the
+active model's name, context window, and effort. Pass your own `Feedback` to
+`SetFeedback` to observe lifecycle events (tool calls, session
 start/reset/close); the default prints them to stdout.
 
 ## License

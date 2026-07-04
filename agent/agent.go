@@ -34,9 +34,8 @@ type Agent struct {
 	toolBox          *tools.ToolBox
 	fb               Feedback
 	messages         []llm.Message
-	contextSize      int
 	compactThreshold int
-	modelName        string
+	modelInfo        *llm.ModelInfo
 }
 
 // New creates an [Agent] from cfg, an [llm.LLM], and a [tools.ToolBox], using a
@@ -168,15 +167,13 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			return &Response{
 				Content: response.Content,
 				Metadata: Metadata{
-					Iterations:       iteration,
-					PromptTokens:     response.Stats.PromptTokens,
-					OutputTokens:     response.Stats.OutputTokens,
-					TotalTokens:      response.Stats.TotalTokens,
-					ToolCalls:        callCount,
-					LLMDuration:      llmDuration,
-					ToolDuration:     toolDuration,
-					ModelName:        a.modelName,
-					ModelContextSize: a.contextSize,
+					Iterations:   iteration,
+					PromptTokens: response.Stats.PromptTokens,
+					OutputTokens: response.Stats.OutputTokens,
+					TotalTokens:  response.Stats.TotalTokens,
+					ToolCalls:    callCount,
+					LLMDuration:  llmDuration,
+					ToolDuration: toolDuration,
 				},
 			}, nil
 		}
@@ -207,9 +204,15 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 	}
 }
 
-// CurrentModel returns the identifier of the model the agent is currently using.
-func (a *Agent) CurrentModel() string {
-	return a.modelName
+// ModelInfo reports the model the agent is currently using — its name, context
+// window, and reasoning effort. It must be called after at least one completed
+// [Agent.Process] turn, which resolves the model's context window.
+func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
+	return &ModelInfo{
+		ModelName:        a.modelInfo.Name,
+		ModelContextSize: a.modelInfo.ContextSize,
+		Effort:           a.llm.Effort(),
+	}
 }
 
 // AvailableModels returns the model identifiers the agent can switch to via
@@ -228,16 +231,10 @@ func (a *Agent) ChangeModel(model string) error {
 		return err
 	}
 
-	a.modelName = model
-	a.contextSize = 0 // force reload on next turn
+	a.modelInfo = nil // force reload on next turn
 	a.compactThreshold = 0
 
 	return nil
-}
-
-// Effort reports the reasoning effort the underlying llm client applies.
-func (a *Agent) Effort() llm.Effort {
-	return a.llm.Effort()
 }
 
 // ChangeEffort sets the reasoning effort applied to subsequent turns.
@@ -280,7 +277,7 @@ func (a *Agent) CompactContext(ctx context.Context) {
 // compaction threshold from it. Best-effort: on error both stay zero and
 // compaction is skipped until a later turn succeeds.
 func (a *Agent) loadModelLimits(ctx context.Context) {
-	if a.contextSize != 0 {
+	if a.modelInfo != nil {
 		return
 	}
 
@@ -289,7 +286,6 @@ func (a *Agent) loadModelLimits(ctx context.Context) {
 		return
 	}
 
-	a.modelName = info.Name
-	a.contextSize = info.ContextSize
+	a.modelInfo = info
 	a.compactThreshold = compactionThreshold(info.ContextSize, a.config.CompactionThresholdPercent)
 }
