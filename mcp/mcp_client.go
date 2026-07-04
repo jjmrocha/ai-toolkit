@@ -138,11 +138,17 @@ func (c *Client) makeHandler(name string) tools.Handler {
 			return "", err
 		}
 
-		return extractText(result), nil
+		text, failed := parseToolResult(result)
+		if failed {
+			return "", fmt.Errorf("tool %s reported an error: %s", name, text)
+		}
+
+		return text, nil
 	}
 }
 
-func extractText(result map[string]any) string {
+func parseToolResult(result map[string]any) (text string, failed bool) {
+	failed, _ = result["isError"].(bool)
 	content, _ := result["content"].([]any)
 
 	parts := make([]string, 0, len(content))
@@ -156,19 +162,19 @@ func extractText(result map[string]any) string {
 			continue
 		}
 
-		if text, ok := part["text"].(string); ok {
-			parts = append(parts, text)
+		if t, ok := part["text"].(string); ok {
+			parts = append(parts, t)
 		}
 	}
 
 	if len(parts) > 0 {
-		return strings.Join(parts, "\n")
+		return strings.Join(parts, "\n"), failed
 	}
 
 	encoded, err := json.Marshal(result)
 	if err != nil {
-		return ""
+		return "", failed
 	}
 
-	return string(encoded)
+	return string(encoded), failed
 }

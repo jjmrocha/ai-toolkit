@@ -77,6 +77,21 @@ func TestRegisterTools(t *testing.T) {
 		assert.Equal(t, map[string]any{"name": "echo", "arguments": map[string]any{"city": "Lisbon"}}, sent[1]["params"])
 	})
 
+	t.Run("a tools/call error result surfaces as a handler error", func(t *testing.T) {
+		// given: the server marks the call result with isError
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n",
+			`{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"boom"}],"isError":true}}`+"\n",
+		)
+		require.NoError(t, c.RegisterTools(t.Context(), tb))
+		// when
+		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv.echo"})
+		// then
+		assert.Nil(t, result)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+	})
+
 	t.Run("registers nothing when the server returns no tools", func(t *testing.T) {
 		// given
 		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`+"\n")
@@ -124,22 +139,40 @@ func TestClientClose(t *testing.T) {
 	})
 }
 
-func TestExtractText(t *testing.T) {
-	t.Run("joins the text parts with newlines", func(t *testing.T) {
+func TestParseToolResult(t *testing.T) {
+	t.Run("joins the text parts with newlines and reports success", func(t *testing.T) {
 		// given
 		result := map[string]any{"content": []any{
 			map[string]any{"type": "text", "text": "a"},
 			map[string]any{"type": "image", "data": "..."},
 			map[string]any{"type": "text", "text": "b"},
 		}}
+		// when
+		text, failed := parseToolResult(result)
 		// then
-		assert.Equal(t, "a\nb", extractText(result))
+		assert.Equal(t, "a\nb", text)
+		assert.False(t, failed)
+	})
+
+	t.Run("reports failed when the result is flagged with isError", func(t *testing.T) {
+		// given
+		result := map[string]any{"content": []any{
+			map[string]any{"type": "text", "text": "boom"},
+		}, "isError": true}
+		// when
+		text, failed := parseToolResult(result)
+		// then
+		assert.Equal(t, "boom", text)
+		assert.True(t, failed)
 	})
 
 	t.Run("falls back to JSON when there is no text content", func(t *testing.T) {
 		// given
 		result := map[string]any{"isError": true}
+		// when
+		text, failed := parseToolResult(result)
 		// then
-		assert.JSONEq(t, `{"isError":true}`, extractText(result))
+		assert.JSONEq(t, `{"isError":true}`, text)
+		assert.True(t, failed)
 	})
 }
