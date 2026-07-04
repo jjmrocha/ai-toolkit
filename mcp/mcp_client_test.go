@@ -67,7 +67,7 @@ func TestRegisterTools(t *testing.T) {
 		)
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		// when
-		result, err := tb.ExecuteTool(llm.ToolCall{Name: "srv.echo", Arguments: map[string]any{"city": "Lisbon"}})
+		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv.echo", Arguments: map[string]any{"city": "Lisbon"}})
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hello\nworld", result.Content)

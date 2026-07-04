@@ -182,7 +182,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			a.fb.ToolCalled(call.Name)
 
 			t0 := time.Now()
-			result, err := a.toolBox.ExecuteTool(call)
+			result, err := a.toolBox.ExecuteTool(ctx, call)
 			toolDuration += time.Since(t0)
 			callCount++
 

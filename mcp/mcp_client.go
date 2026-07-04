@@ -125,8 +125,8 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 }
 
 func (c *Client) makeHandler(name string) tools.Handler {
-	return func(args map[string]any) (string, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), callToolTimeout)
+	return func(ctx context.Context, args map[string]any) (string, error) {
+		ctx, cancel := context.WithTimeout(ctx, callToolTimeout)
 		defer cancel()
 
 		result, err := c.transport.Request(ctx, "tools/call", map[string]any{

@@ -6,15 +6,17 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 )
 
-// Handler executes a tool call. It receives the decoded arguments from the
-// model (values arrive with JSON types, so numbers are float64) and returns the
+// Handler executes a tool call. It receives the caller's context — honor it for
+// cancellation and deadlines in any I/O — and the decoded arguments from the
+// model (values arrive with JSON types, so numbers are float64), and returns the
 // result string sent back to the model, or an error.
-type Handler func(map[string]any) (string, error)
+type Handler func(context.Context, map[string]any) (string, error)
 
 type fn struct {
 	tool    llm.Tool
@@ -70,11 +72,12 @@ func (tb *ToolBox) GetTools() []llm.Tool {
 }
 
 // ExecuteTool runs the handler for the requested tool call and wraps its result
-// in an llm.ToolMessage ready to append to the conversation. It returns
-// ErrToolNotFound if no tool matches call.Name, or a wrapped error if the
-// handler itself fails. The returned message correlates by both ToolCallID and
-// ToolName so it works with either provider.
-func (tb *ToolBox) ExecuteTool(call llm.ToolCall) (*llm.ToolMessage, error) {
+// in an llm.ToolMessage ready to append to the conversation. ctx is passed to
+// the handler for cancellation and deadlines. It returns ErrToolNotFound if no
+// tool matches call.Name, or a wrapped error if the handler itself fails. The
+// returned message correlates by both ToolCallID and ToolName so it works with
+// either provider.
+func (tb *ToolBox) ExecuteTool(ctx context.Context, call llm.ToolCall) (*llm.ToolMessage, error) {
 	fn, ok := tb.tools[call.Name]
 	if !ok {
 		return nil, ErrToolNotFound
@@ -82,7 +85,7 @@ func (tb *ToolBox) ExecuteTool(call llm.ToolCall) (*llm.ToolMessage, error) {
 
 	handler := fn.handler
 
-	result, err := handler(call.Arguments)
+	result, err := handler(ctx, call.Arguments)
 	if err != nil {
 		return nil, fmt.Errorf("error executing tool %s: %w", call.Name, err)
 	}

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,18 +10,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func noopHandler(map[string]any) (string, error) { return "", nil }
+func noopHandler(context.Context, map[string]any) (string, error) { return "", nil }
 
 func TestAddTool(t *testing.T) {
 	t.Run("re-registering a name replaces the previous tool", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		box.AddTool(llm.Tool{Name: "x"}, func(map[string]any) (string, error) { return "first", nil })
+		box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "first", nil })
 		// when
-		box.AddTool(llm.Tool{Name: "x"}, func(map[string]any) (string, error) { return "second", nil })
+		box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "second", nil })
 		// then
 		require.Len(t, box.GetTools(), 1)
-		result, err := box.ExecuteTool(llm.ToolCall{Name: "x"})
+		result, err := box.ExecuteTool(t.Context(), llm.ToolCall{Name: "x"})
 		require.NoError(t, err)
 		assert.Equal(t, "second", result.Content)
 	})
@@ -35,7 +36,7 @@ func TestRemoveTool(t *testing.T) {
 		box.RemoveTool("a")
 		// then
 		assert.Empty(t, box.GetTools())
-		_, err := box.ExecuteTool(llm.ToolCall{Name: "a"})
+		_, err := box.ExecuteTool(t.Context(), llm.ToolCall{Name: "a"})
 		assert.ErrorIs(t, err, ErrToolNotFound)
 	})
 
@@ -75,13 +76,13 @@ func TestExecuteTool(t *testing.T) {
 		// given
 		box := NewToolBox()
 		var gotArgs map[string]any
-		box.AddTool(llm.Tool{Name: "echo"}, func(args map[string]any) (string, error) {
+		box.AddTool(llm.Tool{Name: "echo"}, func(_ context.Context, args map[string]any) (string, error) {
 			gotArgs = args
 			return "sunny", nil
 		})
 		call := llm.ToolCall{ID: "call_1", Name: "echo", Arguments: map[string]any{"city": "Lisbon"}}
 		// when
-		result, err := box.ExecuteTool(call)
+		result, err := box.ExecuteTool(t.Context(), call)
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -95,7 +96,7 @@ func TestExecuteTool(t *testing.T) {
 		// given
 		box := NewToolBox()
 		// when
-		result, err := box.ExecuteTool(llm.ToolCall{Name: "missing"})
+		result, err := box.ExecuteTool(t.Context(), llm.ToolCall{Name: "missing"})
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrToolNotFound)
@@ -105,13 +106,31 @@ func TestExecuteTool(t *testing.T) {
 		// given
 		box := NewToolBox()
 		expectedErr := errors.New("boom")
-		box.AddTool(llm.Tool{Name: "fail"}, func(map[string]any) (string, error) {
+		box.AddTool(llm.Tool{Name: "fail"}, func(context.Context, map[string]any) (string, error) {
 			return "", expectedErr
 		})
 		// when
-		result, err := box.ExecuteTool(llm.ToolCall{Name: "fail"})
+		result, err := box.ExecuteTool(t.Context(), llm.ToolCall{Name: "fail"})
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("passes the caller's context to the handler", func(t *testing.T) {
+		// given
+		type ctxKey string
+		const key ctxKey = "k"
+		box := NewToolBox()
+		var got any
+		box.AddTool(llm.Tool{Name: "peek"}, func(ctx context.Context, _ map[string]any) (string, error) {
+			got = ctx.Value(key)
+			return "ok", nil
+		})
+		ctx := context.WithValue(t.Context(), key, "v")
+		// when
+		_, err := box.ExecuteTool(ctx, llm.ToolCall{Name: "peek"})
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "v", got)
 	})
 }
