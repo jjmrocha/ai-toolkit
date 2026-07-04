@@ -3,11 +3,11 @@ package tools
 import "fmt"
 
 // Arguments wraps the decoded arguments of a tool call (the map[string]any a
-// Handler receives) and provides typed accessors for reading fields. It is the
-// read-side counterpart to ObjectBuilder: ObjectBuilder describes the schema a
-// model fills in, Arguments reads the values back out. Because the values arrive
-// with JSON types, numbers are float64; the numeric accessors also accept int so
-// the same code works for programmatically built maps.
+// Handler receives) and provides typed accessors that return each field already
+// converted to a Go type, with an error instead of a panic on a type mismatch.
+// Because the values arrive with JSON types, numbers are float64; the numeric
+// accessors also accept int so the same code works for programmatically built
+// maps.
 type Arguments struct {
 	data map[string]any
 }
