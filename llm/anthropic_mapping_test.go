@@ -63,6 +63,24 @@ func TestToAnthropicMessages(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
+	t.Run("replays the raw content blocks when present", func(t *testing.T) {
+		// given: tool_use before text, an order the rebuild path never produces
+		raw := []anthropicContentBlock{
+			{Type: "tool_use", ID: "toolu_1", Name: "get_weather", Input: map[string]any{"city": "Lisbon"}},
+			{Type: "text", Text: "Looking it up"},
+		}
+		messages := []Message{AssistantMessage{
+			Content:   "Looking it up",
+			ToolCalls: []ToolCall{{ID: "toolu_1", Name: "get_weather", Arguments: map[string]any{"city": "Lisbon"}}},
+			raw:       raw,
+		}}
+		// when
+		result := toAnthropicMessages(messages)
+		// then
+		expected := []anthropicMessage{{Role: "assistant", Content: raw}}
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("omits the text block when the assistant content is empty", func(t *testing.T) {
 		// given
 		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}
@@ -239,6 +257,15 @@ func TestFromAnthropicToAssistantMessage(t *testing.T) {
 		result := fromAnthropicToAssistantMessage(resp)
 		// then
 		assert.Empty(t, result.ToolCalls)
+	})
+
+	t.Run("preserves the raw content blocks for replay", func(t *testing.T) {
+		// given
+		resp := anthropicChatResponse{Content: []anthropicContentBlock{{Type: "text", Text: "ok"}}}
+		// when
+		result := fromAnthropicToAssistantMessage(resp)
+		// then
+		assert.Equal(t, resp.Content, result.raw)
 	})
 }
 

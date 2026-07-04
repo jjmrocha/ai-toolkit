@@ -34,39 +34,49 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 			return
 		}
 
-		result = append(result, anthropicMessage{Role: role, Content: blocks})
+		anthropicMsg := anthropicMessage{Role: role, Content: blocks}
+		result = append(result, anthropicMsg)
 	}
 
 	for _, m := range messages {
 		switch m.Role() {
 		case UserRole:
 			msg := m.(UserMessage)
-			appendBlocks(string(UserRole), []anthropicContentBlock{{Type: "text", Text: msg.Content}})
+			block := anthropicContentBlock{Type: "text", Text: msg.Content}
+			appendBlocks(string(UserRole), []anthropicContentBlock{block})
 		case AssistantRole:
 			msg := m.(AssistantMessage)
 
+			if blocks, ok := msg.raw.([]anthropicContentBlock); ok {
+				appendBlocks(string(AssistantRole), blocks)
+				break
+			}
+
 			var blocks []anthropicContentBlock
 			if msg.Content != "" {
-				blocks = append(blocks, anthropicContentBlock{Type: "text", Text: msg.Content})
+				block := anthropicContentBlock{Type: "text", Text: msg.Content}
+				blocks = append(blocks, block)
 			}
 
 			for _, call := range msg.ToolCalls {
-				blocks = append(blocks, anthropicContentBlock{
+				block := anthropicContentBlock{
 					Type:  "tool_use",
 					ID:    call.ID,
 					Name:  call.Name,
 					Input: call.Arguments,
-				})
+				}
+				blocks = append(blocks, block)
 			}
 
 			appendBlocks(string(AssistantRole), blocks)
 		case ToolRole:
 			msg := m.(ToolMessage)
-			appendBlocks(string(UserRole), []anthropicContentBlock{{
+			block := anthropicContentBlock{
 				Type:      "tool_result",
 				ToolUseID: msg.ToolCallID,
 				Content:   msg.Content,
-			}})
+			}
+			appendBlocks(string(UserRole), []anthropicContentBlock{block})
 		}
 	}
 
@@ -89,11 +99,12 @@ func toAnthropicTools(tools []Tool) []anthropicTool {
 	toolList := make([]anthropicTool, 0, len(tools))
 
 	for _, t := range tools {
-		toolList = append(toolList, anthropicTool{
+		anthropicT := anthropicTool{
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.Schema,
-		})
+		}
+		toolList = append(toolList, anthropicT)
 	}
 
 	return toolList
@@ -106,6 +117,7 @@ func fromAnthropicToAssistantMessage(resp anthropicChatResponse) *AssistantMessa
 			OutputTokens: resp.Usage.OutputTokens,
 			TotalTokens:  resp.Usage.InputTokens + resp.Usage.OutputTokens,
 		},
+		raw: resp.Content,
 	}
 
 	for _, block := range resp.Content {
@@ -113,11 +125,12 @@ func fromAnthropicToAssistantMessage(resp anthropicChatResponse) *AssistantMessa
 		case "text":
 			result.Content += block.Text
 		case "tool_use":
-			result.ToolCalls = append(result.ToolCalls, ToolCall{
+			toolCall := ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: block.Input,
-			})
+			}
+			result.ToolCalls = append(result.ToolCalls, toolCall)
 		}
 	}
 
