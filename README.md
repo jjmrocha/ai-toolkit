@@ -86,19 +86,19 @@ toolBox.AddTool(
 			String("city", "the city to look up", true).
 			Build(),
 	},
-	func(args map[string]any) (string, error) {
+	func(ctx context.Context, args map[string]any) (string, error) {
 		city, err := tools.NewArguments(args).GetString("city")
 		if err != nil {
 			return "", err
 		}
-		return weatherFor(city) // your code
+		return weatherFor(ctx, city) // your code
 	},
 )
 
 reply, err := model.Chat(ctx, messages, toolBox.GetTools())
 // ...
 for _, call := range reply.ToolCalls {
-	msg, err := toolBox.ExecuteTool(call) // looks up and runs the handler
+	msg, err := toolBox.ExecuteTool(ctx, call) // looks up and runs the handler
 	if err != nil {
 		return err
 	}
