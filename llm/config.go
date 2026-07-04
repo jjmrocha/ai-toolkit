@@ -12,14 +12,16 @@ const (
 	ProviderAnthropic Provider = "anthropic"
 )
 
-// Config configures an [LLM]. Provider, APIKey, and Model are required; BaseURL
-// defaults to the provider's standard endpoint when empty.
+// Config configures an [LLM]. Provider and Model are always required; APIKey is
+// required for OpenRouter and Anthropic but not for Ollama. BaseURL defaults to
+// the provider's standard endpoint when empty.
 type Config struct {
 	// Provider selects the LLM backend. Required.
 	Provider Provider
 	// BaseURL overrides the provider's default API endpoint. Optional.
 	BaseURL string
-	// APIKey authenticates requests to the provider. Required.
+	// APIKey authenticates requests to the provider. Required for OpenRouter and
+	// Anthropic; unused by Ollama.
 	APIKey string `json:"-"`
 	// Model name selects the LLM model to use. Required.
 	Model string
