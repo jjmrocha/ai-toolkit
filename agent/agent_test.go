@@ -43,8 +43,6 @@ func (f *fakeLLM) ModelInfo(context.Context) (*llm.ModelInfo, error) {
 
 func (f *fakeLLM) AvailableModels() []string { return f.models }
 
-func (f *fakeLLM) CurrentModel() string { return f.current }
-
 func (f *fakeLLM) ChangeModel(model string) error {
 	if f.changeErr != nil {
 		return f.changeErr
@@ -243,7 +241,7 @@ func TestProcess(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNoSession)
 	})
 
-	t.Run("returns the final reply with token usage and context size", func(t *testing.T) {
+	t.Run("returns the final reply with token usage", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -260,7 +258,6 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, "hello", result.Content)
 		assert.Equal(t, 15, result.Metadata.TotalTokens)
 		assert.Equal(t, 0, result.Metadata.Iterations)
-		assert.Equal(t, 1000, result.Metadata.ModelContextSize)
 	})
 
 	t.Run("runs requested tools and feeds the results back", func(t *testing.T) {
@@ -395,9 +392,8 @@ func TestProcess(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hi", result.Content)
-		assert.Zero(t, result.Metadata.ModelContextSize)
-		assert.Empty(t, result.Metadata.ModelName)
-		assert.Zero(t, agt.contextSize)
+		assert.Nil(t, agt.modelInfo)
+		assert.Zero(t, agt.compactThreshold)
 	})
 }
 
@@ -425,14 +421,13 @@ func TestChangeModel(t *testing.T) {
 		agt.StartSession("sys")
 		_, err := agt.Process(context.Background(), "hi")
 		require.NoError(t, err)
-		require.Equal(t, 1000, agt.contextSize)
+		require.Equal(t, 1000, agt.modelInfo.ContextSize)
 		// when
 		err = agt.ChangeModel("m2")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, "m2", agt.CurrentModel())
 		assert.Equal(t, "m2", fake.current)
-		assert.Zero(t, agt.contextSize)      // forced reload on next turn
+		assert.Nil(t, agt.modelInfo)         // forced reload on next turn
 		assert.Zero(t, agt.compactThreshold) // forced reload on next turn
 	})
 
@@ -440,24 +435,39 @@ func TestChangeModel(t *testing.T) {
 		// given
 		fake := &fakeLLM{changeErr: errors.New("boom"), current: "old"}
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
-		agt.modelName = "old"
 		// when
 		err := agt.ChangeModel("m2")
 		// then
 		assert.ErrorContains(t, err, "boom")
-		assert.Equal(t, "old", agt.CurrentModel())
+		assert.Equal(t, "old", fake.current)
 	})
 }
 
-func TestEffort(t *testing.T) {
-	t.Run("reports the underlying client's effort", func(t *testing.T) {
+func TestModelInfo(t *testing.T) {
+	t.Run("reports the active model's name, context window, and effort", func(t *testing.T) {
 		// given
-		fake := &fakeLLM{effort: llm.EffortMedium}
+		fake := &fakeLLM{
+			info:   &llm.ModelInfo{Name: "m1", ContextSize: 2000},
+			effort: llm.EffortMedium,
+		}
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		// when
-		result := agt.Effort()
+		result := agt.ModelInfo(context.Background())
 		// then
-		assert.Equal(t, llm.EffortMedium, result)
+		require.NotNil(t, result)
+		assert.Equal(t, "m1", result.ModelName)
+		assert.Equal(t, 2000, result.ModelContextSize)
+		assert.Equal(t, llm.EffortMedium, result.Effort)
+	})
+
+	t.Run("returns nil when the model info cannot be fetched", func(t *testing.T) {
+		// given: called before any turn, with a client that cannot report info
+		fake := &fakeLLM{infoErr: errors.New("no info")}
+		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		// when
+		result := agt.ModelInfo(context.Background())
+		// then
+		assert.Nil(t, result)
 	})
 }
 
@@ -470,7 +480,6 @@ func TestChangeEffort(t *testing.T) {
 		agt.ChangeEffort(llm.EffortMax)
 		// then
 		assert.Equal(t, llm.EffortMax, fake.effort)
-		assert.Equal(t, llm.EffortMax, agt.Effort())
 	})
 }
 

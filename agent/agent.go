@@ -20,7 +20,6 @@ type modelInterface interface {
 	ModelInfo(ctx context.Context) (*llm.ModelInfo, error)
 	AvailableModels() []string
 	ChangeModel(model string) error
-	CurrentModel() string
 	Effort() llm.Effort
 	ChangeEffort(e llm.Effort)
 }
@@ -205,9 +204,15 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 }
 
 // ModelInfo reports the model the agent is currently using — its name, context
-// window, and reasoning effort. It must be called after at least one completed
-// [Agent.Process] turn, which resolves the model's context window.
+// window, and reasoning effort. It resolves the model's context window on
+// demand, so it is safe to call before the first turn; it returns nil when that
+// information cannot be fetched from the underlying client.
 func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
+	a.loadModelLimits(ctx)
+	if a.modelInfo == nil {
+		return nil
+	}
+
 	return &ModelInfo{
 		ModelName:        a.modelInfo.Name,
 		ModelContextSize: a.modelInfo.ContextSize,
