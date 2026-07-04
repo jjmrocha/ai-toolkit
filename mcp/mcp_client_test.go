@@ -11,9 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newMemClient builds a Client whose transport is backed by in-memory streams,
-// serving the given newline-terminated responses in order. Writes land in the
-// returned buffer.
 func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *bytes.Buffer) {
 	in := &bytes.Buffer{}
 	tb := tools.NewToolBox()

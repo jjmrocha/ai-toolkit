@@ -20,9 +20,6 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// callToolTimeout bounds a single tools/call. It is best-effort: it only takes
-// effect between reads, so a server that goes silent mid-call is not
-// interrupted until Close tears the connection down.
 const callToolTimeout = 30 * time.Second
 
 // Client registers the tools exposed by a single MCP server into a ToolBox and

@@ -20,9 +20,6 @@ const (
 	clientVersion   = "0.1.0"
 )
 
-// stdio is a synchronous JSON-RPC transport over an MCP server child process.
-// mu serializes Request so at most one request is in flight at a time; close
-// intentionally does not take mu, so it can abort a request blocked on a read.
 type stdio struct {
 	cmd       *exec.Cmd
 	in        io.Writer
@@ -31,10 +28,6 @@ type stdio struct {
 	mu        sync.Mutex
 }
 
-// newStdIO launches command with args, wires its stdin and stdout, and performs
-// the MCP initialize handshake including protocol-version negotiation. The
-// child's stderr is discarded and ctx bounds the handshake. On any handshake
-// failure the process is terminated before returning.
 func newStdIO(ctx context.Context, command string, args []string) (*stdio, error) {
 	cmd := exec.Command(command, args...) //nolint:gosec // command and args are operator-provided server config
 
@@ -95,12 +88,6 @@ func (s *stdio) initialize(ctx context.Context) error {
 	return s.notify(ctx, "notifications/initialized", nil)
 }
 
-// Request sends a JSON-RPC request and blocks until the response matching its id
-// is read, returning that response's result. It holds mu for the whole
-// send-and-read, so concurrent callers are serialized. ctx is checked before
-// sending and between reads (best-effort cancellation); a request blocked on a
-// silent server is unblocked by close, not by ctx. It returns the server's error
-// for a JSON-RPC error response, or ErrMCPConnectionClosed if the stream ends first.
 func (s *stdio) Request(ctx context.Context, method string, params map[string]any) (map[string]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,10 +122,6 @@ func (s *stdio) notify(ctx context.Context, method string, params map[string]any
 	return nil
 }
 
-// close shuts the server down: it closes stdin, then escalates through SIGTERM
-// and SIGKILL, waiting closeTimeout at each step, and reaps the process. It takes
-// no lock, so it can abort a Request blocked reading from a silent server. It is
-// a no-op if the process never started or has already exited.
 func (s *stdio) close() error {
 	if s.cmd == nil || s.cmd.Process == nil || s.cmd.ProcessState != nil {
 		return nil

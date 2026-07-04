@@ -6,8 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// exerciseAllEvents fires every Feedback event once; it must not panic for any
-// implementation.
 func exerciseAllEvents(fb Feedback) {
 	fb.SessionStarted()
 	fb.ToolCalled("echo")

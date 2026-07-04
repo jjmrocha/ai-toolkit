@@ -255,8 +255,6 @@ func TestLLMChangeModel(t *testing.T) {
 	})
 }
 
-// fakeProvider is an in-package llmProvider double whose behavior is set
-// per-test via function fields.
 type fakeProvider struct {
 	chatFunc         func(context.Context, []Message, []Tool) (*AssistantMessage, error)
 	modelInfoFunc    func(context.Context) (*ModelInfo, error)

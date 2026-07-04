@@ -324,10 +324,6 @@ func TestModelInfo(t *testing.T) {
 	})
 }
 
-// --- test helpers ---
-
-// newTestProvider spins up an httptest server running handler and returns an
-// openrouter client pointed at it.
 func newTestProvider(t testing.TB, handler http.HandlerFunc) *openrouter {
 	t.Helper()
 	server := httptest.NewServer(handler)

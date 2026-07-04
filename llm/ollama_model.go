@@ -1,7 +1,5 @@
 package llm
 
-// Native Ollama API wire types (POST /api/chat, POST /api/show).
-
 type ollamaChatRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
@@ -27,8 +25,7 @@ type ollamaToolCall struct {
 }
 
 type ollamaToolCallFunction struct {
-	Name string `json:"name"`
-	// Arguments is a JSON object, unlike the OpenAI family which stringifies it.
+	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
 }
 

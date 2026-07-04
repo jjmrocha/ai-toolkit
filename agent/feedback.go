@@ -25,8 +25,6 @@ type Feedback interface {
 	SessionClosed()
 }
 
-// --------------------------------------------------------------------------------------------
-
 type writerFeedback struct {
 	stdout io.Writer
 }
@@ -63,8 +61,6 @@ func (s *writerFeedback) SessionStarted() {
 func (s *writerFeedback) SessionClosed() {
 	_, _ = fmt.Fprintln(s.stdout, "Session closed")
 }
-
-// --------------------------------------------------------------------------------------------
 
 type nullFeedback struct{}
 

@@ -11,9 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newMemStdio returns a stdio backed by in-memory streams: writes land in the
-// returned buffer, reads are served from the concatenated responses (each of
-// which must end with a newline).
 func newMemStdio(responses ...string) (*stdio, *bytes.Buffer) {
 	in := &bytes.Buffer{}
 	s := &stdio{

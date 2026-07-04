@@ -15,11 +15,7 @@ import (
 type LLM struct {
 	config   Config
 	provider llmProvider
-	// mu guards the provider's mutable model/effort state. Chat and the other
-	// readers take a read lock, so they run concurrently; ChangeModel and
-	// ChangeEffort take the write lock and therefore wait for in-flight
-	// requests to finish before the switch takes effect.
-	mu sync.RWMutex
+	mu       sync.RWMutex
 }
 
 // New creates an [LLM] backed by the provider named in cfg. It returns

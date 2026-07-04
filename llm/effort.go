@@ -17,7 +17,6 @@ const (
 	EffortMax Effort = "max"
 )
 
-// valid reports whether e is one of the recognized Effort values.
 func (e Effort) valid() bool {
 	switch e {
 	case EffortOff, EffortLow, EffortMedium, EffortMax:
@@ -27,9 +26,6 @@ func (e Effort) valid() bool {
 	}
 }
 
-// effortBudgets holds the Anthropic extended-thinking token budget for each
-// effort level; it is meaningful only for Anthropic, whose thinking budget must
-// be reserved within max_tokens.
 var effortBudgets = map[Effort]int{
 	EffortOff:    0,
 	EffortLow:    2000,
@@ -41,10 +37,6 @@ func (e Effort) tokenBudget() int {
 	return effortBudgets[e]
 }
 
-// effortLevels maps an Effort onto the low/medium/high vocabulary shared by the
-// OpenRouter and Ollama reasoning APIs. EffortMax collapses onto "high", the
-// strongest level both providers accept ("max" is rejected by OpenRouter and by
-// Ollama's top-level think parameter).
 var effortLevels = map[Effort]string{
 	EffortLow:    "low",
 	EffortMedium: "medium",

@@ -12,11 +12,8 @@ const (
 	anthropicBaseURL          = "https://api.anthropic.com/v1"
 	anthropicMessagesEndpoint = "/messages"
 	anthropicModelsEndpoint   = "/models"
-	// anthropicVersion is the required anthropic-version header value.
-	anthropicVersion = "2023-06-01"
-	// defaultMaxTokens is applied when Config.MaxTokens is zero, since the
-	// Anthropic Messages API requires a max_tokens on every request.
-	defaultMaxTokens = 4096
+	anthropicVersion          = "2023-06-01"
+	defaultMaxTokens          = 4096
 )
 
 type anthropic struct {

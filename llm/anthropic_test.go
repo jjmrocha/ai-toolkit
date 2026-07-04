@@ -266,10 +266,6 @@ func TestAnthropicModelInfo(t *testing.T) {
 	})
 }
 
-// --- test helpers ---
-
-// newTestAnthropic spins up an httptest server running handler and returns an
-// anthropic client pointed at it.
 func newTestAnthropic(t testing.TB, handler http.HandlerFunc) *anthropic {
 	t.Helper()
 	server := httptest.NewServer(handler)

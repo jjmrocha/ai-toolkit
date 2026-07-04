@@ -1,9 +1,5 @@
 package llm
 
-// Wire types exchanged with the Anthropic Messages API. Unlike the
-// OpenAI-compatible providers, Anthropic carries the system prompt in a
-// top-level field and represents message bodies as typed content blocks.
-
 type anthropicChatRequest struct {
 	Model     string             `json:"model"`
 	MaxTokens int                `json:"max_tokens"`
@@ -23,9 +19,6 @@ type anthropicMessage struct {
 	Content []anthropicContentBlock `json:"content"`
 }
 
-// anthropicContentBlock is the union of the block shapes we send and receive:
-// text (Text), tool_use (ID, Name, Input), and tool_result (ToolUseID, Content).
-// Type selects which fields are populated.
 type anthropicContentBlock struct {
 	Type      string         `json:"type"`
 	Text      string         `json:"text,omitempty"`

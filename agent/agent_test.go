@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeLLM is a model double. Each Chat call returns the next reply in replies
-// (or chatErr); ModelInfo returns info (or infoErr).
 type fakeLLM struct {
 	replies   []*llm.AssistantMessage
 	chatErr   error
@@ -55,8 +53,6 @@ func (f *fakeLLM) Effort() llm.Effort { return f.effort }
 
 func (f *fakeLLM) ChangeEffort(e llm.Effort) { f.effort = e }
 
-// agentWithLLM builds an Agent backed by a model double, bypassing the
-// constructor's *llm.LLM requirement.
 func agentWithLLM(m modelInterface, tb *tools.ToolBox, fb Feedback, cfg Config) *Agent {
 	if tb == nil {
 		tb = tools.NewToolBox()
@@ -64,9 +60,6 @@ func agentWithLLM(m modelInterface, tb *tools.ToolBox, fb Feedback, cfg Config) 
 	return &Agent{config: cfg, llm: m, toolBox: tb, fb: fb}
 }
 
-// recordingFeedback is a Feedback double that records the lifecycle events it
-// receives, in order, so tests can assert the observable side effects of the
-// session methods.
 type recordingFeedback struct {
 	events []string
 	tools  []string
@@ -81,8 +74,6 @@ func (f *recordingFeedback) SessionReset()     { f.events = append(f.events, "Se
 func (f *recordingFeedback) SessionStarted()   { f.events = append(f.events, "SessionStarted") }
 func (f *recordingFeedback) SessionClosed()    { f.events = append(f.events, "SessionClosed") }
 
-// testLLM builds a real *llm.LLM. Construction performs no I/O, so it is safe in
-// unit tests; only Chat/ModelInfo would reach the network.
 func testLLM(t *testing.T) *llm.LLM {
 	t.Helper()
 	client, err := llm.New(llm.Config{Provider: llm.ProviderOllama, Model: "test-model"})

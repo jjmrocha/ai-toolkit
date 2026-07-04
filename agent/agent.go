@@ -13,8 +13,6 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// modelInterface is the slice of [llm.LLM] behavior the agent depends on, so a test can
-// supply a double in its place. *llm.LLM satisfies it.
 type modelInterface interface {
 	Chat(ctx context.Context, messages []llm.Message, tools []llm.Tool) (*llm.AssistantMessage, error)
 	ModelInfo(ctx context.Context) (*llm.ModelInfo, error)
@@ -279,9 +277,6 @@ func (a *Agent) CompactContext(ctx context.Context) {
 	a.fb.ContextCompacted()
 }
 
-// loadModelLimits fetches the model's context window once and derives the
-// compaction threshold from it. Best-effort: on error both stay zero and
-// compaction is skipped until a later turn succeeds.
 func (a *Agent) loadModelLimits(ctx context.Context) {
 	if a.modelInfo != nil {
 		return
