@@ -38,7 +38,8 @@ type Agent struct {
 }
 
 // New creates an [Agent] from cfg, an [llm.LLM], and a [tools.ToolBox], using a
-// default [Feedback] that reports lifecycle events to standard output. It
+// silent default [Feedback]; install [NewStdoutFeedback] with [Agent.SetFeedback]
+// to print lifecycle events. It
 // returns [ErrNoLLM] when llm is nil and [ErrInvalidThreshold] when
 // Config.CompactionThresholdPercent is outside 0–100; a nil toolBox is treated
 // as an empty one.
@@ -55,7 +56,7 @@ func New(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox) (*Agent, error) {
 		toolBox = tools.NewToolBox()
 	}
 
-	feedback := &defaultFeedback{}
+	feedback := &nullFeedback{}
 
 	return &Agent{
 		config:  cfg,
@@ -116,8 +117,8 @@ func (a *Agent) SetFeedback(fb Feedback) {
 // its error text so the model can recover rather than aborting the round.
 //
 // On the first round it also queries the model's context window (see
-// [llm.LLM.ModelInfo]) to populate [Metadata.ModelContextSize] and size the
-// compaction threshold; the result is cached for the agent's lifetime. Once a
+// [llm.LLM.ModelInfo]) to size the compaction threshold; the result is cached
+// for the agent's lifetime. Once a
 // completed turn crosses Config.CompactionThresholdPercent of that window, the
 // older turns are summarized before the next round.
 //

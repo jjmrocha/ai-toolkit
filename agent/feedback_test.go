@@ -30,7 +30,7 @@ func TestStdoutFeedback(t *testing.T) {
 func TestDefaultFeedback(t *testing.T) {
 	t.Run("silently ignores every event", func(t *testing.T) {
 		// given
-		var fb Feedback = defaultFeedback{}
+		var fb Feedback = nullFeedback{}
 		// when / then: the noop sink must not panic
 		require.NotPanics(t, func() { exerciseAllEvents(fb) })
 	})

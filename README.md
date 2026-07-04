@@ -200,7 +200,8 @@ and `ChangeModel` mirror the `llm` client to switch models mid-conversation —
 the context window is re-derived on the next turn — and `ModelInfo` reports the
 active model's name, context window, and effort. Pass your own `Feedback` to
 `SetFeedback` to observe lifecycle events (tool calls, session
-start/reset/close); the default prints them to stdout.
+start/reset/close); the default is silent, and `NewStdoutFeedback` prints them
+to stdout.
 
 ## License
 
