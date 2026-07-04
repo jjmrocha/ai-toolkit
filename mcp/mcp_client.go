@@ -89,11 +89,12 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 		return ErrAlreadyRegistered
 	}
 
-	c.toolBox = tb
 	result, err := c.transport.Request(ctx, "tools/list", nil)
 	if err != nil {
 		return err
 	}
+
+	c.toolBox = tb
 
 	list, _ := result["tools"].([]any)
 	for _, item := range list {

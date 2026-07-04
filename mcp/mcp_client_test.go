@@ -96,6 +96,18 @@ func TestRegisterTools(t *testing.T) {
 		// then
 		assert.ErrorIs(t, err, ErrAlreadyRegistered)
 	})
+
+	t.Run("a failed tools/list leaves the client registrable", func(t *testing.T) {
+		// given: an empty stream, so tools/list fails with a transport error
+		c, tb, _ := newMemClient("srv")
+		// when: the first registration fails
+		firstErr := c.RegisterTools(t.Context(), tb)
+		// then: it surfaces the transport error, not a registration state
+		require.ErrorIs(t, firstErr, ErrMCPConnectionClosed)
+		// and: a retry is not wedged by ErrAlreadyRegistered
+		secondErr := c.RegisterTools(t.Context(), tb)
+		assert.NotErrorIs(t, secondErr, ErrAlreadyRegistered)
+	})
 }
 
 func TestClientClose(t *testing.T) {
