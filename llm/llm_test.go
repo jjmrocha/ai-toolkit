@@ -60,7 +60,8 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff // New defaults an unset effort
+		cfg.Effort = EffortOff                 // New defaults an unset effort
+		cfg.Models = []string{"openai/gpt-4o"} // New seeds the active model
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -72,7 +73,8 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff // New defaults an unset effort
+		cfg.Effort = EffortOff            // New defaults an unset effort
+		cfg.Models = []string{"llama3.2"} // New seeds the active model
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -84,8 +86,30 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff // New defaults an unset effort
+		cfg.Effort = EffortOff                   // New defaults an unset effort
+		cfg.Models = []string{"claude-opus-4-8"} // New seeds the active model
 		assert.Equal(t, cfg, result.config)
+	})
+
+	t.Run("seeds Models with the active model when it is absent", func(t *testing.T) {
+		// given: Models does not list the configured Model
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"other"}}
+		// when
+		result, err := New(cfg)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{"llama3.2", "other"}, result.AvailableModels())
+		assert.NoError(t, result.ChangeModel("llama3.2")) // the active model is switchable
+	})
+
+	t.Run("does not duplicate the active model when Models already lists it", func(t *testing.T) {
+		// given
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"llama3.2", "other"}}
+		// when
+		result, err := New(cfg)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{"llama3.2", "other"}, result.AvailableModels())
 	})
 }
 

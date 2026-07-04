@@ -44,6 +44,10 @@ func New(cfg Config) (*LLM, error) {
 		return nil, ErrInvalidEffort
 	}
 
+	if !slices.Contains(cfg.Models, cfg.Model) {
+		cfg.Models = append([]string{cfg.Model}, cfg.Models...)
+	}
+
 	var provider llmProvider
 
 	switch cfg.Provider {
@@ -109,15 +113,16 @@ func (l *LLM) CurrentModel() string {
 	return l.provider.currentModel()
 }
 
-// AvailableModels returns the model identifiers configured in Config.Models. It
-// returns nil when none were provided.
+// AvailableModels returns the models the client can switch between: the
+// identifiers from Config.Models plus the active Config.Model, which [New]
+// includes even when Config.Models is empty. The active model is always present.
 func (l *LLM) AvailableModels() []string {
 	return l.config.Models
 }
 
-// ChangeModel switches the client to model, which must be one of the
-// identifiers in Config.Models. It returns [ErrMissingModel] when model is
-// empty and [ErrModelNotFound] when it is not in Config.Models.
+// ChangeModel switches the client to model, which must be one of
+// [LLM.AvailableModels] (the active model always qualifies). It returns
+// [ErrMissingModel] when model is empty and [ErrModelNotFound] otherwise.
 func (l *LLM) ChangeModel(model string) error {
 	if model == "" {
 		return ErrMissingModel

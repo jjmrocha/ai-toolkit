@@ -55,8 +55,10 @@ backends — Ollama needs no API key). `Chat` sends an ordered `[]Message` and
 returns the assistant's reply; pass `[]Tool` as the third argument to offer tools.
 
 List the models the client may switch between in `Config.Models`. `AvailableModels`
-returns that list, `CurrentModel` reports the active one, and `ChangeModel` switches
-to another entry from the list (returning `ErrModelNotFound` for anything outside it).
+returns that list — always including the active `Config.Model`, which `New` adds
+even when `Config.Models` is empty — `CurrentModel` reports the active one, and
+`ChangeModel` switches to another entry from the list (returning `ErrModelNotFound`
+for anything outside it).
 
 Set `Config.Effort` to control how much the model reasons before answering —
 `EffortOff` (the default), `EffortLow`, `EffortMedium`, or `EffortMax`. It maps to
