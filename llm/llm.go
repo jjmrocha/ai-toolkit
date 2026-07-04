@@ -7,6 +7,7 @@ package llm
 import (
 	"context"
 	"slices"
+	"sync"
 )
 
 // LLM is a configured client for a single model on a single provider. Create
@@ -14,6 +15,11 @@ import (
 type LLM struct {
 	config   Config
 	provider llmProvider
+	// mu guards the provider's mutable model/effort state. Chat and the other
+	// readers take a read lock, so they run concurrently; ChangeModel and
+	// ChangeEffort take the write lock and therefore wait for in-flight
+	// requests to finish before the switch takes effect.
+	mu sync.RWMutex
 }
 
 // New creates an [LLM] backed by the provider named in cfg. It returns
@@ -76,6 +82,9 @@ func New(cfg Config) (*LLM, error) {
 // offering the given tools, and returns the assistant's reply. The context
 // controls cancellation and deadline.
 func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
 	return l.provider.chat(ctx, messages, tools)
 }
 
@@ -85,12 +94,18 @@ func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*Assi
 // the provider reports no context size for it. The context controls
 // cancellation and deadline.
 func (l *LLM) ModelInfo(ctx context.Context) (*ModelInfo, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
 	return l.provider.modelInfo(ctx)
 }
 
 // CurrentModel returns the identifier of the model the client is currently
 // configured to use.
 func (l *LLM) CurrentModel() string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
 	return l.provider.currentModel()
 }
 
@@ -112,15 +127,24 @@ func (l *LLM) ChangeModel(model string) error {
 		return ErrModelNotFound
 	}
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	return l.provider.changeModel(model)
 }
 
 // Effort reports the reasoning effort the client currently applies to requests.
 func (l *LLM) Effort() Effort {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
 	return l.provider.effort()
 }
 
 // ChangeEffort sets the reasoning effort applied to subsequent requests.
 func (l *LLM) ChangeEffort(e Effort) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	l.provider.changeEffort(e)
 }
