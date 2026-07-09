@@ -14,22 +14,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-const callToolTimeout = 30 * time.Second
+// callToolTimeout bounds a single tools/call. It is generous because MCP tools
+// routinely wrap slow work (network fetches, subprocess builds); the caller's
+// own context still cancels earlier when it has a tighter deadline.
+const callToolTimeout = 120 * time.Second
 
 // Client registers the tools exposed by a single MCP server into a ToolBox and
 // owns the lifetime of that server's process. Create one with NewClient and
 // always pair it with a deferred Close.
 type Client struct {
 	config    ClientConfig
-	toolBox   *tools.ToolBox
 	transport *stdio
-	tools     []string
+
+	mu      sync.Mutex // guards toolBox and tools
+	toolBox *tools.ToolBox
+	tools   []string
 }
 
 // NewClient launches the MCP server described by cfg and completes the protocol
@@ -47,22 +53,25 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		return nil, ErrCommandRequired
 	}
 
-	t, err := newStdIO(ctx, cfg.Command, cfg.Args)
+	c := &Client{config: cfg}
+
+	// unregisterTools doubles as the disconnect callback: when the server exits
+	// on its own, the transport's watch goroutine calls it to drop the tools.
+	t, err := newStdIO(ctx, cfg.Command, cfg.Args, c.unregisterTools)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
-		config:    cfg,
-		transport: t,
-	}, nil
+	c.transport = t
+
+	return c, nil
 }
 
 // Connected reports whether the server's child process is still running. It
 // returns false once the process has exited, whether it was closed or died on
 // its own.
 func (c *Client) Connected() bool {
-	return c.transport != nil && c.transport.connected()
+	return c.transport.connected()
 }
 
 // Close removes this client's tools from the ToolBox and shuts the server
@@ -70,17 +79,22 @@ func (c *Client) Connected() bool {
 // aborts a tool call that is stuck waiting on the server. It is safe to call
 // more than once.
 func (c *Client) Close() error {
-	if c.transport == nil {
-		return nil
-	}
-
-	if c.toolBox != nil {
-		for _, tool := range c.tools {
-			c.toolBox.RemoveTool(tool)
-		}
-	}
+	c.unregisterTools()
 
 	return c.transport.close()
+}
+
+// unregisterTools removes this client's tools from the ToolBox. It is safe to
+// call more than once and from any goroutine.
+func (c *Client) unregisterTools() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for _, tool := range c.tools {
+		c.toolBox.RemoveTool(tool)
+	}
+
+	c.tools = nil
 }
 
 // RegisterTools queries the server for its tools and registers each one in tb,
@@ -89,6 +103,9 @@ func (c *Client) Close() error {
 // registered here are removed again by Close. It may be called only once per
 // client and returns ErrAlreadyRegistered on a later call.
 func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.toolBox != nil {
 		return ErrAlreadyRegistered
 	}

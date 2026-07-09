@@ -48,12 +48,12 @@ func (m *Manager) RegisterClient(cfg ClientConfig) {
 	m.configs[cfg.Name] = cfg
 }
 
-// GetMCPs reports the registered MCPs and whether each is currently running. It
-// is read-only: a client that has died is reported inactive but not reaped;
-// lifecycle changes happen only through Start and Stop.
+// GetMCPs reports the registered MCPs and whether each is currently running. A
+// client whose process has died is reported inactive and reaped, so the next
+// Start launches a fresh one. It takes the write lock because of that reaping.
 func (m *Manager) GetMCPs() []Status {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	statuses := make([]Status, 0, len(m.configs))
 	for name := range m.configs {
@@ -61,6 +61,12 @@ func (m *Manager) GetMCPs() []Status {
 
 		if client, ok := m.clients[name]; ok {
 			active = client.Connected()
+
+			if !active {
+				// The process has died; drop it so the next Start will launch a fresh one.
+				_ = client.Close()
+				delete(m.clients, name)
+			}
 		}
 
 		status := Status{Name: name, Active: active}
@@ -86,7 +92,7 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 
 	if client, ok := m.clients[name]; ok {
 		if client.Connected() {
-			return client.RegisterTools(ctx, m.toolBox)
+			return nil
 		}
 
 		// The process has died; drop it and start a fresh one below.

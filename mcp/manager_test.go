@@ -72,6 +72,21 @@ func TestManagerStart(t *testing.T) {
 		assert.True(t, m.clients["srv"].Connected())
 	})
 
+	t.Run("reuses a client that is already running", func(t *testing.T) {
+		// given: an MCP that has already been started
+		m := NewManager(tools.NewToolBox())
+		m.RegisterClient(echoServerCmd())
+		t.Cleanup(m.Close)
+		require.NoError(t, m.Start(t.Context(), "srv"))
+		existing := m.clients["srv"]
+		// when: Start is called again while it is still running
+		err := m.Start(t.Context(), "srv")
+		// then: the same client is kept and its tools are not registered twice
+		require.NoError(t, err)
+		assert.Same(t, existing, m.clients["srv"])
+		assert.Len(t, m.toolBox.GetTools(), 1)
+	})
+
 	t.Run("replaces a client whose process has died", func(t *testing.T) {
 		// given: a registered MCP whose recorded client is already dead
 		m := NewManager(tools.NewToolBox())
@@ -141,17 +156,18 @@ func TestManagerGetMCPs(t *testing.T) {
 		assert.Equal(t, map[string]bool{"up": true, "down": false}, byName)
 	})
 
-	t.Run("reports a dead client as inactive without reaping it", func(t *testing.T) {
+	t.Run("reports a dead client as inactive and reaps it", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
 		m.RegisterClient(ClientConfig{Name: "srv", Command: "server"})
 		m.clients["srv"] = deadClient(t, "srv")
 		// when
 		statuses := m.GetMCPs()
-		// then: read-only — reported inactive, but the entry stays for Start/Stop to own
+		// then: reported inactive and dropped, but the config stays for a later Start
 		require.Len(t, statuses, 1)
 		assert.False(t, statuses[0].Active)
-		assert.Contains(t, m.clients, "srv")
+		assert.NotContains(t, m.clients, "srv")
+		assert.Contains(t, m.configs, "srv")
 	})
 }
 

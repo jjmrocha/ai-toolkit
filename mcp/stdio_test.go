@@ -165,6 +165,31 @@ func TestStdioClose(t *testing.T) {
 	})
 }
 
+func TestStdioWatch(t *testing.T) {
+	t.Run("invokes the disconnect callback once the process exits", func(t *testing.T) {
+		// given: a process that exits on its own, with a disconnect callback wired
+		called := make(chan struct{})
+		cmd := exec.Command("sh", "-c", "exit 0")
+		stdin, err := cmd.StdinPipe()
+		require.NoError(t, err)
+		s := &stdio{
+			cmd:              cmd,
+			in:               stdin,
+			exited:           make(chan struct{}),
+			serverDisconnect: func() { close(called) },
+		}
+		require.NoError(t, cmd.Start())
+		// when
+		go s.watch()
+		// then: the callback fires after the process is reaped
+		select {
+		case <-called:
+		case <-time.After(closeTimeout):
+			t.Fatal("disconnect callback was not invoked")
+		}
+	})
+}
+
 func startProcess(t testing.TB, command string, args ...string) *stdio {
 	t.Helper()
 

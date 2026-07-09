@@ -135,6 +135,18 @@ func TestClientClose(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, tb.GetTools())
 	})
+
+	t.Run("is safe to call more than once", func(t *testing.T) {
+		// given: a client with its tools registered
+		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n")
+		require.NoError(t, c.RegisterTools(t.Context(), tb))
+		require.NoError(t, c.Close())
+		// when: Close is called a second time
+		err := c.Close()
+		// then: it is a clean no-op and the tools stay removed
+		require.NoError(t, err)
+		assert.Empty(t, tb.GetTools())
+	})
 }
 
 func TestParseToolResult(t *testing.T) {

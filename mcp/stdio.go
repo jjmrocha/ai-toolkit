@@ -22,15 +22,16 @@ const (
 )
 
 type stdio struct {
-	cmd       *exec.Cmd
-	in        io.Writer
-	out       *bufio.Reader
-	exited    chan struct{}
-	messageID int
-	mu        sync.Mutex
+	cmd              *exec.Cmd
+	in               io.Writer
+	out              *bufio.Reader
+	exited           chan struct{}
+	messageID        int
+	mu               sync.Mutex
+	serverDisconnect func()
 }
 
-func newStdIO(ctx context.Context, command string, args []string) (*stdio, error) {
+func newStdIO(ctx context.Context, command string, args []string, fn func()) (*stdio, error) {
 	cmd := exec.Command(command, args...) //nolint:gosec // command and args are operator-provided server config
 
 	stdin, err := cmd.StdinPipe()
@@ -50,10 +51,11 @@ func newStdIO(ctx context.Context, command string, args []string) (*stdio, error
 	}
 
 	s := &stdio{
-		cmd:    cmd,
-		in:     stdin,
-		out:    bufio.NewReader(stdout),
-		exited: make(chan struct{}),
+		cmd:              cmd,
+		in:               stdin,
+		out:              bufio.NewReader(stdout),
+		exited:           make(chan struct{}),
+		serverDisconnect: fn,
 	}
 
 	go s.watch()
@@ -71,6 +73,10 @@ func newStdIO(ctx context.Context, command string, args []string) (*stdio, error
 func (s *stdio) watch() {
 	_ = s.cmd.Wait()
 	close(s.exited)
+
+	if s.serverDisconnect != nil {
+		s.serverDisconnect()
+	}
 }
 
 func (s *stdio) initialize(ctx context.Context) error {
