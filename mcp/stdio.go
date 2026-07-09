@@ -25,6 +25,7 @@ type stdio struct {
 	cmd       *exec.Cmd
 	in        io.Writer
 	out       *bufio.Reader
+	exited    chan struct{}
 	messageID int
 	mu        sync.Mutex
 }
@@ -49,10 +50,13 @@ func newStdIO(ctx context.Context, command string, args []string) (*stdio, error
 	}
 
 	s := &stdio{
-		cmd: cmd,
-		in:  stdin,
-		out: bufio.NewReader(stdout),
+		cmd:    cmd,
+		in:     stdin,
+		out:    bufio.NewReader(stdout),
+		exited: make(chan struct{}),
 	}
+
+	go s.watch()
 
 	if err := s.initialize(ctx); err != nil {
 		_ = s.close()
@@ -60,6 +64,13 @@ func newStdIO(ctx context.Context, command string, args []string) (*stdio, error
 	}
 
 	return s, nil
+}
+
+// watch reaps the server process and closes exited once it terminates, so that
+// connected can report the process dying on its own, not only being closed.
+func (s *stdio) watch() {
+	_ = s.cmd.Wait()
+	close(s.exited)
 }
 
 func (s *stdio) initialize(ctx context.Context) error {
@@ -124,7 +135,7 @@ func (s *stdio) notify(ctx context.Context, method string, params map[string]any
 }
 
 func (s *stdio) close() error {
-	if s.cmd == nil || s.cmd.Process == nil || s.cmd.ProcessState != nil {
+	if s.cmd == nil || s.cmd.Process == nil {
 		return nil
 	}
 
@@ -132,19 +143,20 @@ func (s *stdio) close() error {
 		_ = closer.Close()
 	}
 
-	done := make(chan error, 1)
-	go func() { done <- s.cmd.Wait() }()
-
+	// Closing stdin asks the server to exit; escalate through SIGTERM then
+	// SIGKILL, sending each signal up front and only waiting out the grace
+	// period if the process has not already exited.
 	for _, sig := range []os.Signal{syscall.SIGTERM, syscall.SIGKILL} {
+		_ = s.cmd.Process.Signal(sig)
+
 		select {
-		case <-done:
+		case <-s.exited:
 			return nil
 		case <-time.After(closeTimeout):
-			_ = s.cmd.Process.Signal(sig)
 		}
 	}
 
-	<-done
+	<-s.exited
 
 	return nil
 }
@@ -193,12 +205,25 @@ func (s *stdio) read(ctx context.Context, requestID int) (map[string]any, error)
 		}
 
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) {
 				return nil, ErrMCPConnectionClosed
 			}
 
 			return nil, fmt.Errorf("reading from MCP server: %w", err)
 		}
+	}
+}
+
+func (s *stdio) connected() bool {
+	if s.cmd == nil || s.cmd.Process == nil {
+		return false
+	}
+
+	select {
+	case <-s.exited:
+		return false
+	default:
+		return true
 	}
 }
 

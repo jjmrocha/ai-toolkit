@@ -34,8 +34,8 @@ type Response struct {
 	Metadata Metadata
 }
 
-// ModelInfo describes the model an [Agent] is currently using: its name,
-// context window, and the reasoning effort applied to each turn.
+// ModelInfo describes the model an [Agent] is currently using: its provider,
+// name, context window, and the reasoning effort applied to each turn.
 type ModelInfo struct {
 	// Provider is the underlying llm.Provider used to serve the model.
 	Provider llm.Provider

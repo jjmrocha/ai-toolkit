@@ -58,6 +58,13 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	}, nil
 }
 
+// Connected reports whether the server's child process is still running. It
+// returns false once the process has exited, whether it was closed or died on
+// its own.
+func (c *Client) Connected() bool {
+	return c.transport != nil && c.transport.connected()
+}
+
 // Close removes this client's tools from the ToolBox and shuts the server
 // process down. Because it does not wait on an in-flight Request, Close also
 // aborts a tool call that is stuck waiting on the server. It is safe to call

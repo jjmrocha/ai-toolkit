@@ -202,10 +202,10 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 	}
 }
 
-// ModelInfo reports the model the agent is currently using — its name, context
-// window, and reasoning effort. It resolves the model's context window on
-// demand, so it is safe to call before the first turn; it returns nil when that
-// information cannot be fetched from the underlying client.
+// ModelInfo reports the model the agent is currently using — its provider,
+// name, context window, and reasoning effort. It resolves the model's context
+// window on demand, so it is safe to call before the first turn; it returns nil
+// when that information cannot be fetched from the underlying client.
 func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
 	a.loadModelLimits(ctx)
 	if a.modelInfo == nil {

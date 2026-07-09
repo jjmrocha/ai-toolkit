@@ -262,7 +262,7 @@ func TestProcess(t *testing.T) {
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
 		tb := tools.NewToolBox()
-		tb.AddTool(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil })
+		require.NoError(t, tb.AddTool(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
 		agt := agentWithLLM(fake, tb, fb, Config{})
 		agt.StartSession("sys")
 		// when
@@ -285,7 +285,7 @@ func TestProcess(t *testing.T) {
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
 		tb := tools.NewToolBox()
-		tb.AddTool(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil })
+		require.NoError(t, tb.AddTool(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
 		agt := agentWithLLM(fake, tb, &recordingFeedback{}, Config{MaxIterations: 2})
 		agt.StartSession("sys")
 		// when
@@ -346,9 +346,9 @@ func TestProcess(t *testing.T) {
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
 		tb := tools.NewToolBox()
-		tb.AddTool(llm.Tool{Name: "boom"}, func(context.Context, map[string]any) (string, error) {
+		require.NoError(t, tb.AddTool(llm.Tool{Name: "boom"}, func(context.Context, map[string]any) (string, error) {
 			return "", errors.New("kaboom")
-		})
+		}))
 		agt := agentWithLLM(fake, tb, fb, Config{})
 		agt.StartSession("sys")
 		// when

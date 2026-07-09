@@ -88,8 +88,8 @@ func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*Assi
 	return l.provider.chat(ctx, messages, tools)
 }
 
-// ModelInfo reports metadata about the configured model, such as its
-// human-readable name and context-window size. It returns [ErrModelNotFound]
+// ModelInfo reports metadata about the configured model: its provider, its
+// human-readable name, and its context-window size. It returns [ErrModelNotFound]
 // when the provider does not offer the model and [ErrMissingContextLength] when
 // the provider reports no context size for it. The context controls
 // cancellation and deadline.

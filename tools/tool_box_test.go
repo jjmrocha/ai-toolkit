@@ -27,7 +27,7 @@ func TestAddTool(t *testing.T) {
 	t.Run("re-registering a name replaces the previous tool", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "first", nil })
+		require.NoError(t, box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "first", nil }))
 		// when
 		err := box.AddTool(llm.Tool{Name: "x"}, func(context.Context, map[string]any) (string, error) { return "second", nil })
 		// then
@@ -72,7 +72,7 @@ func TestRemoveTool(t *testing.T) {
 	t.Run("removes a registered tool", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		box.AddTool(llm.Tool{Name: "a"}, noopHandler)
+		require.NoError(t, box.AddTool(llm.Tool{Name: "a"}, noopHandler))
 		// when
 		box.RemoveTool("a")
 		// then
@@ -93,8 +93,8 @@ func TestGetTools(t *testing.T) {
 	t.Run("returns every registered tool definition", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		box.AddTool(llm.Tool{Name: "a"}, noopHandler)
-		box.AddTool(llm.Tool{Name: "b"}, noopHandler)
+		require.NoError(t, box.AddTool(llm.Tool{Name: "a"}, noopHandler))
+		require.NoError(t, box.AddTool(llm.Tool{Name: "b"}, noopHandler))
 		// when
 		result := box.GetTools()
 		// then
@@ -117,10 +117,10 @@ func TestExecuteTool(t *testing.T) {
 		// given
 		box := NewToolBox()
 		var gotArgs map[string]any
-		box.AddTool(llm.Tool{Name: "echo"}, func(_ context.Context, args map[string]any) (string, error) {
+		require.NoError(t, box.AddTool(llm.Tool{Name: "echo"}, func(_ context.Context, args map[string]any) (string, error) {
 			gotArgs = args
 			return "sunny", nil
-		})
+		}))
 		call := llm.ToolCall{ID: "call_1", Name: "echo", Arguments: map[string]any{"city": "Lisbon"}}
 		// when
 		result, err := box.ExecuteTool(t.Context(), call)
@@ -147,9 +147,9 @@ func TestExecuteTool(t *testing.T) {
 		// given
 		box := NewToolBox()
 		expectedErr := errors.New("boom")
-		box.AddTool(llm.Tool{Name: "fail"}, func(context.Context, map[string]any) (string, error) {
+		require.NoError(t, box.AddTool(llm.Tool{Name: "fail"}, func(context.Context, map[string]any) (string, error) {
 			return "", expectedErr
-		})
+		}))
 		// when
 		result, err := box.ExecuteTool(t.Context(), llm.ToolCall{Name: "fail"})
 		// then
@@ -163,10 +163,10 @@ func TestExecuteTool(t *testing.T) {
 		const key ctxKey = "k"
 		box := NewToolBox()
 		var got any
-		box.AddTool(llm.Tool{Name: "peek"}, func(ctx context.Context, _ map[string]any) (string, error) {
+		require.NoError(t, box.AddTool(llm.Tool{Name: "peek"}, func(ctx context.Context, _ map[string]any) (string, error) {
 			got = ctx.Value(key)
 			return "ok", nil
-		})
+		}))
 		ctx := context.WithValue(t.Context(), key, "v")
 		// when
 		_, err := box.ExecuteTool(ctx, llm.ToolCall{Name: "peek"})

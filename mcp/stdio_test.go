@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -149,6 +151,57 @@ func TestStdioClose(t *testing.T) {
 		err := s.close()
 		// then
 		assert.NoError(t, err)
+	})
+
+	t.Run("signals a process that ignores stdin close without waiting out the grace period", func(t *testing.T) {
+		// given: sleep does not exit on stdin EOF, only when signalled
+		s := startProcess(t, "sleep", "30")
+		// when
+		start := time.Now()
+		err := s.close()
+		// then: SIGTERM is sent up front, so close returns well before closeTimeout
+		require.NoError(t, err)
+		assert.Less(t, time.Since(start), closeTimeout)
+	})
+}
+
+func startProcess(t testing.TB, command string, args ...string) *stdio {
+	t.Helper()
+
+	cmd := exec.Command(command, args...)
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+
+	s := &stdio{cmd: cmd, in: stdin, exited: make(chan struct{})}
+	require.NoError(t, cmd.Start())
+	go s.watch()
+
+	return s
+}
+
+func TestStdioConnected(t *testing.T) {
+	t.Run("returns false before any process is started", func(t *testing.T) {
+		// given
+		s := &stdio{}
+		// then
+		assert.False(t, s.connected())
+	})
+
+	t.Run("returns true while the server process is running", func(t *testing.T) {
+		// given: cat stays alive on stdin and exits on EOF, so close returns promptly
+		s := startProcess(t, "cat")
+		t.Cleanup(func() { _ = s.close() })
+		// then
+		assert.True(t, s.connected())
+	})
+
+	t.Run("returns false after the server process exits on its own", func(t *testing.T) {
+		// given
+		s := startProcess(t, "sh", "-c", "exit 0")
+		// when: wait for the watcher to reap the self-exited process
+		<-s.exited
+		// then
+		assert.False(t, s.connected())
 	})
 }
 
