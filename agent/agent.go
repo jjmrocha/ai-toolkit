@@ -213,6 +213,7 @@ func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
 	}
 
 	return &ModelInfo{
+		Provider:         a.modelInfo.Provider,
 		ModelName:        a.modelInfo.Name,
 		ModelContextSize: a.modelInfo.ContextSize,
 		Effort:           a.llm.Effort(),

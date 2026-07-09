@@ -435,10 +435,10 @@ func TestChangeModel(t *testing.T) {
 }
 
 func TestModelInfo(t *testing.T) {
-	t.Run("reports the active model's name, context window, and effort", func(t *testing.T) {
+	t.Run("reports the active model's provider, name, context window, and effort", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{
-			info:   &llm.ModelInfo{Name: "m1", ContextSize: 2000},
+			info:   &llm.ModelInfo{Provider: llm.ProviderAnthropic, Name: "m1", ContextSize: 2000},
 			effort: llm.EffortMedium,
 		}
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
@@ -446,6 +446,7 @@ func TestModelInfo(t *testing.T) {
 		result := agt.ModelInfo(context.Background())
 		// then
 		require.NotNil(t, result)
+		assert.Equal(t, llm.ProviderAnthropic, result.Provider)
 		assert.Equal(t, "m1", result.ModelName)
 		assert.Equal(t, 2000, result.ModelContextSize)
 		assert.Equal(t, llm.EffortMedium, result.Effort)

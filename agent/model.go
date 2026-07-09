@@ -37,6 +37,8 @@ type Response struct {
 // ModelInfo describes the model an [Agent] is currently using: its name,
 // context window, and the reasoning effort applied to each turn.
 type ModelInfo struct {
+	// Provider is the underlying llm.Provider used to serve the model.
+	Provider llm.Provider
 	// ModelName is the human-readable name of the active model.
 	ModelName string
 	// ModelContextSize is the model's context window in tokens, or 0 if it

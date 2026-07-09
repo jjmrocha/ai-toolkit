@@ -154,14 +154,17 @@ func TestLLMChat(t *testing.T) {
 }
 
 func TestLLMModelInfo(t *testing.T) {
-	t.Run("delegates to the provider and returns its result", func(t *testing.T) {
-		// given
-		expected := &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}
-		llm := &LLM{provider: fakeProvider{
-			modelInfoFunc: func(context.Context) (*ModelInfo, error) {
-				return expected, nil
+	t.Run("delegates to the provider and stamps the configured provider", func(t *testing.T) {
+		// given: the provider reports model info without a provider set
+		expected := &ModelInfo{Provider: ProviderOpenRouter, Name: "OpenAI: GPT-4o", ContextSize: 128000}
+		llm := &LLM{
+			config: Config{Provider: ProviderOpenRouter},
+			provider: fakeProvider{
+				modelInfoFunc: func(context.Context) (*ModelInfo, error) {
+					return &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, nil
+				},
 			},
-		}}
+		}
 		// when
 		result, err := llm.ModelInfo(t.Context())
 		// then

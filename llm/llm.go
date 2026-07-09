@@ -97,7 +97,13 @@ func (l *LLM) ModelInfo(ctx context.Context) (*ModelInfo, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	return l.provider.modelInfo(ctx)
+	info, err := l.provider.modelInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	info.Provider = l.config.Provider
+	return info, nil
 }
 
 // CurrentModel returns the identifier of the model the client is currently
