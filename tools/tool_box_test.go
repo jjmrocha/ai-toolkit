@@ -66,6 +66,16 @@ func TestAddTool(t *testing.T) {
 		// then
 		assert.ErrorIs(t, err, ErrInvalidToolName)
 	})
+
+	t.Run("rejects a nil handler and does not register it", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		// when
+		err := box.AddTool(llm.Tool{Name: "echo"}, nil)
+		// then
+		assert.ErrorIs(t, err, ErrNilHandler)
+		assert.Empty(t, box.GetTools())
+	})
 }
 
 func TestRemoveTool(t *testing.T) {

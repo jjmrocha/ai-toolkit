@@ -53,10 +53,15 @@ var toolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 //
 // It returns ErrInvalidToolName without registering anything if tool.Name is
 // empty or contains a character the providers reject (only letters, digits,
-// underscore, and hyphen are allowed, up to 128 characters).
+// underscore, and hyphen are allowed, up to 128 characters), or ErrNilHandler
+// if handler is nil.
 func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) error {
 	if !toolNamePattern.MatchString(tool.Name) {
 		return fmt.Errorf("%w: %q", ErrInvalidToolName, tool.Name)
+	}
+
+	if handler == nil {
+		return fmt.Errorf("%w: %q", ErrNilHandler, tool.Name)
 	}
 
 	t := fn{
