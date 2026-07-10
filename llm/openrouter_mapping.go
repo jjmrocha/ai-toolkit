@@ -130,6 +130,10 @@ func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
 func fromORToModelInfo(models []orModel, id string) (*ModelInfo, error) {
 	for _, m := range models {
 		if m.ID == id {
+			if m.ContextLength == 0 {
+				return nil, fmt.Errorf("openrouter: %w: %q", ErrMissingContextLength, id)
+			}
+
 			return &ModelInfo{
 				Name:        m.Name,
 				ContextSize: m.ContextLength,

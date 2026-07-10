@@ -111,7 +111,7 @@ func fromOllamaToModelInfo(resp ollamaShowResponse, model string) (*ModelInfo, e
 	}
 
 	ctxLen, ok := resp.ModelInfo[arch+".context_length"].(float64)
-	if !ok {
+	if !ok || ctxLen == 0 {
 		return nil, fmt.Errorf("ollama: %w: %q", ErrMissingContextLength, model)
 	}
 

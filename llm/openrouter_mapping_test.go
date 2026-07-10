@@ -238,4 +238,14 @@ func TestFromORToModelInfo(t *testing.T) {
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
 	})
+
+	t.Run("returns ErrMissingContextLength when the context length is zero", func(t *testing.T) {
+		// given
+		zero := []orModel{{ID: "openai/gpt-4o", Name: "OpenAI: GPT-4o", ContextLength: 0}}
+		// when
+		result, err := fromORToModelInfo(zero, "openai/gpt-4o")
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrMissingContextLength)
+	})
 }

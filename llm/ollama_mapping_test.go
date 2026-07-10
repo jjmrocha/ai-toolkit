@@ -161,4 +161,16 @@ func TestFromOllamaToModelInfo(t *testing.T) {
 		// then
 		assert.ErrorIs(t, err, ErrMissingContextLength)
 	})
+
+	t.Run("returns an error when the context length is zero", func(t *testing.T) {
+		// given
+		resp := ollamaShowResponse{ModelInfo: map[string]any{
+			"general.architecture": "llama",
+			"llama.context_length": float64(0),
+		}}
+		// when
+		_, err := fromOllamaToModelInfo(resp, "llama3.2")
+		// then
+		assert.ErrorIs(t, err, ErrMissingContextLength)
+	})
 }
