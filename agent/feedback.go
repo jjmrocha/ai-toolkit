@@ -17,6 +17,10 @@ type Feedback interface {
 	// ContextCompacted fires when the conversation context is compacted to fit
 	// the model's window (see Config.CompactionThresholdPercent).
 	ContextCompacted()
+	// ContextCompactionFailed fires when a compaction attempt is abandoned
+	// because the summarizing model call failed; the conversation is left
+	// unchanged and compaction is retried after the next completed turn.
+	ContextCompactionFailed()
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
 	// SessionStarted fires when [Agent.StartSession] begins a session.
@@ -50,6 +54,10 @@ func (s *writerFeedback) ContextCompacted() {
 	_, _ = fmt.Fprintln(s.stdout, "Context was compacted")
 }
 
+func (s *writerFeedback) ContextCompactionFailed() {
+	_, _ = fmt.Fprintln(s.stdout, "Context compaction failed")
+}
+
 func (s *writerFeedback) SessionReset() {
 	_, _ = fmt.Fprintln(s.stdout, "Session reset")
 }
@@ -68,6 +76,9 @@ func (nullFeedback) ToolCalled(_ string) {
 }
 
 func (nullFeedback) ContextCompacted() {
+}
+
+func (nullFeedback) ContextCompactionFailed() {
 }
 
 func (nullFeedback) SessionReset() {

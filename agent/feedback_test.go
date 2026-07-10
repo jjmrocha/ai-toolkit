@@ -10,6 +10,7 @@ func exerciseAllEvents(fb Feedback) {
 	fb.SessionStarted()
 	fb.ToolCalled("echo")
 	fb.ContextCompacted()
+	fb.ContextCompactionFailed()
 	fb.SessionReset()
 	fb.SessionClosed()
 }

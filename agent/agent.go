@@ -266,6 +266,7 @@ func (a *Agent) CompactContext(ctx context.Context) {
 		llm.UserMessage{Content: renderConversation(older)},
 	}, nil)
 	if err != nil {
+		a.fb.ContextCompactionFailed()
 		return
 	}
 

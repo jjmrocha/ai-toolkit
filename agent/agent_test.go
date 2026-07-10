@@ -70,9 +70,12 @@ func (f *recordingFeedback) ToolCalled(toolName string) {
 	f.events = append(f.events, "ToolCalled")
 }
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
-func (f *recordingFeedback) SessionReset()     { f.events = append(f.events, "SessionReset") }
-func (f *recordingFeedback) SessionStarted()   { f.events = append(f.events, "SessionStarted") }
-func (f *recordingFeedback) SessionClosed()    { f.events = append(f.events, "SessionClosed") }
+func (f *recordingFeedback) ContextCompactionFailed() {
+	f.events = append(f.events, "ContextCompactionFailed")
+}
+func (f *recordingFeedback) SessionReset()   { f.events = append(f.events, "SessionReset") }
+func (f *recordingFeedback) SessionStarted() { f.events = append(f.events, "SessionStarted") }
+func (f *recordingFeedback) SessionClosed()  { f.events = append(f.events, "SessionClosed") }
 
 func testLLM(t *testing.T) *llm.LLM {
 	t.Helper()
@@ -512,5 +515,6 @@ func TestCompactContext(t *testing.T) {
 		// then
 		assert.Equal(t, snapshot, agt.messages) // unchanged on failure
 		assert.NotContains(t, fb.events, "ContextCompacted")
+		assert.Contains(t, fb.events, "ContextCompactionFailed")
 	})
 }
