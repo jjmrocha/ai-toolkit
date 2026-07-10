@@ -105,9 +105,16 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 		return err
 	}
 
+	if err := client.RegisterTools(ctx, m.toolBox); err != nil {
+		// Registration failed; discard the client so it is not left behind
+		// reporting itself as running with missing tools.
+		_ = client.Close()
+		return err
+	}
+
 	m.clients[name] = client
 
-	return client.RegisterTools(ctx, m.toolBox)
+	return nil
 }
 
 // Stop shuts down the running MCP named name, removing its tools from the

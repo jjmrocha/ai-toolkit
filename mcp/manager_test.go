@@ -36,6 +36,17 @@ func echoServerCmd() ClientConfig {
 	return ClientConfig{Name: "srv", Command: "sh", Args: []string{"-c", script}}
 }
 
+// badToolServerCmd returns a command that completes the handshake and then
+// answers tools/list with a tool whose namespaced name is invalid, so
+// RegisterTools fails while the process stays alive (Connected reports true).
+func badToolServerCmd() ClientConfig {
+	initResp := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":%q}}`, protocolVersion)
+	toolsResp := `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"bad name","description":"","inputSchema":{"type":"object"}}]}}`
+	script := fmt.Sprintf("echo '%s'; echo '%s'; cat >/dev/null", initResp, toolsResp)
+
+	return ClientConfig{Name: "srv", Command: "sh", Args: []string{"-c", script}}
+}
+
 func TestManagerStart(t *testing.T) {
 	t.Run("returns ErrMCPNotRegistered for an unknown name", func(t *testing.T) {
 		// given
@@ -55,6 +66,19 @@ func TestManagerStart(t *testing.T) {
 		// then
 		require.Error(t, err)
 		assert.NotContains(t, m.clients, "srv")
+	})
+
+	t.Run("rolls back the client when tool registration fails", func(t *testing.T) {
+		// given: a server that starts fine but whose tools cannot be registered
+		m := NewManager(tools.NewToolBox())
+		m.RegisterClient(badToolServerCmd())
+		t.Cleanup(m.Close)
+		// when
+		err := m.Start(t.Context(), "srv")
+		// then: the error propagates and no broken client is left behind
+		require.Error(t, err)
+		assert.NotContains(t, m.clients, "srv")
+		assert.Empty(t, m.toolBox.GetTools())
 	})
 
 	t.Run("starts a registered MCP and registers its tools", func(t *testing.T) {
