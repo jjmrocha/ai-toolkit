@@ -135,7 +135,7 @@ func fromORToModelInfo(models []orModel, id string) (*ModelInfo, error) {
 			}
 
 			return &ModelInfo{
-				Name:        m.Name,
+				Name:        id,
 				ContextSize: m.ContextLength,
 			}, nil
 		}

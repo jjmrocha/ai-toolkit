@@ -283,7 +283,7 @@ func TestModelInfo(t *testing.T) {
 		result, err := o.modelInfo(t.Context())
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, result)
+		assert.Equal(t, &ModelInfo{Name: "openai/gpt-4o", ContextSize: 128000}, result)
 	})
 
 	t.Run("returns an error when the configured model is not listed", func(t *testing.T) {

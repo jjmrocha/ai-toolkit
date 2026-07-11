@@ -89,7 +89,7 @@ func (a *anthropic) modelInfo(ctx context.Context) (*ModelInfo, error) {
 		return nil, fmt.Errorf("anthropic: unexpected status %d: %s", resp.StatusCode(), resp.String())
 	}
 
-	return fromAnthropicToModelInfo(apiResp)
+	return fromAnthropicToModelInfo(apiResp, a.config.Model)
 }
 
 func (a *anthropic) changeModel(model string) error {

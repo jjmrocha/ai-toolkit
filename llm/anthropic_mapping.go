@@ -137,13 +137,13 @@ func fromAnthropicToAssistantMessage(resp anthropicChatResponse) *AssistantMessa
 	return &result
 }
 
-func fromAnthropicToModelInfo(model anthropicModel) (*ModelInfo, error) {
+func fromAnthropicToModelInfo(model anthropicModel, id string) (*ModelInfo, error) {
 	if model.MaxInputTokens == 0 {
-		return nil, fmt.Errorf("anthropic: %w: %q", ErrMissingContextLength, model.ID)
+		return nil, fmt.Errorf("anthropic: %w: %q", ErrMissingContextLength, id)
 	}
 
 	return &ModelInfo{
-		Name:        model.DisplayName,
+		Name:        id,
 		ContextSize: model.MaxInputTokens,
 	}, nil
 }

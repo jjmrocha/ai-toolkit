@@ -270,21 +270,21 @@ func TestFromAnthropicToAssistantMessage(t *testing.T) {
 }
 
 func TestFromAnthropicToModelInfo(t *testing.T) {
-	t.Run("maps the display name and context size", func(t *testing.T) {
+	t.Run("maps the requested id as the name and the context size", func(t *testing.T) {
 		// given
 		model := anthropicModel{ID: "claude-opus-4-8", DisplayName: "Claude Opus 4.8", MaxInputTokens: 1000000}
 		// when
-		result, err := fromAnthropicToModelInfo(model)
+		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "Claude Opus 4.8", ContextSize: 1000000}, result)
+		assert.Equal(t, &ModelInfo{Name: "claude-opus-4-8", ContextSize: 1000000}, result)
 	})
 
 	t.Run("returns ErrMissingContextLength when no context size is reported", func(t *testing.T) {
 		// given
 		model := anthropicModel{ID: "claude-opus-4-8", DisplayName: "Claude Opus 4.8"}
 		// when
-		result, err := fromAnthropicToModelInfo(model)
+		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrMissingContextLength)

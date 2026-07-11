@@ -224,7 +224,7 @@ func TestAnthropicModelInfo(t *testing.T) {
 		result, err := a.modelInfo(t.Context())
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "Claude Opus 4.8", ContextSize: 1000000}, result)
+		assert.Equal(t, &ModelInfo{Name: "claude-opus-4-8", ContextSize: 1000000}, result)
 	})
 
 	t.Run("returns ErrModelNotFound when the model is not found", func(t *testing.T) {
