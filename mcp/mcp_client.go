@@ -55,9 +55,7 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 
 	c := &Client{config: cfg}
 
-	// unregisterTools doubles as the disconnect callback: when the server exits
-	// on its own, the transport's watch goroutine calls it to drop the tools.
-	t, err := newStdIO(ctx, cfg.Command, cfg.Args, c.unregisterTools)
+	t, err := newStdIO(ctx, cfg.Command, cfg.Args, c.serverDisconnectedCallback)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +82,10 @@ func (c *Client) Close() error {
 	return c.transport.close()
 }
 
-// unregisterTools removes this client's tools from the ToolBox. It is safe to
-// call more than once and from any goroutine.
+func (c *Client) serverDisconnectedCallback() {
+	c.unregisterTools()
+}
+
 func (c *Client) unregisterTools() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

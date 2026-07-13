@@ -132,7 +132,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		a.messages = append(a.messages, llm.UserMessage{Content: userInput})
 	}
 
-	toolDefs := a.toolBox.GetTools()
+	toolList := a.toolBox.GetTools()
 
 	var (
 		callCount    int
@@ -147,7 +147,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		}
 
 		t0 := time.Now()
-		response, err := a.llm.Chat(ctx, a.messages, toolDefs)
+		response, err := a.llm.Chat(ctx, a.messages, toolList)
 		llmDuration += time.Since(t0)
 		if err != nil {
 			return nil, err

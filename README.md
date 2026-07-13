@@ -155,15 +155,15 @@ removes them and shuts the process down.
 each server's configuration by name, then start and stop them individually — for
 example, to expose an MCP's tools only while a user has it switched on.
 
-- `RegisterClient` records a server's launch configuration under its name without starting it.
+- `RegisterMCP` records a server's launch configuration under its name without starting it.
 - `Start` launches a registered server and registers its tools; an already-running one is reused, and one whose process has died is replaced.
 - `Stop` shuts a running server down and removes its tools, keeping the configuration so it can be started again.
-- `GetMCPs` reports each registered server and whether it is currently running, as a slice of `Status`.
+- `GetMCPStatus` reports each registered server and whether it is currently running, as a slice of `Status`.
 - `Close` stops every running server and clears the registry. The `Manager` is safe for concurrent use.
 
 ```go
 manager := mcp.NewManager(toolBox)
-manager.RegisterClient(mcp.ClientConfig{
+manager.RegisterMCP(mcp.ClientConfig{
 	Name:    "playwright",
 	Command: "npx",
 	Args:    []string{"@playwright/mcp@latest"},
@@ -174,7 +174,7 @@ if err := manager.Start(ctx, "playwright"); err != nil {
 	log.Fatal(err)
 }
 
-for _, status := range manager.GetMCPs() {
+for _, status := range manager.GetMCPStatus() {
 	fmt.Printf("%s active=%t\n", status.Name, status.Active)
 }
 

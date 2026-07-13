@@ -19,7 +19,7 @@ import (
 // result string sent back to the model, or an error.
 type Handler func(context.Context, map[string]any) (string, error)
 
-type fn struct {
+type toolFn struct {
 	tool    llm.Tool
 	handler Handler
 }
@@ -33,13 +33,13 @@ type fn struct {
 // setup, then treat it as read-only; concurrent ExecuteTool/GetTools calls are
 // then safe.
 type ToolBox struct {
-	tools map[string]fn
+	tools map[string]toolFn
 }
 
 // NewToolBox returns an empty ToolBox ready for tool registration.
 func NewToolBox() *ToolBox {
 	return &ToolBox{
-		tools: make(map[string]fn),
+		tools: make(map[string]toolFn),
 	}
 }
 
@@ -64,7 +64,7 @@ func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) error {
 		return fmt.Errorf("%w: %q", ErrNilHandler, tool.Name)
 	}
 
-	t := fn{
+	t := toolFn{
 		tool:    tool,
 		handler: handler,
 	}

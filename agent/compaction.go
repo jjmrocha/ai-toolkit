@@ -16,12 +16,12 @@ const (
 		"Reply with the summary only."
 )
 
-func compactionThreshold(contextSize, pct int) int {
-	if pct == 0 {
-		pct = defaultCompactionThresholdPercent
+func compactionThreshold(contextSize, pctThreshold int) int {
+	if pctThreshold == 0 {
+		pctThreshold = defaultCompactionThresholdPercent
 	}
 
-	return contextSize * pct / 100
+	return contextSize * pctThreshold / 100
 }
 
 func indexOfTheBeginningOfTurnToKeep(messages []llm.Message) int {
@@ -44,6 +44,7 @@ func indexOfTheBeginningOfTurnToKeep(messages []llm.Message) int {
 
 func renderConversation(messages []llm.Message) string {
 	var b strings.Builder
+
 	for _, m := range messages {
 		switch v := m.(type) {
 		case llm.SystemMessage:
@@ -61,5 +62,6 @@ func renderConversation(messages []llm.Message) string {
 			fmt.Fprintf(&b, "Tool %s result: %s\n", v.ToolName, v.Content)
 		}
 	}
+
 	return b.String()
 }

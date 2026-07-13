@@ -60,7 +60,7 @@ func TestManagerStart(t *testing.T) {
 	t.Run("propagates the error when the server fails to start", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(ClientConfig{Name: "srv", Command: "definitely-not-a-real-command"})
+		m.RegisterMCP(ClientConfig{Name: "srv", Command: "definitely-not-a-real-command"})
 		// when
 		err := m.Start(t.Context(), "srv")
 		// then
@@ -71,7 +71,7 @@ func TestManagerStart(t *testing.T) {
 	t.Run("rolls back the client when tool registration fails", func(t *testing.T) {
 		// given: a server that starts fine but whose tools cannot be registered
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(badToolServerCmd())
+		m.RegisterMCP(badToolServerCmd())
 		t.Cleanup(m.Close)
 		// when
 		err := m.Start(t.Context(), "srv")
@@ -84,7 +84,7 @@ func TestManagerStart(t *testing.T) {
 	t.Run("starts a registered MCP and registers its tools", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(echoServerCmd())
+		m.RegisterMCP(echoServerCmd())
 		t.Cleanup(m.Close)
 		// when
 		err := m.Start(t.Context(), "srv")
@@ -99,7 +99,7 @@ func TestManagerStart(t *testing.T) {
 	t.Run("reuses a client that is already running", func(t *testing.T) {
 		// given: an MCP that has already been started
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(echoServerCmd())
+		m.RegisterMCP(echoServerCmd())
 		t.Cleanup(m.Close)
 		require.NoError(t, m.Start(t.Context(), "srv"))
 		existing := m.clients["srv"]
@@ -114,7 +114,7 @@ func TestManagerStart(t *testing.T) {
 	t.Run("replaces a client whose process has died", func(t *testing.T) {
 		// given: a registered MCP whose recorded client is already dead
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(echoServerCmd())
+		m.RegisterMCP(echoServerCmd())
 		m.clients["srv"] = deadClient(t, "srv")
 		t.Cleanup(m.Close)
 		// when
@@ -137,20 +137,20 @@ func TestManagerStop(t *testing.T) {
 		assert.ErrorIs(t, err, ErrMCPNotRegistered)
 	})
 
-	t.Run("returns ErrMCPNotRunning when registered but not started", func(t *testing.T) {
+	t.Run("returns no error when registered but not started", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(ClientConfig{Name: "srv", Command: "server"})
+		m.RegisterMCP(ClientConfig{Name: "srv", Command: "server"})
 		// when
 		err := m.Stop("srv")
 		// then
-		assert.ErrorIs(t, err, ErrMCPNotRunning)
+		require.NoError(t, err)
 	})
 
 	t.Run("stops a running MCP and forgets it", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(ClientConfig{Name: "srv", Command: "server"})
+		m.RegisterMCP(ClientConfig{Name: "srv", Command: "server"})
 		m.clients["srv"] = liveClient(t, "srv")
 		// when
 		err := m.Stop("srv")
@@ -166,12 +166,12 @@ func TestManagerGetMCPs(t *testing.T) {
 	t.Run("reports each registered MCP with its active state", func(t *testing.T) {
 		// given: one running, one registered but never started
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(ClientConfig{Name: "up", Command: "server"})
-		m.RegisterClient(ClientConfig{Name: "down", Command: "server"})
+		m.RegisterMCP(ClientConfig{Name: "up", Command: "server"})
+		m.RegisterMCP(ClientConfig{Name: "down", Command: "server"})
 		m.clients["up"] = liveClient(t, "up")
 		t.Cleanup(m.Close)
 		// when
-		statuses := m.GetMCPs()
+		statuses := m.GetMCPStatus()
 		// then
 		byName := map[string]bool{}
 		for _, s := range statuses {
@@ -183,10 +183,10 @@ func TestManagerGetMCPs(t *testing.T) {
 	t.Run("reports a dead client as inactive and reaps it", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(ClientConfig{Name: "srv", Command: "server"})
+		m.RegisterMCP(ClientConfig{Name: "srv", Command: "server"})
 		m.clients["srv"] = deadClient(t, "srv")
 		// when
-		statuses := m.GetMCPs()
+		statuses := m.GetMCPStatus()
 		// then: reported inactive and dropped, but the config stays for a later Start
 		require.Len(t, statuses, 1)
 		assert.False(t, statuses[0].Active)
@@ -201,7 +201,7 @@ func TestManagerConcurrentAccess(t *testing.T) {
 		m := NewManager(tools.NewToolBox())
 		for i := range 5 {
 			name := fmt.Sprintf("srv%d", i)
-			m.RegisterClient(ClientConfig{Name: name, Command: "server"})
+			m.RegisterMCP(ClientConfig{Name: name, Command: "server"})
 			m.clients[name] = liveClient(t, name)
 		}
 		t.Cleanup(m.Close)
@@ -211,8 +211,8 @@ func TestManagerConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				m.GetMCPs()
-				m.RegisterClient(ClientConfig{Name: fmt.Sprintf("new%d", i), Command: "server"})
+				m.GetMCPStatus()
+				m.RegisterMCP(ClientConfig{Name: fmt.Sprintf("new%d", i), Command: "server"})
 				_ = m.Stop(fmt.Sprintf("srv%d", i%5))
 			}(i)
 		}
@@ -225,7 +225,7 @@ func TestManagerClose(t *testing.T) {
 	t.Run("closes every client and clears the registry", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		m.RegisterClient(ClientConfig{Name: "srv", Command: "server"})
+		m.RegisterMCP(ClientConfig{Name: "srv", Command: "server"})
 		m.clients["srv"] = liveClient(t, "srv")
 		// when
 		m.Close()

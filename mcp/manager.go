@@ -8,8 +8,8 @@ import (
 )
 
 // Manager registers MCP servers by name and runs them on demand against a shared
-// tools.ToolBox. Register a server with RegisterClient, then Start and Stop it by
-// name; GetMCPs reports which are running. It is safe for concurrent use.
+// tools.ToolBox. Register a server with RegisterMCP, then Start and Stop it by
+// name; GetMCPStatus reports which are running. It is safe for concurrent use.
 type Manager struct {
 	toolBox *tools.ToolBox
 	configs map[string]ClientConfig
@@ -38,20 +38,20 @@ func (m *Manager) Close() {
 	}
 }
 
-// RegisterClient records an MCP's launch configuration under cfg.Name so it can
+// RegisterMCP adds an MCP's configuration under cfg.Name so it can
 // later be started by name. Registering an existing name replaces its config.
 // It does not start the server.
-func (m *Manager) RegisterClient(cfg ClientConfig) {
+func (m *Manager) RegisterMCP(cfg ClientConfig) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.configs[cfg.Name] = cfg
 }
 
-// GetMCPs reports the registered MCPs and whether each is currently running. A
+// GetMCPStatus reports the registered MCPs and whether each is currently running. A
 // client whose process has died is reported inactive and reaped, so the next
 // Start launches a fresh one. It takes the write lock because of that reaping.
-func (m *Manager) GetMCPs() []Status {
+func (m *Manager) GetMCPStatus() []Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -119,8 +119,7 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 
 // Stop shuts down the running MCP named name, removing its tools from the
 // ToolBox, and keeps its configuration so it can be started again. It returns
-// ErrMCPNotRegistered when no MCP is registered under name and ErrMCPNotRunning
-// when it is registered but not currently running.
+// ErrMCPNotRegistered when no MCP is registered under name.
 func (m *Manager) Stop(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,7 +130,7 @@ func (m *Manager) Stop(name string) error {
 
 	client, ok := m.clients[name]
 	if !ok {
-		return ErrMCPNotRunning
+		return nil
 	}
 
 	_ = client.Close()

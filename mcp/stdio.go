@@ -22,13 +22,13 @@ const (
 )
 
 type stdio struct {
-	cmd              *exec.Cmd
-	in               io.Writer
-	out              *bufio.Reader
-	exited           chan struct{}
-	messageID        int
-	mu               sync.Mutex
-	serverDisconnect func()
+	cmd                            *exec.Cmd
+	in                             io.Writer
+	out                            *bufio.Reader
+	exited                         chan struct{}
+	messageID                      int
+	mu                             sync.Mutex
+	serverDisconnectedNotification func()
 }
 
 func newStdIO(ctx context.Context, command string, args []string, fn func()) (*stdio, error) {
@@ -51,14 +51,14 @@ func newStdIO(ctx context.Context, command string, args []string, fn func()) (*s
 	}
 
 	s := &stdio{
-		cmd:              cmd,
-		in:               stdin,
-		out:              bufio.NewReader(stdout),
-		exited:           make(chan struct{}),
-		serverDisconnect: fn,
+		cmd:                            cmd,
+		in:                             stdin,
+		out:                            bufio.NewReader(stdout),
+		exited:                         make(chan struct{}),
+		serverDisconnectedNotification: fn,
 	}
 
-	go s.watch()
+	go s.waitForTermination()
 
 	if err := s.initialize(ctx); err != nil {
 		_ = s.close()
@@ -68,14 +68,14 @@ func newStdIO(ctx context.Context, command string, args []string, fn func()) (*s
 	return s, nil
 }
 
-// watch reaps the server process and closes exited once it terminates, so that
+// waitForTermination reaps the server process and closes exited once it terminates, so that
 // connected can report the process dying on its own, not only being closed.
-func (s *stdio) watch() {
+func (s *stdio) waitForTermination() {
 	_ = s.cmd.Wait()
 	close(s.exited)
 
-	if s.serverDisconnect != nil {
-		s.serverDisconnect()
+	if s.serverDisconnectedNotification != nil {
+		s.serverDisconnectedNotification()
 	}
 }
 
@@ -119,11 +119,11 @@ func (s *stdio) Request(ctx context.Context, method string, params map[string]an
 		"params":  orEmpty(params),
 	}
 
-	if err := s.send(ctx, message); err != nil {
+	if err := s.sendMessage(ctx, message); err != nil {
 		return nil, fmt.Errorf("sending request to MCP server: %w", err)
 	}
 
-	return s.read(ctx, id)
+	return s.readResponse(ctx, id)
 }
 
 func (s *stdio) notify(ctx context.Context, method string, params map[string]any) error {
@@ -133,7 +133,7 @@ func (s *stdio) notify(ctx context.Context, method string, params map[string]any
 		"params":  orEmpty(params),
 	}
 
-	if err := s.send(ctx, notification); err != nil {
+	if err := s.sendMessage(ctx, notification); err != nil {
 		return fmt.Errorf("sending notification to MCP server: %w", err)
 	}
 
@@ -172,7 +172,7 @@ func (s *stdio) nextMessageID() int {
 	return s.messageID
 }
 
-func (s *stdio) send(ctx context.Context, message map[string]any) error {
+func (s *stdio) sendMessage(ctx context.Context, message map[string]any) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (s *stdio) send(ctx context.Context, message map[string]any) error {
 	return nil
 }
 
-func (s *stdio) read(ctx context.Context, requestID int) (map[string]any, error) {
+func (s *stdio) readResponse(ctx context.Context, requestID int) (map[string]any, error) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err

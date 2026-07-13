@@ -19,7 +19,4 @@ var (
 	// ErrMCPNotRegistered is returned by Manager.Start and Manager.Stop when no
 	// MCP has been registered under the given name.
 	ErrMCPNotRegistered = errors.New("MCP not registered")
-	// ErrMCPNotRunning is returned by Manager.Stop when the named MCP is
-	// registered but not currently running.
-	ErrMCPNotRunning = errors.New("MCP not running")
 )

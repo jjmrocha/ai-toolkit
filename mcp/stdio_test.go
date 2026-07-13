@@ -92,7 +92,7 @@ func TestRead(t *testing.T) {
 			`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`+"\n",
 		)
 		// when
-		result, err := s.read(t.Context(), 1)
+		result, err := s.readResponse(t.Context(), 1)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{"ok": true}, result)
@@ -102,7 +102,7 @@ func TestRead(t *testing.T) {
 		// given
 		s, _ := newMemStdio(`{"jsonrpc":"2.0","id":99,"result":{}}` + "\n")
 		// when
-		result, err := s.read(t.Context(), 1)
+		result, err := s.readResponse(t.Context(), 1)
 		// then
 		assert.ErrorIs(t, err, ErrMCPConnectionClosed)
 		assert.Nil(t, result)
@@ -173,14 +173,14 @@ func TestStdioWatch(t *testing.T) {
 		stdin, err := cmd.StdinPipe()
 		require.NoError(t, err)
 		s := &stdio{
-			cmd:              cmd,
-			in:               stdin,
-			exited:           make(chan struct{}),
-			serverDisconnect: func() { close(called) },
+			cmd:                            cmd,
+			in:                             stdin,
+			exited:                         make(chan struct{}),
+			serverDisconnectedNotification: func() { close(called) },
 		}
 		require.NoError(t, cmd.Start())
 		// when
-		go s.watch()
+		go s.waitForTermination()
 		// then: the callback fires after the process is reaped
 		select {
 		case <-called:
@@ -199,7 +199,7 @@ func startProcess(t testing.TB, command string, args ...string) *stdio {
 
 	s := &stdio{cmd: cmd, in: stdin, exited: make(chan struct{})}
 	require.NoError(t, cmd.Start())
-	go s.watch()
+	go s.waitForTermination()
 
 	return s
 }
