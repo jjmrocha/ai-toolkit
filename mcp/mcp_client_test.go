@@ -50,7 +50,7 @@ func TestRegisterTools(t *testing.T) {
 		err := c.RegisterTools(t.Context(), tb)
 		// then
 		require.NoError(t, err)
-		registered := tb.GetTools()
+		registered := tb.Tools()
 		require.Len(t, registered, 1)
 		assert.Equal(t, "srv__echo", registered[0].Name)
 		assert.Equal(t, "Echoes input", registered[0].Description)
@@ -65,7 +65,7 @@ func TestRegisterTools(t *testing.T) {
 		)
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		// when
-		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv__echo", Arguments: map[string]any{"city": "Lisbon"}})
+		result, err := tb.Execute(t.Context(), llm.ToolCall{Name: "srv__echo", Arguments: map[string]any{"city": "Lisbon"}})
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hello\nworld", result.Content)
@@ -83,7 +83,7 @@ func TestRegisterTools(t *testing.T) {
 		)
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		// when
-		result, err := tb.ExecuteTool(t.Context(), llm.ToolCall{Name: "srv__echo"})
+		result, err := tb.Execute(t.Context(), llm.ToolCall{Name: "srv__echo"})
 		// then
 		assert.Nil(t, result)
 		require.Error(t, err)
@@ -97,7 +97,7 @@ func TestRegisterTools(t *testing.T) {
 		err := c.RegisterTools(t.Context(), tb)
 		// then
 		require.NoError(t, err)
-		assert.Empty(t, tb.GetTools())
+		assert.Empty(t, tb.Tools())
 	})
 
 	t.Run("returns ErrAlreadyRegistered on a second call", func(t *testing.T) {
@@ -128,12 +128,12 @@ func TestClientClose(t *testing.T) {
 		// given
 		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n")
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
-		require.Len(t, tb.GetTools(), 1)
+		require.Len(t, tb.Tools(), 1)
 		// when
 		err := c.Close()
 		// then
 		require.NoError(t, err)
-		assert.Empty(t, tb.GetTools())
+		assert.Empty(t, tb.Tools())
 	})
 
 	t.Run("is safe to call more than once", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestClientClose(t *testing.T) {
 		err := c.Close()
 		// then: it is a clean no-op and the tools stay removed
 		require.NoError(t, err)
-		assert.Empty(t, tb.GetTools())
+		assert.Empty(t, tb.Tools())
 	})
 }
 

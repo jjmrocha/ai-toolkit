@@ -91,7 +91,7 @@ func (c *Client) unregisterTools() {
 	defer c.mu.Unlock()
 
 	for _, tool := range c.tools {
-		c.toolBox.RemoveTool(tool)
+		c.toolBox.Remove(tool)
 	}
 
 	c.tools = nil
@@ -138,7 +138,7 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 			Schema:      schema,
 		}
 
-		if err := c.toolBox.AddTool(tool, c.makeHandler(name)); err != nil {
+		if err := c.toolBox.Add(tool, c.makeHandler(name)); err != nil {
 			return err
 		}
 		c.tools = append(c.tools, tool.Name)

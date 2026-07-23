@@ -73,14 +73,14 @@ by hand and dispatching tool calls yourself.
 
 **Features:**
 
-- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `AddTool` (returns `ErrInvalidToolName` if the name is empty or contains anything other than letters, digits, `_`, or `-`, up to 128 chars), `RemoveTool`, `GetTools` (feed to `Chat`), and `ExecuteTool` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
+- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `Add` (returns `ErrInvalidToolName` if the name is empty or contains anything other than letters, digits, `_`, or `-`, up to 128 chars), `Remove`, `Tools` (feed to `Chat`), and `Execute` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
 - `ObjectBuilder` builds a tool's JSON Schema with a fluent API: scalars (`String`, `Integer`, `Number`, `Boolean`), arrays (`ArrayOfStrings`, `ArrayOfIntegers`, `ArrayOfNumbers`, `ArrayOfBooleans`, `ArrayOfObjects`), nested `Object`, then `Build`.
 - `Arguments` reads a call's decoded arguments with type-checked accessors — `GetString`, `GetInt`, `GetFloat64`, `GetBool`, `GetObject`, and the `GetArrayOf…` family — returning an error instead of panicking on a type mismatch.
 
 ```go
 toolBox := tools.NewToolBox()
 
-toolBox.AddTool(
+toolBox.Add(
 	llm.Tool{
 		Name:        "get_weather",
 		Description: "Get the current weather for a city",
@@ -97,10 +97,10 @@ toolBox.AddTool(
 	},
 )
 
-reply, err := model.Chat(ctx, messages, toolBox.GetTools())
+reply, err := model.Chat(ctx, messages, toolBox.Tools())
 // ...
 for _, call := range reply.ToolCalls {
-	msg, err := toolBox.ExecuteTool(ctx, call) // looks up and runs the handler
+	msg, err := toolBox.Execute(ctx, call) // looks up and runs the handler
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ for _, call := range reply.ToolCalls {
 
 `ObjectBuilder` builds a tool's JSON Schema with a fluent API (scalars, arrays,
 nested objects). `ToolBox` registers each tool with the function that runs it;
-`GetTools` feeds them to `Chat` and `ExecuteTool` dispatches a requested call.
+`Tools` feeds them to `Chat` and `Execute` dispatches a requested call.
 Inside a handler, `Arguments` reads decoded arguments back with typed accessors
 that validate the type instead of panicking.
 
@@ -143,7 +143,7 @@ if err := mcpClient.RegisterTools(ctx, toolBox); err != nil {
 	log.Fatal(err)
 }
 
-reply, err := model.Chat(ctx, messages, toolBox.GetTools()) // MCP tools included
+reply, err := model.Chat(ctx, messages, toolBox.Tools()) // MCP tools included
 ```
 
 `NewClient` launches the server as a child process and completes the handshake.
@@ -155,15 +155,15 @@ removes them and shuts the process down.
 each server's configuration by name, then start and stop them individually — for
 example, to expose an MCP's tools only while a user has it switched on.
 
-- `RegisterMCP` records a server's launch configuration under its name without starting it.
+- `Register` records a server's launch configuration under its name without starting it.
 - `Start` launches a registered server and registers its tools; an already-running one is reused, and one whose process has died is replaced.
 - `Stop` shuts a running server down and removes its tools, keeping the configuration so it can be started again.
-- `GetMCPStatus` reports each registered server and whether it is currently running, as a slice of `Status`.
+- `GetStatus` reports each registered server and whether it is currently running, as a slice of `Status`.
 - `Close` stops every running server and clears the registry. The `Manager` is safe for concurrent use.
 
 ```go
 manager := mcp.NewManager(toolBox)
-manager.RegisterMCP(mcp.ClientConfig{
+manager.Register(mcp.ClientConfig{
 	Name:    "playwright",
 	Command: "npx",
 	Args:    []string{"@playwright/mcp@latest"},
@@ -174,7 +174,7 @@ if err := manager.Start(ctx, "playwright"); err != nil {
 	log.Fatal(err)
 }
 
-for _, status := range manager.GetMCPStatus() {
+for _, status := range manager.GetStatus() {
 	fmt.Printf("%s active=%t\n", status.Name, status.Active)
 }
 

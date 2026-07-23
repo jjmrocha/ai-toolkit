@@ -26,11 +26,11 @@ type toolFn struct {
 
 // ToolBox is a registry that pairs llm.Tool definitions with the functions that
 // execute them, bridging a tool call requested by the model and your code:
-// register tools with AddTool, expose their definitions to the model with
-// GetTools, and run a requested call with ExecuteTool.
+// register tools with Add, expose their definitions to the model with
+// Tools, and run a requested call with Execute.
 //
 // A ToolBox is not safe for concurrent modification. Register every tool during
-// setup, then treat it as read-only; concurrent ExecuteTool/GetTools calls are
+// setup, then treat it as read-only; concurrent Execute/Tools calls are
 // then safe.
 type ToolBox struct {
 	tools map[string]toolFn
@@ -47,7 +47,7 @@ func NewToolBox() *ToolBox {
 // characters, each a letter, digit, underscore, or hyphen.
 var toolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 
-// AddTool registers tool together with the handler that executes it. The
+// Add registers tool together with the handler that executes it. The
 // handler is keyed by tool.Name; registering a tool whose name already exists
 // replaces the previous entry.
 //
@@ -55,7 +55,7 @@ var toolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 // empty or contains a character the providers reject (only letters, digits,
 // underscore, and hyphen are allowed, up to 128 characters), or ErrNilHandler
 // if handler is nil.
-func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) error {
+func (tb *ToolBox) Add(tool llm.Tool, handler Handler) error {
 	if !toolNamePattern.MatchString(tool.Name) {
 		return fmt.Errorf("%w: %q", ErrInvalidToolName, tool.Name)
 	}
@@ -73,15 +73,15 @@ func (tb *ToolBox) AddTool(tool llm.Tool, handler Handler) error {
 	return nil
 }
 
-// RemoveTool unregisters the tool with the given name. It is a no-op if no such
+// Remove unregisters the tool with the given name. It is a no-op if no such
 // tool is registered.
-func (tb *ToolBox) RemoveTool(name string) {
+func (tb *ToolBox) Remove(name string) {
 	delete(tb.tools, name)
 }
 
-// GetTools returns the definitions of all registered tools, suitable for
+// Tools returns the definitions of all registered tools, suitable for
 // passing to llm.LLM.Chat. The order is unspecified.
-func (tb *ToolBox) GetTools() []llm.Tool {
+func (tb *ToolBox) Tools() []llm.Tool {
 	tools := make([]llm.Tool, 0, len(tb.tools))
 
 	for _, t := range tb.tools {
@@ -91,13 +91,13 @@ func (tb *ToolBox) GetTools() []llm.Tool {
 	return tools
 }
 
-// ExecuteTool runs the handler for the requested tool call and wraps its result
+// Execute runs the handler for the requested tool call and wraps its result
 // in an llm.ToolMessage ready to append to the conversation. ctx is passed to
 // the handler for cancellation and deadlines. It returns ErrToolNotFound if no
 // tool matches call.Name, or a wrapped error if the handler itself fails. The
 // returned message correlates by both ToolCallID and ToolName so it works with
 // either provider.
-func (tb *ToolBox) ExecuteTool(ctx context.Context, call llm.ToolCall) (*llm.ToolMessage, error) {
+func (tb *ToolBox) Execute(ctx context.Context, call llm.ToolCall) (*llm.ToolMessage, error) {
 	fn, ok := tb.tools[call.Name]
 	if !ok {
 		return nil, ErrToolNotFound

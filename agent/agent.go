@@ -132,7 +132,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		a.messages = append(a.messages, llm.UserMessage{Content: userInput})
 	}
 
-	toolList := a.toolBox.GetTools()
+	toolList := a.toolBox.Tools()
 
 	var (
 		callCount    int
@@ -180,7 +180,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			a.fb.ToolCalled(call.Name)
 
 			t0 := time.Now()
-			result, err := a.toolBox.ExecuteTool(ctx, call)
+			result, err := a.toolBox.Execute(ctx, call)
 			toolDuration += time.Since(t0)
 			callCount++
 
