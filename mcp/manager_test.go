@@ -127,6 +127,14 @@ func TestManagerStart(t *testing.T) {
 	})
 }
 
+// slowServerCmd is echoServerCmd with a delayed handshake, so Start stays in
+// the launch phase long enough for tests to observe it.
+func slowServerCmd() ClientConfig {
+	cfg := echoServerCmd()
+	cfg.Args[1] = "sleep 1; " + cfg.Args[1]
+	return cfg
+}
+
 func TestManagerStop(t *testing.T) {
 	t.Run("returns ErrMCPNotRegistered for an unknown name", func(t *testing.T) {
 		// given
@@ -171,7 +179,7 @@ func TestManagerGetMCPs(t *testing.T) {
 		m.clients["up"] = liveClient(t, "up")
 		t.Cleanup(m.Close)
 		// when
-		statuses := m.GetStatus()
+		statuses := m.Status()
 		// then
 		byName := map[string]bool{}
 		for _, s := range statuses {
@@ -186,7 +194,7 @@ func TestManagerGetMCPs(t *testing.T) {
 		m.Register(ClientConfig{Name: "srv", Command: "server"})
 		m.clients["srv"] = deadClient(t, "srv")
 		// when
-		statuses := m.GetStatus()
+		statuses := m.Status()
 		// then: reported inactive and dropped, but the config stays for a later Start
 		require.Len(t, statuses, 1)
 		assert.False(t, statuses[0].Active)
@@ -211,7 +219,7 @@ func TestManagerConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				m.GetStatus()
+				m.Status()
 				m.Register(ClientConfig{Name: fmt.Sprintf("new%d", i), Command: "server"})
 				_ = m.Stop(fmt.Sprintf("srv%d", i%5))
 			}(i)

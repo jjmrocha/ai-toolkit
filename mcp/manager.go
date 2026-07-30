@@ -9,7 +9,7 @@ import (
 
 // Manager registers MCP servers by name and runs them on demand against a shared
 // tools.ToolBox. Register a server with Register, then Start and Stop it by
-// name; GetStatus reports which are running. It is safe for concurrent use.
+// name; Status reports which are running. It is safe for concurrent use.
 type Manager struct {
 	toolBox *tools.ToolBox
 	configs map[string]ClientConfig
@@ -48,10 +48,10 @@ func (m *Manager) Register(cfg ClientConfig) {
 	m.configs[cfg.Name] = cfg
 }
 
-// GetStatus reports the registered MCPs and whether each is currently running. A
+// Status reports the registered MCPs and whether each is currently running. A
 // client whose process has died is reported inactive and reaped, so the next
 // Start launches a fresh one. It takes the write lock because of that reaping.
-func (m *Manager) GetStatus() []Status {
+func (m *Manager) Status() []Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
