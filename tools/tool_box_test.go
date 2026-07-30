@@ -3,7 +3,9 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -57,10 +59,20 @@ func TestAddTool(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInvalidToolName)
 	})
 
-	t.Run("rejects a name longer than 128 characters", func(t *testing.T) {
+	t.Run("accepts a name of exactly 64 characters", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		longName := strings.Repeat("a", 129)
+		longName := strings.Repeat("a", 64)
+		// when
+		err := box.Add(llm.Tool{Name: longName}, noopHandler)
+		// then
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects a name longer than 64 characters", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		longName := strings.Repeat("a", 65)
 		// when
 		err := box.Add(llm.Tool{Name: longName}, noopHandler)
 		// then
@@ -112,6 +124,20 @@ func TestGetTools(t *testing.T) {
 		assert.ElementsMatch(t, []string{"a", "b"}, []string{result[0].Name, result[1].Name})
 	})
 
+	t.Run("returns the tools sorted by name", func(t *testing.T) {
+		// given: registration order differs from name order
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "zeta"}, noopHandler))
+		require.NoError(t, box.Add(llm.Tool{Name: "alpha"}, noopHandler))
+		require.NoError(t, box.Add(llm.Tool{Name: "mid"}, noopHandler))
+		// when
+		result := box.Tools()
+		// then: stable order keeps provider prompt prefixes cacheable
+		expected := []string{"alpha", "mid", "zeta"}
+		names := []string{result[0].Name, result[1].Name, result[2].Name}
+		assert.Equal(t, expected, names)
+	})
+
 	t.Run("returns nothing for an empty box", func(t *testing.T) {
 		// given
 		box := NewToolBox()
@@ -119,6 +145,34 @@ func TestGetTools(t *testing.T) {
 		result := box.Tools()
 		// then
 		assert.Empty(t, result)
+	})
+}
+
+func TestToolBoxConcurrency(t *testing.T) {
+	t.Run("concurrent add, remove, list and execute are safe", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "stable"}, noopHandler))
+		var wg sync.WaitGroup
+		// when
+		for i := range 50 {
+			name := fmt.Sprintf("tool-%d", i)
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				_ = box.Add(llm.Tool{Name: name}, noopHandler)
+				box.Remove(name)
+			}()
+			go func() {
+				defer wg.Done()
+				_ = box.Tools()
+				_, _ = box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
+			}()
+		}
+		wg.Wait()
+		// then
+		_, err := box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
+		assert.NoError(t, err)
 	})
 }
 
