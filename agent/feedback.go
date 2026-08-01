@@ -22,8 +22,8 @@ type Feedback interface {
 	// unchanged and compaction is retried after the next completed turn.
 	ContextCompactionFailed()
 	// ModelInfoUnavailable fires when the model's context window cannot be
-	// fetched, leaving automatic compaction disabled. It fires once per
-	// model; the fetch is retried every turn until it succeeds.
+	// fetched, leaving automatic compaction disabled. The fetch is retried
+	// every turn until it succeeds, so the event fires on each failure.
 	ModelInfoUnavailable()
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
