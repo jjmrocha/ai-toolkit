@@ -156,11 +156,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		a.messages = append(a.messages, *response)
 
 		if len(response.ToolCalls) == 0 {
-			a.loadModelLimits(ctx)
-
-			if a.compactThreshold != 0 && response.Stats.TotalTokens > a.compactThreshold {
-				a.CompactContext(ctx)
-			}
+			a.compactIfNeeded(ctx, response.Stats.TotalTokens)
 
 			return &Response{
 				Content: response.Content,
@@ -170,6 +166,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 					OutputTokens: response.Stats.OutputTokens,
 					TotalTokens:  response.Stats.TotalTokens,
 					ToolCalls:    callCount,
+					StopReason:   response.StopReason,
 					LLMDuration:  llmDuration,
 					ToolDuration: toolDuration,
 				},
@@ -199,6 +196,14 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		}
 
 		iteration++
+	}
+}
+
+func (a *Agent) compactIfNeeded(ctx context.Context, lastTotalTokens int) {
+	a.loadModelLimits(ctx)
+
+	if a.compactThreshold != 0 && lastTotalTokens > a.compactThreshold {
+		a.CompactContext(ctx)
 	}
 }
 
@@ -259,7 +264,7 @@ func (a *Agent) CompactContext(ctx context.Context) {
 		return // nothing older to summarize
 	}
 
-	older := a.messages[0:keepFrom] // complete turns, tool pairs intact
+	older := a.messages[1:keepFrom] // complete turns, tool pairs intact
 
 	reply, err := a.llm.Chat(ctx, []llm.Message{
 		llm.SystemMessage{Content: summarySystemPrompt},
@@ -286,6 +291,7 @@ func (a *Agent) loadModelLimits(ctx context.Context) {
 
 	info, err := a.llm.ModelInfo(ctx)
 	if err != nil {
+		a.fb.ModelInfoUnavailable()
 		return
 	}
 

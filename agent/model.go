@@ -19,6 +19,10 @@ type Metadata struct {
 	TotalTokens int
 	// ToolCalls is how many tools were executed across the round.
 	ToolCalls int
+	// StopReason is the provider's native reason the model stopped generating
+	// the final reply (e.g. "end_turn", "max_tokens"); a truncated reply shows
+	// the provider's length-limit value here.
+	StopReason string
 	// LLMDuration is the wall-clock time spent in model calls.
 	LLMDuration time.Duration
 	// ToolDuration is the wall-clock time spent executing tools.

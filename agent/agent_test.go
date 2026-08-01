@@ -17,16 +17,18 @@ type fakeLLM struct {
 	info      *llm.ModelInfo
 	infoErr   error
 	chatCalls int
+	calls     [][]llm.Message
 	models    []string
 	current   string
 	changeErr error
 	effort    llm.Effort
 }
 
-func (f *fakeLLM) Chat(_ context.Context, _ []llm.Message, _ []llm.Tool) (*llm.AssistantMessage, error) {
+func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, _ []llm.Tool) (*llm.AssistantMessage, error) {
 	if f.chatErr != nil {
 		return nil, f.chatErr
 	}
+	f.calls = append(f.calls, messages)
 	reply := f.replies[f.chatCalls]
 	f.chatCalls++
 	return reply, nil
@@ -72,6 +74,9 @@ func (f *recordingFeedback) ToolCalled(toolName string) {
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
 func (f *recordingFeedback) ContextCompactionFailed() {
 	f.events = append(f.events, "ContextCompactionFailed")
+}
+func (f *recordingFeedback) ModelInfoUnavailable() {
+	f.events = append(f.events, "ModelInfoUnavailable")
 }
 func (f *recordingFeedback) SessionReset()   { f.events = append(f.events, "SessionReset") }
 func (f *recordingFeedback) SessionStarted() { f.events = append(f.events, "SessionStarted") }
@@ -254,6 +259,21 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, 0, result.Metadata.Iterations)
 	})
 
+	t.Run("surfaces the model's stop reason in the metadata", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "cut short", StopReason: "max_tokens"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt.StartSession("sys")
+		// when
+		result, err := agt.Process(context.Background(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "max_tokens", result.Metadata.StopReason)
+	})
+
 	t.Run("runs requested tools and feeds the results back", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
@@ -336,6 +356,88 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err3)
 		assert.Contains(t, fb.events, "ContextCompacted")
 		assert.Equal(t, 4, fake.chatCalls) // three turns plus one summarization
+	})
+
+	t.Run("compacts after a tool round when the threshold is crossed", func(t *testing.T) {
+		// given: two completed turns, then a tool round whose final reply trips
+		// 90% of the 1000-token window
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "a1", Stats: llm.Stats{TotalTokens: 100}},
+				{Content: "a2", Stats: llm.Stats{TotalTokens: 100}},
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}, Stats: llm.Stats{TotalTokens: 400}},
+				{Content: "done", Stats: llm.Stats{TotalTokens: 950}},
+				{Content: "SUMMARY"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, tb, fb, Config{CompactionThresholdPercent: 90})
+		agt.StartSession("sys")
+		_, err := agt.Process(context.Background(), "u1")
+		require.NoError(t, err)
+		_, err = agt.Process(context.Background(), "u2")
+		require.NoError(t, err)
+		// when
+		result, err := agt.Process(context.Background(), "u3")
+		// then: the round returns its final reply and compaction runs after it
+		require.NoError(t, err)
+		assert.Equal(t, "done", result.Content)
+		assert.Equal(t, []string{"echo"}, fb.tools)
+		assert.Contains(t, fb.events, "ContextCompacted")
+		assert.Equal(t, 5, fake.chatCalls) // four round trips plus one summarization
+	})
+
+	t.Run("summarizes without repeating the system prompt", func(t *testing.T) {
+		// given: same shape as the threshold test, watching the summarizer call
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "a1", Stats: llm.Stats{TotalTokens: 100}},
+				{Content: "a2", Stats: llm.Stats{TotalTokens: 100}},
+				{Content: "a3", Stats: llm.Stats{TotalTokens: 950}},
+				{Content: "SUMMARY"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, nil, fb, Config{CompactionThresholdPercent: 90})
+		agt.StartSession("the-session-prompt")
+		// when
+		_, err1 := agt.Process(context.Background(), "u1")
+		_, err2 := agt.Process(context.Background(), "u2")
+		_, err3 := agt.Process(context.Background(), "u3")
+		// then: the summarizer sees its own system prompt and a transcript
+		// without the session prompt, which the compacted history keeps anyway
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		require.NoError(t, err3)
+		require.Contains(t, fb.events, "ContextCompacted")
+		require.Len(t, fake.calls, 4)
+		summaryCall := fake.calls[3]
+		require.Len(t, summaryCall, 2)
+		assert.Equal(t, llm.SystemMessage{Content: summarySystemPrompt}, summaryCall[0])
+		transcript := summaryCall[1].(llm.UserMessage)
+		assert.NotContains(t, transcript.Content, "the-session-prompt")
+	})
+
+	t.Run("reports every turn the model info stays unavailable", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "one"}, {Content: "two"}},
+			infoErr: errors.New("no info"),
+		}
+		agt := agentWithLLM(fake, nil, fb, Config{})
+		agt.StartSession("sys")
+		// when: two turns both fail to fetch the model info
+		_, err1 := agt.Process(context.Background(), "u1")
+		_, err2 := agt.Process(context.Background(), "u2")
+		// then: the fetch is retried every turn, so the event fires each time
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		assert.Equal(t, []string{"SessionStarted", "ModelInfoUnavailable", "ModelInfoUnavailable"}, fb.events)
 	})
 
 	t.Run("feeds a failing tool's error back to the model and continues", func(t *testing.T) {
