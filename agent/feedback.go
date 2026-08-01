@@ -21,6 +21,10 @@ type Feedback interface {
 	// because the summarizing model call failed; the conversation is left
 	// unchanged and compaction is retried after the next completed turn.
 	ContextCompactionFailed()
+	// ModelInfoUnavailable fires when the model's context window cannot be
+	// fetched, leaving automatic compaction disabled. It fires once per
+	// model; the fetch is retried every turn until it succeeds.
+	ModelInfoUnavailable()
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
 	// SessionStarted fires when [Agent.StartSession] begins a session.
@@ -58,6 +62,10 @@ func (s *writerFeedback) ContextCompactionFailed() {
 	_, _ = fmt.Fprintln(s.stdout, "Context compaction failed")
 }
 
+func (s *writerFeedback) ModelInfoUnavailable() {
+	_, _ = fmt.Fprintln(s.stdout, "Model info unavailable; automatic context compaction is disabled")
+}
+
 func (s *writerFeedback) SessionReset() {
 	_, _ = fmt.Fprintln(s.stdout, "Session reset")
 }
@@ -79,6 +87,9 @@ func (nullFeedback) ContextCompacted() {
 }
 
 func (nullFeedback) ContextCompactionFailed() {
+}
+
+func (nullFeedback) ModelInfoUnavailable() {
 }
 
 func (nullFeedback) SessionReset() {

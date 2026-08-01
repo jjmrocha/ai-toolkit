@@ -11,6 +11,7 @@ func exerciseAllEvents(fb Feedback) {
 	fb.ToolCalled("echo")
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
+	fb.ModelInfoUnavailable()
 	fb.SessionReset()
 	fb.SessionClosed()
 }
