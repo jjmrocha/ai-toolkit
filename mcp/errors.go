@@ -19,4 +19,9 @@ var (
 	// ErrMCPNotRegistered is returned by Manager.Start and Manager.Stop when no
 	// MCP has been registered under the given name.
 	ErrMCPNotRegistered = errors.New("MCP not registered")
+	// ErrProcessClosed is returned by Write when the process has been closed.
+	ErrProcessClosed = errors.New("process closed")
+	// ErrInvalidMessage is returned by Write when the message cannot be framed
+	// as a single line.
+	ErrInvalidMessage = errors.New("invalid message")
 )
