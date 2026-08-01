@@ -8,21 +8,21 @@ func toOllamaMessages(messages []Message) []ollamaMessage {
 	for _, m := range messages {
 		switch m.Role() {
 		case SystemRole:
-			msg := m.(SystemMessage)
+			msg := messageValue[SystemMessage](m)
 			ollamaMsg := ollamaMessage{
 				Role:    string(SystemRole),
 				Content: msg.Content,
 			}
 			convertedMessages = append(convertedMessages, ollamaMsg)
 		case UserRole:
-			msg := m.(UserMessage)
+			msg := messageValue[UserMessage](m)
 			ollamaMsg := ollamaMessage{
 				Role:    string(UserRole),
 				Content: msg.Content,
 			}
 			convertedMessages = append(convertedMessages, ollamaMsg)
 		case AssistantRole:
-			msg := m.(AssistantMessage)
+			msg := messageValue[AssistantMessage](m)
 			ollamaMsg := ollamaMessage{
 				Role:    string(AssistantRole),
 				Content: msg.Content,
@@ -40,7 +40,7 @@ func toOllamaMessages(messages []Message) []ollamaMessage {
 
 			convertedMessages = append(convertedMessages, ollamaMsg)
 		case ToolRole:
-			msg := m.(ToolMessage)
+			msg := messageValue[ToolMessage](m)
 			ollamaMsg := ollamaMessage{
 				Role:     string(ToolRole),
 				Content:  msg.Content,
@@ -85,7 +85,8 @@ func toOllamaTools(tools []Tool) []ollamaTool {
 
 func fromOllamaToAssistantMessage(resp ollamaChatResponse) *AssistantMessage {
 	result := AssistantMessage{
-		Content: resp.Message.Content,
+		Content:    resp.Message.Content,
+		StopReason: resp.DoneReason,
 		Stats: Stats{
 			PromptTokens: resp.PromptEvalCount,
 			OutputTokens: resp.EvalCount,

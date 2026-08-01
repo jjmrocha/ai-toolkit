@@ -11,21 +11,21 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 	for _, m := range messages {
 		switch m.Role() {
 		case SystemRole:
-			msg := m.(SystemMessage)
+			msg := messageValue[SystemMessage](m)
 			orMsg := orMessage{
 				Role:    string(SystemRole),
 				Content: msg.Content,
 			}
 			convertedMessages = append(convertedMessages, orMsg)
 		case UserRole:
-			msg := m.(UserMessage)
+			msg := messageValue[UserMessage](m)
 			orMsg := orMessage{
 				Role:    string(UserRole),
 				Content: msg.Content,
 			}
 			convertedMessages = append(convertedMessages, orMsg)
 		case AssistantRole:
-			msg := m.(AssistantMessage)
+			msg := messageValue[AssistantMessage](m)
 			orMsg := orMessage{
 				Role:    string(AssistantRole),
 				Content: msg.Content,
@@ -50,7 +50,7 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 
 			convertedMessages = append(convertedMessages, orMsg)
 		case ToolRole:
-			msg := m.(ToolMessage)
+			msg := messageValue[ToolMessage](m)
 			orMsg := orMessage{
 				Role:       string(ToolRole),
 				Content:    msg.Content,
@@ -98,7 +98,8 @@ func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
 	choice := resp.Choices[0].Message
 
 	result := AssistantMessage{
-		Content: choice.Content,
+		Content:    choice.Content,
+		StopReason: resp.Choices[0].FinishReason,
 		Stats: Stats{
 			PromptTokens: resp.Usage.PromptTokens,
 			OutputTokens: resp.Usage.CompletionTokens,

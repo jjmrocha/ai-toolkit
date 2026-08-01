@@ -42,6 +42,7 @@ type ollamaToolFunction struct {
 
 type ollamaChatResponse struct {
 	Message         ollamaResponseMessage `json:"message"`
+	DoneReason      string                `json:"done_reason"`
 	PromptEvalCount int                   `json:"prompt_eval_count"`
 	EvalCount       int                   `json:"eval_count"`
 	Error           string                `json:"error,omitempty"`

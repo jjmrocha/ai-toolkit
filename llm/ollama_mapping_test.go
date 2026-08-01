@@ -59,6 +59,28 @@ func TestToOllamaMessages(t *testing.T) {
 	})
 }
 
+func TestToOllamaMessagesPointerForms(t *testing.T) {
+	t.Run("maps pointer messages like their value forms", func(t *testing.T) {
+		// given
+		messages := []Message{
+			&SystemMessage{Content: "Be brief"},
+			&UserMessage{Content: "Hi"},
+			&AssistantMessage{Content: "Hello"},
+			&ToolMessage{ToolName: "get_weather", Content: "sunny"},
+		}
+		// when
+		result := toOllamaMessages(messages)
+		// then
+		expected := []ollamaMessage{
+			{Role: "system", Content: "Be brief"},
+			{Role: "user", Content: "Hi"},
+			{Role: "assistant", Content: "Hello"},
+			{Role: "tool", Content: "sunny", ToolName: "get_weather"},
+		}
+		assert.Equal(t, expected, result)
+	})
+}
+
 func TestToOllamaThink(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -114,6 +136,15 @@ func TestFromOllamaToAssistantMessage(t *testing.T) {
 		// then
 		assert.Equal(t, "Hello there", result.Content)
 		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
+	})
+
+	t.Run("maps the done reason", func(t *testing.T) {
+		// given
+		resp := ollamaChatResponse{Message: ollamaResponseMessage{Content: "x"}, DoneReason: "length"}
+		// when
+		result := fromOllamaToAssistantMessage(resp)
+		// then
+		assert.Equal(t, "length", result.StopReason)
 	})
 
 	t.Run("maps tool calls with object arguments and no id", func(t *testing.T) {

@@ -81,6 +81,29 @@ func TestToORMessages(t *testing.T) {
 	})
 }
 
+func TestToORMessagesPointerForms(t *testing.T) {
+	t.Run("maps pointer messages like their value forms", func(t *testing.T) {
+		// given
+		messages := []Message{
+			&SystemMessage{Content: "Be brief"},
+			&UserMessage{Content: "Hi"},
+			&AssistantMessage{Content: "Hello"},
+			&ToolMessage{ToolCallID: "call_1", Content: "sunny"},
+		}
+		// when
+		result, err := toORMessages(messages)
+		// then
+		require.NoError(t, err)
+		expected := []orMessage{
+			{Role: "system", Content: "Be brief"},
+			{Role: "user", Content: "Hi"},
+			{Role: "assistant", Content: "Hello"},
+			{Role: "tool", Content: "sunny", ToolCallID: "call_1"},
+		}
+		assert.Equal(t, expected, result)
+	})
+}
+
 func TestToORReasoning(t *testing.T) {
 	t.Run("off disables reasoning explicitly", func(t *testing.T) {
 		// when
@@ -166,6 +189,16 @@ func TestFromORToAssistantMessage(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Hello there", result.Content)
 		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
+	})
+
+	t.Run("maps the finish reason", func(t *testing.T) {
+		// given
+		resp := orChatResponse{Choices: []orChoice{{FinishReason: "length", Message: orResponseMessage{Content: "x"}}}}
+		// when
+		result, err := fromORToAssistantMessage(resp)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "length", result.StopReason)
 	})
 
 	t.Run("decodes tool call arguments from a JSON string", func(t *testing.T) {

@@ -12,10 +12,17 @@ type ToolCall struct {
 
 // Stats reports token usage for a response.
 type Stats struct {
-	// PromptTokens is the number of tokens in the request.
+	// PromptTokens is the number of tokens in the request, including any served
+	// from or written to the provider's prompt cache.
 	PromptTokens int
 	// OutputTokens is the number of tokens generated in the response.
 	OutputTokens int
 	// TotalTokens is the total number of tokens billed for the request.
 	TotalTokens int
+	// CacheWriteTokens is how many prompt tokens were written to the provider's
+	// prompt cache. Zero for providers without prompt caching.
+	CacheWriteTokens int
+	// CacheReadTokens is how many prompt tokens were served from the provider's
+	// prompt cache. Zero for providers without prompt caching.
+	CacheReadTokens int
 }

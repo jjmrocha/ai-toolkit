@@ -22,6 +22,16 @@ type Message interface {
 	isMessage()
 }
 
+// messageValue returns the concrete message of type T carried by m, accepting
+// both the value and pointer forms — callers may seed history with either.
+func messageValue[T Message](m Message) T {
+	if v, ok := m.(T); ok {
+		return v
+	}
+
+	return *(any(m).(*T))
+}
+
 // SystemMessage carries instructions that steer the model's behavior.
 type SystemMessage struct {
 	Content string
@@ -52,6 +62,11 @@ type AssistantMessage struct {
 	Content   string
 	ToolCalls []ToolCall
 	Stats     Stats
+
+	// StopReason is the provider's native reason the model stopped generating
+	// (e.g. Anthropic's "end_turn" or "max_tokens", OpenRouter's "stop" or
+	// "length", Ollama's "stop"). Empty for messages not produced by [LLM.Chat].
+	StopReason string
 
 	// raw holds the provider's original response payload so it can be replayed
 	// verbatim on the next turn. Anthropic needs this to preserve thinking

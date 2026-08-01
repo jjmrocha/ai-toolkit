@@ -49,7 +49,8 @@ type orChatResponse struct {
 }
 
 type orChoice struct {
-	Message orResponseMessage `json:"message"`
+	Message      orResponseMessage `json:"message"`
+	FinishReason string            `json:"finish_reason"`
 }
 
 type orResponseMessage struct {
