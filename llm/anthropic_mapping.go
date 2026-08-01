@@ -37,7 +37,7 @@ func toAnthropicSystemBlocks(messages []Message) []anthropicSystemBlock {
 }
 
 // toAnthropicMessages converts the conversation into Anthropic messages,
-// dropping system messages (carried separately by [toAnthropicSystem]).
+// dropping system messages (carried separately by [toAnthropicSystemBlocks]).
 // Consecutive messages that map to the same role — most commonly a run of tool
 // results answering parallel tool calls — are merged into one message, since
 // Anthropic requires user and assistant turns to alternate.

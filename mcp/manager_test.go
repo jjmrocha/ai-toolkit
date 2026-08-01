@@ -127,14 +127,6 @@ func TestManagerStart(t *testing.T) {
 	})
 }
 
-// slowServerCmd is echoServerCmd with a delayed handshake, so Start stays in
-// the launch phase long enough for tests to observe it.
-func slowServerCmd() ClientConfig {
-	cfg := echoServerCmd()
-	cfg.Args[1] = "sleep 1; " + cfg.Args[1]
-	return cfg
-}
-
 func TestManagerStop(t *testing.T) {
 	t.Run("returns ErrMCPNotRegistered for an unknown name", func(t *testing.T) {
 		// given

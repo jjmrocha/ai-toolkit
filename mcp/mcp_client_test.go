@@ -1,9 +1,7 @@
 package mcp
 
 import (
-	"bufio"
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -13,13 +11,12 @@ import (
 )
 
 func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *bytes.Buffer) {
-	in := &bytes.Buffer{}
-	tb := tools.NewToolBox()
+	transport, in := newMemStdio(responses...)
 	c := &Client{
 		config:    ClientConfig{Name: name},
-		transport: &stdio{in: in, out: bufio.NewReader(strings.NewReader(strings.Join(responses, "")))},
+		transport: transport,
 	}
-	return c, tb, in
+	return c, tools.NewToolBox(), in
 }
 
 func TestNewClient(t *testing.T) {

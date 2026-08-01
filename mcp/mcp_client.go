@@ -5,8 +5,8 @@
 //
 // A Client drives exactly one MCP server over its stdin/stdout. Tool calls are
 // serialized by the transport, so at most one request is in flight at a time.
-// Context cancellation is best-effort: a request blocked waiting on a silent
-// server is not interrupted by its deadline — call Close to abort it.
+// A request blocked on a silent server returns when its context is cancelled
+// or its deadline expires; a response arriving after that is discarded.
 package mcp
 
 import (
