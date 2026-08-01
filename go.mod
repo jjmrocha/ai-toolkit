@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/go-resty/resty/v2 v2.17.2
+	github.com/jjmrocha/go-algo v0.1.1
 	github.com/stretchr/testify v1.11.1
 )
 
