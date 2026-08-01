@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,31 @@ func TestToAnthropicSystem(t *testing.T) {
 		result := toAnthropicSystem(messages)
 		// then
 		assert.Equal(t, "Be brief\n\nBe kind", result)
+	})
+}
+
+func TestToAnthropicSystemBlocks(t *testing.T) {
+	t.Run("returns nil when there are no system messages", func(t *testing.T) {
+		// given
+		messages := []Message{UserMessage{Content: "Hi"}}
+		// when
+		result := toAnthropicSystemBlocks(messages)
+		// then
+		assert.Nil(t, result)
+	})
+
+	t.Run("wraps the system prompt in a cached text block", func(t *testing.T) {
+		// given
+		messages := []Message{SystemMessage{Content: "Be brief"}}
+		// when
+		result := toAnthropicSystemBlocks(messages)
+		// then
+		expected := []anthropicSystemBlock{{
+			Type:         "text",
+			Text:         "Be brief",
+			CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+		}}
+		assert.Equal(t, expected, result)
 	})
 }
 
@@ -88,7 +114,7 @@ func TestToAnthropicMessages(t *testing.T) {
 		result := toAnthropicMessages(messages)
 		// then
 		expected := []anthropicMessage{{Role: "assistant", Content: []anthropicContentBlock{
-			{Type: "tool_use", ID: "toolu_1", Name: "ping"},
+			{Type: "tool_use", ID: "toolu_1", Name: "ping", Input: map[string]any{}},
 		}}}
 		assert.Equal(t, expected, result)
 	})
@@ -137,11 +163,55 @@ func TestToAnthropicMessages(t *testing.T) {
 		assert.Equal(t, "user", result[2].Role)
 	})
 
+	t.Run("maps pointer messages like their value forms", func(t *testing.T) {
+		// given
+		messages := []Message{
+			&SystemMessage{Content: "Be brief"},
+			&UserMessage{Content: "Hi"},
+			&AssistantMessage{Content: "Hello"},
+			&ToolMessage{ToolCallID: "toolu_1", Content: "sunny"},
+		}
+		// when
+		system := toAnthropicSystem(messages)
+		result := toAnthropicMessages(messages)
+		// then
+		assert.Equal(t, "Be brief", system)
+		expected := []anthropicMessage{
+			{Role: "user", Content: []anthropicContentBlock{{Type: "text", Text: "Hi"}}},
+			{Role: "assistant", Content: []anthropicContentBlock{{Type: "text", Text: "Hello"}}},
+			{Role: "user", Content: []anthropicContentBlock{{Type: "tool_result", ToolUseID: "toolu_1", Content: "sunny"}}},
+		}
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("empty input yields no messages", func(t *testing.T) {
 		// when
 		result := toAnthropicMessages(nil)
 		// then
 		assert.Empty(t, result)
+	})
+}
+
+func TestAnthropicToolUseInput(t *testing.T) {
+	t.Run("marshals an empty input map as an empty object", func(t *testing.T) {
+		// given: a zero-argument tool_use as decoded from an API response
+		block := anthropicContentBlock{Type: "tool_use", ID: "toolu_1", Name: "ping", Input: map[string]any{}}
+		// when
+		result, err := json.Marshal(block)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, string(result), `"input":{}`)
+	})
+
+	t.Run("rebuild path fills a missing arguments map", func(t *testing.T) {
+		// given: a seeded assistant turn whose tool call has nil arguments
+		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}
+		// when
+		result := toAnthropicMessages(messages)
+		// then
+		require.Len(t, result, 1)
+		require.Len(t, result[0].Content, 1)
+		assert.NotNil(t, result[0].Content[0].Input)
 	})
 }
 
@@ -206,8 +276,13 @@ func TestToAnthropicTools(t *testing.T) {
 		tools := []Tool{{Name: "get_weather", Description: "Get the weather", Schema: schema}}
 		// when
 		result := toAnthropicTools(tools)
-		// then
-		expected := []anthropicTool{{Name: "get_weather", Description: "Get the weather", InputSchema: schema}}
+		// then: a single tool is also the last one, so it carries the cache breakpoint
+		expected := []anthropicTool{{
+			Name:         "get_weather",
+			Description:  "Get the weather",
+			InputSchema:  schema,
+			CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+		}}
 		assert.Equal(t, expected, result)
 	})
 
@@ -220,6 +295,17 @@ func TestToAnthropicTools(t *testing.T) {
 		require.Len(t, result, 2)
 		assert.Equal(t, "a", result[0].Name)
 		assert.Equal(t, "b", result[1].Name)
+	})
+
+	t.Run("marks only the last tool as the cache breakpoint", func(t *testing.T) {
+		// given
+		tools := []Tool{{Name: "a"}, {Name: "b"}}
+		// when
+		result := toAnthropicTools(tools)
+		// then
+		require.Len(t, result, 2)
+		assert.Nil(t, result[0].CacheControl)
+		assert.Equal(t, &anthropicCacheControl{Type: "ephemeral"}, result[1].CacheControl)
 	})
 }
 
@@ -259,6 +345,30 @@ func TestFromAnthropicToAssistantMessage(t *testing.T) {
 		assert.Empty(t, result.ToolCalls)
 	})
 
+	t.Run("maps the stop reason", func(t *testing.T) {
+		// given
+		resp := anthropicChatResponse{StopReason: "max_tokens"}
+		// when
+		result := fromAnthropicToAssistantMessage(resp)
+		// then
+		assert.Equal(t, "max_tokens", result.StopReason)
+	})
+
+	t.Run("includes cache tokens in the prompt and total counts", func(t *testing.T) {
+		// given
+		resp := anthropicChatResponse{Usage: anthropicUsage{
+			InputTokens:              10,
+			CacheCreationInputTokens: 3,
+			CacheReadInputTokens:     7,
+			OutputTokens:             5,
+		}}
+		// when
+		result := fromAnthropicToAssistantMessage(resp)
+		// then
+		expected := Stats{PromptTokens: 20, OutputTokens: 5, TotalTokens: 25, CacheWriteTokens: 3, CacheReadTokens: 7}
+		assert.Equal(t, expected, result.Stats)
+	})
+
 	t.Run("preserves the raw content blocks for replay", func(t *testing.T) {
 		// given
 		resp := anthropicChatResponse{Content: []anthropicContentBlock{{Type: "text", Text: "ok"}}}
@@ -266,6 +376,19 @@ func TestFromAnthropicToAssistantMessage(t *testing.T) {
 		result := fromAnthropicToAssistantMessage(resp)
 		// then
 		assert.Equal(t, resp.Content, result.raw)
+	})
+}
+
+func TestAnthropicRedactedThinking(t *testing.T) {
+	t.Run("preserves the data field through a JSON round trip", func(t *testing.T) {
+		// given
+		var block anthropicContentBlock
+		require.NoError(t, json.Unmarshal([]byte(`{"type":"redacted_thinking","data":"opaque"}`), &block))
+		// when
+		result, err := json.Marshal(block)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, string(result), `"data":"opaque"`)
 	})
 }
 

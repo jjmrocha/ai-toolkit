@@ -13,11 +13,27 @@ func toAnthropicSystem(messages []Message) string {
 
 	for _, m := range messages {
 		if m.Role() == SystemRole {
-			parts = append(parts, m.(SystemMessage).Content)
+			parts = append(parts, messageValue[SystemMessage](m).Content)
 		}
 	}
 
 	return strings.Join(parts, "\n\n")
+}
+
+// cacheEphemeral marks a prompt-cache breakpoint. The tool list and the system
+// prompt are the stable prefix of every request, so caching them there saves
+// re-processing that prefix on each turn of an agent loop.
+var cacheEphemeral = &anthropicCacheControl{Type: "ephemeral"}
+
+// toAnthropicSystemBlocks wraps the collected system prompt in a text block
+// carrying a cache breakpoint. It returns nil when there is no system prompt.
+func toAnthropicSystemBlocks(messages []Message) []anthropicSystemBlock {
+	text := toAnthropicSystem(messages)
+	if text == "" {
+		return nil
+	}
+
+	return []anthropicSystemBlock{{Type: "text", Text: text, CacheControl: cacheEphemeral}}
 }
 
 // toAnthropicMessages converts the conversation into Anthropic messages,
@@ -41,11 +57,11 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 	for _, m := range messages {
 		switch m.Role() {
 		case UserRole:
-			msg := m.(UserMessage)
+			msg := messageValue[UserMessage](m)
 			block := anthropicContentBlock{Type: "text", Text: msg.Content}
 			appendBlocks(string(UserRole), []anthropicContentBlock{block})
 		case AssistantRole:
-			msg := m.(AssistantMessage)
+			msg := messageValue[AssistantMessage](m)
 
 			if blocks, ok := msg.raw.([]anthropicContentBlock); ok {
 				appendBlocks(string(AssistantRole), blocks)
@@ -59,18 +75,23 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 			}
 
 			for _, call := range msg.ToolCalls {
+				input := call.Arguments
+				if input == nil {
+					input = map[string]any{}
+				}
+
 				block := anthropicContentBlock{
 					Type:  "tool_use",
 					ID:    call.ID,
 					Name:  call.Name,
-					Input: call.Arguments,
+					Input: input,
 				}
 				blocks = append(blocks, block)
 			}
 
 			appendBlocks(string(AssistantRole), blocks)
 		case ToolRole:
-			msg := m.(ToolMessage)
+			msg := messageValue[ToolMessage](m)
 			block := anthropicContentBlock{
 				Type:      "tool_result",
 				ToolUseID: msg.ToolCallID,
@@ -107,15 +128,24 @@ func toAnthropicTools(tools []Tool) []anthropicTool {
 		toolList = append(toolList, anthropicT)
 	}
 
+	// The last tool carries a cache breakpoint so the whole tool list — the
+	// first section of the prompt — is served from the prompt cache.
+	toolList[len(toolList)-1].CacheControl = cacheEphemeral
+
 	return toolList
 }
 
 func fromAnthropicToAssistantMessage(resp anthropicChatResponse) *AssistantMessage {
+	promptTokens := resp.Usage.InputTokens + resp.Usage.CacheCreationInputTokens + resp.Usage.CacheReadInputTokens
+
 	result := AssistantMessage{
+		StopReason: resp.StopReason,
 		Stats: Stats{
-			PromptTokens: resp.Usage.InputTokens,
-			OutputTokens: resp.Usage.OutputTokens,
-			TotalTokens:  resp.Usage.InputTokens + resp.Usage.OutputTokens,
+			PromptTokens:     promptTokens,
+			OutputTokens:     resp.Usage.OutputTokens,
+			TotalTokens:      promptTokens + resp.Usage.OutputTokens,
+			CacheWriteTokens: resp.Usage.CacheCreationInputTokens,
+			CacheReadTokens:  resp.Usage.CacheReadInputTokens,
 		},
 		raw: resp.Content,
 	}

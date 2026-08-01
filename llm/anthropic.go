@@ -48,7 +48,7 @@ func (a *anthropic) chat(ctx context.Context, messages []Message, tools []Tool) 
 	request := anthropicChatRequest{
 		Model:     a.config.Model,
 		MaxTokens: a.config.MaxTokens + a.config.Effort.tokenBudget(),
-		System:    toAnthropicSystem(messages),
+		System:    toAnthropicSystemBlocks(messages),
 		Messages:  toAnthropicMessages(messages),
 		Tools:     toAnthropicTools(tools),
 		Thinking:  toAnthropicThinking(a.config.Effort),
