@@ -226,8 +226,8 @@ func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
 }
 
 // AvailableModels returns the model identifiers the agent can switch to via
-// [Agent.ChangeModel]. It returns nil when the underlying client was configured
-// without a model list.
+// [Agent.ChangeModel]. The active model is always included, so the result is
+// never empty.
 func (a *Agent) AvailableModels() []string {
 	return a.llm.AvailableModels()
 }

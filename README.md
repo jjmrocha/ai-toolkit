@@ -6,7 +6,7 @@ are more mature, better-supported libraries out there, and you should probably
 reach for one of those first. But if it happens to fit your needs as-is, feel
 free to use it.
 
-Requires **Go 1.26+**. Supported providers: **OpenRouter**, **Ollama**, and
+Requires **Go 1.26.5+**. Supported providers: **OpenRouter**, **Ollama**, and
 **Anthropic**.
 
 ```bash
@@ -23,8 +23,9 @@ usage — regardless of the backend provider.
 - Three backends behind one API — `ProviderOpenRouter`, `ProviderOllama`, and `ProviderAnthropic` — selected by `Config.Provider`.
 - `Chat` exchanges an ordered `[]Message` (`SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolMessage`) and returns the assistant's reply.
 - Tool calling: pass `[]Tool` to `Chat` and read the model's requests from `AssistantMessage.ToolCalls`.
-- Token accounting on every reply via `Stats` (prompt, output, and total tokens).
-- Model management — `AvailableModels`, `CurrentModel`, and `ChangeModel` switch between the models in `Config.Models`; `ModelInfo` reports a model's name and context window.
+- Token accounting on every reply via `Stats` (prompt, output, and total tokens, plus prompt-cache reads and writes for providers that support caching).
+- `AssistantMessage.StopReason` carries the provider's native stop reason (e.g. `"end_turn"`, `"max_tokens"`).
+- Model management — `AvailableModels`, `CurrentModel`, and `ChangeModel` switch between the models in `Config.Models`; `ModelInfo` reports a model's provider, name, and context window.
 - Reasoning control — `Config.Effort` (`EffortOff`, `EffortLow`, `EffortMedium`, `EffortMax`), read with `Effort` and changed live with `ChangeEffort`.
 - Optional output cap via `Config.MaxTokens` and endpoint override via `Config.BaseURL`.
 
@@ -73,7 +74,8 @@ by hand and dispatching tool calls yourself.
 
 **Features:**
 
-- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `Add` (returns `ErrInvalidToolName` if the name is empty or contains anything other than letters, digits, `_`, or `-`, up to 128 chars), `Remove`, `Tools` (feed to `Chat`), and `Execute` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
+- `ToolBox` pairs each `llm.Tool` with its `Handler` and manages the set — `Add` (returns `ErrInvalidToolName` if the name is empty or contains anything other than letters, digits, `_`, or `-`, up to 64 chars, and `ErrNilHandler` if the handler is nil), `Remove`, `Tools` (feed to `Chat`), and `Execute` (dispatch a requested call, returning `ErrToolNotFound` for an unknown tool).
+- A `ToolBox` is safe for concurrent use, and `Tools` returns a name-sorted slice so the tool section of the prompt stays byte-identical across requests for prompt caching.
 - `ObjectBuilder` builds a tool's JSON Schema with a fluent API: scalars (`String`, `Integer`, `Number`, `Boolean`), arrays (`ArrayOfStrings`, `ArrayOfIntegers`, `ArrayOfNumbers`, `ArrayOfBooleans`, `ArrayOfObjects`), nested `Object`, then `Build`.
 - `Arguments` reads a call's decoded arguments with type-checked accessors — `GetString`, `GetInt`, `GetFloat64`, `GetBool`, `GetObject`, and the `GetArrayOf…` family — returning an error instead of panicking on a type mismatch.
 
@@ -122,7 +124,8 @@ Connects a stdio-based [MCP](https://modelcontextprotocol.io) server to a
 **Features:**
 
 - `NewClient` launches a stdio MCP server as a child process and completes the initialize handshake, including protocol-version negotiation.
-- `RegisterTools` discovers the server's tools and adds them to a `tools.ToolBox`, namespaced as `"<Name>__<tool>"`, so they are callable like any native tool.
+- `RegisterTools` discovers the server's tools and adds them to a `tools.ToolBox`, namespaced as `"<Name>__<tool>"`, so they are callable like any native tool. It may be called only once per client; a later call returns `ErrAlreadyRegistered`.
+- `Connected` reports whether the child process is still running.
 - `Close` removes the registered tools and shuts the child process down.
 - One server per `Client`, driven over its stdin/stdout; requests are serialized, so at most one is in flight at a time.
 
@@ -157,8 +160,8 @@ example, to expose an MCP's tools only while a user has it switched on.
 
 - `Register` records a server's launch configuration under its name without starting it.
 - `Start` launches a registered server and registers its tools; an already-running one is reused, and one whose process has died is replaced.
-- `Stop` shuts a running server down and removes its tools, keeping the configuration so it can be started again.
-- `GetStatus` reports each registered server and whether it is currently running, as a slice of `Status`.
+- `Stop` shuts a running server down and removes its tools, keeping the configuration so it can be started again. Both return `ErrMCPNotRegistered` for an unknown name.
+- `Status` reports each registered server and whether it is currently running, as a slice of `Status`.
 - `Close` stops every running server and clears the registry. The `Manager` is safe for concurrent use.
 
 ```go
@@ -174,7 +177,7 @@ if err := manager.Start(ctx, "playwright"); err != nil {
 	log.Fatal(err)
 }
 
-for _, status := range manager.GetStatus() {
+for _, status := range manager.Status() {
 	fmt.Printf("%s active=%t\n", status.Name, status.Active)
 }
 
@@ -192,12 +195,12 @@ yourself.
 
 - Runs the whole call-tool-feed-back loop for you: `Process` sends the user input, executes every tool the model requests, feeds the results back, and repeats until the model answers without requesting tools.
 - A failing tool is reported back to the model as its error text so the model can recover instead of aborting the turn.
-- Automatic context compaction: once a completed turn crosses `Config.CompactionThresholdPercent` of the model's window, older turns are summarized while the system prompt and recent turns are kept; `CompactContext` also runs it on demand.
+- Automatic context compaction: once a completed turn crosses `Config.CompactionThresholdPercent` of the model's window (85% by default), older turns are summarized while the system prompt and recent turns are kept; `CompactContext` also runs it on demand.
 - Session lifecycle — `StartSession`, `ResetSession`, and `Close`.
-- `Process` returns a `Response` whose `Metadata` reports token usage, per-phase timing (`LLMDuration`, `ToolDuration`), and iteration and tool-call counts.
+- `Process` returns a `Response` whose `Metadata` reports token usage, `StopReason`, per-phase timing (`LLMDuration`, `ToolDuration`), and iteration and tool-call counts.
 - Model and reasoning control — `AvailableModels`, `ChangeModel`, and `ChangeEffort` switch models and reasoning on the underlying client; `ModelInfo` reports the active model's provider, name, context window, and current effort as a `ModelInfo` struct.
-- Observe lifecycle events by installing a `Feedback` sink with `SetFeedback`; `NewStdoutFeedback` prints them to standard output.
-- `Config.MaxIterations` caps the model/tool rounds per `Process` call.
+- Observe lifecycle events by installing a `Feedback` sink with `SetFeedback`; `NewStdoutFeedback` prints them to standard output and `NewWriterFeedback` prints them to any `io.Writer`.
+- `Config.MaxIterations` caps the model/tool rounds per `Process` call; zero means no limit, and hitting the cap returns `ErrMaxIterations`.
 
 ```go
 agt, err := agent.New(agent.Config{MaxIterations: 10}, model, toolBox)
@@ -230,7 +233,7 @@ so it can recover instead of aborting the turn. `ResetSession` clears the
 conversation to the system prompt; `Close` ends the session. `AvailableModels`
 and `ChangeModel` mirror the `llm` client to switch models mid-conversation —
 the context window is re-derived on the next turn — and `ModelInfo` reports the
-active model's name, context window, and effort. Pass your own `Feedback` to
+active model's provider, name, context window, and effort. Pass your own `Feedback` to
 `SetFeedback` to observe lifecycle events (tool calls, session
 start/reset/close); the default is silent, and `NewStdoutFeedback` prints them
 to stdout.
