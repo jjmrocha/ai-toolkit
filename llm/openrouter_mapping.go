@@ -3,6 +3,8 @@ package llm
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/jjmrocha/go-algo/fn"
 )
 
 func toORMessages(messages []Message) ([]orMessage, error) {
@@ -77,10 +79,8 @@ func toORTools(tools []Tool) []orTool {
 		return nil
 	}
 
-	toolList := make([]orTool, 0, len(tools))
-
-	for _, t := range tools {
-		orT := orTool{
+	return fn.Map(tools, func(t Tool) orTool {
+		return orTool{
 			Type: "function",
 			Function: orToolFunction{
 				Name:        t.Name,
@@ -88,10 +88,7 @@ func toORTools(tools []Tool) []orTool {
 				Parameters:  t.Schema,
 			},
 		}
-		toolList = append(toolList, orT)
-	}
-
-	return toolList
+	})
 }
 
 func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
@@ -129,18 +126,17 @@ func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
 }
 
 func fromORToModelInfo(models []orModel, id string) (*ModelInfo, error) {
-	for _, m := range models {
-		if m.ID == id {
-			if m.ContextLength == 0 {
-				return nil, fmt.Errorf("openrouter: %w: %q", ErrMissingContextLength, id)
-			}
-
-			return &ModelInfo{
-				Name:        id,
-				ContextSize: m.ContextLength,
-			}, nil
-		}
+	model, found := fn.Find(models, func(m orModel) bool { return m.ID == id })
+	if !found {
+		return nil, fmt.Errorf("openrouter: %w: %q", ErrModelNotFound, id)
 	}
 
-	return nil, fmt.Errorf("openrouter: %w: %q", ErrModelNotFound, id)
+	if model.ContextLength == 0 {
+		return nil, fmt.Errorf("openrouter: %w: %q", ErrMissingContextLength, id)
+	}
+
+	return &ModelInfo{
+		Name:        id,
+		ContextSize: model.ContextLength,
+	}, nil
 }

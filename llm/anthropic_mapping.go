@@ -3,6 +3,8 @@ package llm
 import (
 	"fmt"
 	"strings"
+
+	"github.com/jjmrocha/go-algo/fn"
 )
 
 // toAnthropicSystem collects the content of every [SystemMessage] into the
@@ -117,16 +119,13 @@ func toAnthropicTools(tools []Tool) []anthropicTool {
 		return nil
 	}
 
-	toolList := make([]anthropicTool, 0, len(tools))
-
-	for _, t := range tools {
-		anthropicT := anthropicTool{
+	toolList := fn.Map(tools, func(t Tool) anthropicTool {
+		return anthropicTool{
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.Schema,
 		}
-		toolList = append(toolList, anthropicT)
-	}
+	})
 
 	// The last tool carries a cache breakpoint so the whole tool list — the
 	// first section of the prompt — is served from the prompt cache.

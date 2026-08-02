@@ -1,6 +1,10 @@
 package llm
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/jjmrocha/go-algo/fn"
+)
 
 func toOllamaMessages(messages []Message) []ollamaMessage {
 	convertedMessages := make([]ollamaMessage, 0, len(messages))
@@ -66,10 +70,8 @@ func toOllamaTools(tools []Tool) []ollamaTool {
 		return nil
 	}
 
-	toolList := make([]ollamaTool, 0, len(tools))
-
-	for _, t := range tools {
-		ollamaT := ollamaTool{
+	return fn.Map(tools, func(t Tool) ollamaTool {
+		return ollamaTool{
 			Type: "function",
 			Function: ollamaToolFunction{
 				Name:        t.Name,
@@ -77,10 +79,7 @@ func toOllamaTools(tools []Tool) []ollamaTool {
 				Parameters:  t.Schema,
 			},
 		}
-		toolList = append(toolList, ollamaT)
-	}
-
-	return toolList
+	})
 }
 
 func fromOllamaToAssistantMessage(resp ollamaChatResponse) *AssistantMessage {
