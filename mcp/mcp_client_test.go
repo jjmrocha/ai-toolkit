@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -10,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *bytes.Buffer) {
+func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *fakeTransport) {
 	transport, in := newMemStdio(responses...)
 	c := &Client{
 		config:    ClientConfig{Name: name},

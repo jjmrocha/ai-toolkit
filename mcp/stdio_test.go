@@ -1,12 +1,11 @@
 package mcp
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,30 +13,325 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newMemStdio(responses ...string) (*stdio, *bytes.Buffer) {
-	in := &bytes.Buffer{}
-	s := &stdio{
-		in:  in,
-		out: bufio.NewReader(strings.NewReader(strings.Join(responses, ""))),
-	}
-	return s, in
+// newMemStdio wires a client to a scripted server: the Nth message the client
+// sends is answered with the Nth response, and the stream ends once the script
+// runs out, the way a server closing its stdout would end it.
+func newMemStdio(responses ...string) (*stdio, *fakeTransport) {
+	ft := newScriptedTransport(responses...)
+
+	return newTestStdio(ft), ft
 }
 
-func sentMessages(t testing.TB, in *bytes.Buffer) []map[string]any {
+// newTestStdio wires a client onto t and starts dispatching, the way newStdIO
+// does once it has built its cmdIO.
+func newTestStdio(t transport) *stdio {
+	s := &stdio{
+		transport: t,
+		messageID: newSeqNum(),
+		requests:  newPendingRequest(),
+	}
+
+	go s.dispatch()
+
+	return s
+}
+
+func sentMessages(t testing.TB, f *fakeTransport) []map[string]any {
 	t.Helper()
 
 	var messages []map[string]any
-	for line := range bytes.SplitSeq(bytes.TrimSpace(in.Bytes()), []byte("\n")) {
-		if len(line) == 0 {
-			continue
-		}
 
-		var message map[string]any
-		require.NoError(t, json.Unmarshal(line, &message))
-		messages = append(messages, message)
+	for {
+		select {
+		case line := <-f.written:
+			var message map[string]any
+			require.NoError(t, json.Unmarshal([]byte(line), &message))
+			messages = append(messages, message)
+		default:
+			return messages
+		}
+	}
+}
+
+// fakeTransport is a scripted transport: the test drives what the server says
+// with send, and inspects what the client wrote with nextSent.
+type fakeTransport struct {
+	written chan string
+	lines   chan string
+	closed  atomic.Bool
+
+	mu       sync.Mutex // guards script
+	script   []string
+	scripted bool
+}
+
+func newFakeTransport() *fakeTransport {
+	return &fakeTransport{
+		written: make(chan string, 16),
+		lines:   make(chan string, 16),
+	}
+}
+
+func newScriptedTransport(responses ...string) *fakeTransport {
+	f := newFakeTransport()
+	f.scripted = true
+
+	for _, response := range responses {
+		f.script = append(f.script, strings.TrimSuffix(response, "\n"))
 	}
 
-	return messages
+	return f
+}
+
+func (f *fakeTransport) Write(_ context.Context, msg string) error {
+	if f.closed.Load() {
+		return ErrProcessClosed
+	}
+
+	f.written <- msg
+
+	if f.scripted {
+		f.replyNext()
+	}
+
+	return nil
+}
+
+// replyNext releases the next scripted response, or ends the stream once the
+// script is exhausted.
+func (f *fakeTransport) replyNext() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.script) == 0 {
+		f.Close()
+
+		return
+	}
+
+	line := f.script[0]
+	f.script = f.script[1:]
+	f.lines <- line
+}
+
+func (f *fakeTransport) Reader() <-chan string { return f.lines }
+
+func (f *fakeTransport) Running() bool { return !f.closed.Load() }
+
+func (f *fakeTransport) Close() {
+	if f.closed.CompareAndSwap(false, true) {
+		close(f.lines)
+	}
+}
+
+func (f *fakeTransport) send(line string) { f.lines <- line }
+
+func (f *fakeTransport) nextSent(t testing.TB) map[string]any {
+	t.Helper()
+
+	select {
+	case line := <-f.written:
+		var message map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &message))
+
+		return message
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the client to write a message")
+
+		return nil
+	}
+}
+
+func TestStdioDispatch(t *testing.T) {
+	t.Run("resolves in-flight requests regardless of response order", func(t *testing.T) {
+		// given: two requests in flight, the second one issued after the first is on the wire
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+
+		type reply struct {
+			result map[string]any
+			err    error
+		}
+
+		first := make(chan reply, 1)
+		second := make(chan reply, 1)
+
+		go func() {
+			result, err := s.Request(t.Context(), "first", nil)
+			r := reply{result: result, err: err}
+			first <- r
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+
+		go func() {
+			result, err := s.Request(t.Context(), "second", nil)
+			r := reply{result: result, err: err}
+			second <- r
+		}()
+		require.Equal(t, float64(2), ft.nextSent(t)["id"])
+		// when: the server answers the newest request first
+		ft.send(`{"jsonrpc":"2.0","id":2,"result":{"which":"second"}}`)
+		ft.send(`{"jsonrpc":"2.0","id":1,"result":{"which":"first"}}`)
+		// then: each caller gets its own response
+		r2 := <-second
+		require.NoError(t, r2.err)
+		assert.Equal(t, map[string]any{"which": "second"}, r2.result)
+
+		r1 := <-first
+		require.NoError(t, r1.err)
+		assert.Equal(t, map[string]any{"which": "first"}, r1.result)
+	})
+
+	t.Run("resolves every response in a batched reply", func(t *testing.T) {
+		// given: revisions before 2025-06-18 let a server answer with a JSON-RPC batch
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+
+		type reply struct {
+			result map[string]any
+			err    error
+		}
+
+		first := make(chan reply, 1)
+		second := make(chan reply, 1)
+
+		go func() {
+			result, err := s.Request(t.Context(), "first", nil)
+			r := reply{result: result, err: err}
+			first <- r
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+
+		go func() {
+			result, err := s.Request(t.Context(), "second", nil)
+			r := reply{result: result, err: err}
+			second <- r
+		}()
+		require.Equal(t, float64(2), ft.nextSent(t)["id"])
+		// when: both answers arrive on one line
+		ft.send(`[{"jsonrpc":"2.0","id":1,"result":{"which":"first"}},{"jsonrpc":"2.0","id":2,"result":{"which":"second"}}]`)
+		// then
+		r1 := <-first
+		require.NoError(t, r1.err)
+		assert.Equal(t, map[string]any{"which": "first"}, r1.result)
+
+		r2 := <-second
+		require.NoError(t, r2.err)
+		assert.Equal(t, map[string]any{"which": "second"}, r2.result)
+	})
+
+	t.Run("ignores noise and messages matching no in-flight request", func(t *testing.T) {
+		// given
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+
+		var result map[string]any
+		done := make(chan error, 1)
+
+		go func() {
+			var err error
+			result, err = s.Request(t.Context(), "tools/list", nil)
+			done <- err
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+		// when: noise, a notification and a stale id arrive before the real response
+		ft.send("not-json")
+		ft.send(`{"jsonrpc":"2.0","method":"notifications/log","params":{}}`)
+		ft.send(`{"jsonrpc":"2.0","id":99,"result":{"ignored":true}}`)
+		ft.send(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
+		// then
+		require.NoError(t, <-done)
+		assert.Equal(t, map[string]any{"ok": true}, result)
+	})
+
+	t.Run("ignores a server request reusing an in-flight id", func(t *testing.T) {
+		// given: ids are per-direction, so the server may issue its own id 1
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+
+		var result map[string]any
+		done := make(chan error, 1)
+
+		go func() {
+			var err error
+			result, err = s.Request(t.Context(), "tools/call", nil)
+			done <- err
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+		// when: the server asks something of its own before answering
+		ft.send(`{"jsonrpc":"2.0","id":1,"method":"sampling/createMessage","params":{}}`)
+		ft.send(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
+		// then: the caller still gets the real response
+		require.NoError(t, <-done)
+		assert.Equal(t, map[string]any{"ok": true}, result)
+	})
+
+	t.Run("answers a ping with an empty result", func(t *testing.T) {
+		// given
+		ft := newFakeTransport()
+		newTestStdio(ft)
+		// when
+		ft.send(`{"jsonrpc":"2.0","id":7,"method":"ping"}`)
+		// then
+		sent := ft.nextSent(t)
+		assert.Equal(t, float64(7), sent["id"])
+		assert.Equal(t, map[string]any{}, sent["result"])
+		assert.NotContains(t, sent, "error")
+	})
+
+	t.Run("refuses a server request it cannot serve", func(t *testing.T) {
+		// given
+		ft := newFakeTransport()
+		newTestStdio(ft)
+		// when: the server asks for something this client does not implement
+		ft.send(`{"jsonrpc":"2.0","id":"abc","method":"sampling/createMessage","params":{}}`)
+		// then: the id is echoed verbatim, so a string id survives
+		sent := ft.nextSent(t)
+		assert.Equal(t, "abc", sent["id"])
+		rpcErr, ok := sent["error"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, float64(-32601), rpcErr["code"])
+	})
+
+	t.Run("does not answer a notification", func(t *testing.T) {
+		// given
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+		// when
+		ft.send(`{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`)
+		// then: the next request is the first thing written, so nothing answered it
+		done := make(chan error, 1)
+
+		go func() {
+			_, err := s.Request(t.Context(), "tools/list", nil)
+			done <- err
+		}()
+		assert.Equal(t, "tools/list", ft.nextSent(t)["method"])
+
+		ft.Close()
+		<-done
+	})
+
+	t.Run("fails an in-flight request when the stream ends", func(t *testing.T) {
+		// given
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+
+		done := make(chan error, 1)
+
+		go func() {
+			_, err := s.Request(t.Context(), "tools/list", nil)
+			done <- err
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+		// when: the server goes away without answering
+		ft.Close()
+		// then
+		assert.ErrorIs(t, <-done, ErrMCPConnectionClosed)
+	})
+
+	// The disconnect callback now fires from cmdIO's process-exit path rather than
+	// from the end of the stream; TestCmdIONotification covers it.
 }
 
 func TestRequest(t *testing.T) {
@@ -78,34 +372,62 @@ func TestRequest(t *testing.T) {
 		// then
 		assert.ErrorIs(t, err, context.Canceled)
 		assert.Nil(t, result)
-		assert.Empty(t, in.Bytes())
-	})
-}
-
-func TestRead(t *testing.T) {
-	t.Run("skips noise and non-matching ids before the matching response", func(t *testing.T) {
-		// given
-		s, _ := newMemStdio(
-			"not-json\n",
-			`{"jsonrpc":"2.0","method":"notifications/log","params":{}}`+"\n",
-			`{"jsonrpc":"2.0","id":99,"result":{"ignored":true}}`+"\n",
-			`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`+"\n",
-		)
-		// when
-		result, err := s.readResponse(t.Context(), 1)
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"ok": true}, result)
+		assert.Empty(t, sentMessages(t, in))
 	})
 
-	t.Run("returns ErrMCPConnectionClosed when the stream ends before a match", func(t *testing.T) {
+	t.Run("tells the server to stop working on an abandoned request", func(t *testing.T) {
 		// given
-		s, _ := newMemStdio(`{"jsonrpc":"2.0","id":99,"result":{}}` + "\n")
-		// when
-		result, err := s.readResponse(t.Context(), 1)
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+		ctx, cancel := context.WithCancel(t.Context())
+
+		done := make(chan error, 1)
+
+		go func() {
+			_, err := s.Request(ctx, "tools/call", nil)
+			done <- err
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+		// when: the caller gives up before the server answers
+		cancel()
 		// then
-		assert.ErrorIs(t, err, ErrMCPConnectionClosed)
-		assert.Nil(t, result)
+		assert.ErrorIs(t, <-done, context.Canceled)
+		sent := ft.nextSent(t)
+		assert.Equal(t, "notifications/cancelled", sent["method"])
+		expected := map[string]any{"requestId": float64(1), "reason": "context canceled"}
+		assert.Equal(t, expected, sent["params"])
+	})
+
+	t.Run("does not cancel a request the server already failed", func(t *testing.T) {
+		// given
+		s, ft := newMemStdio(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"boom"}}` + "\n")
+		// when
+		_, err := s.Request(t.Context(), "tools/call", nil)
+		// then: the request is over, so there is nothing to cancel
+		require.Error(t, err)
+		sent := sentMessages(t, ft)
+		require.Len(t, sent, 1)
+		assert.Equal(t, "tools/call", sent[0]["method"])
+	})
+
+	t.Run("does not cancel an abandoned initialize request", func(t *testing.T) {
+		// given: the spec forbids cancelling initialize
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+		ctx, cancel := context.WithCancel(t.Context())
+
+		done := make(chan error, 1)
+
+		go func() {
+			_, err := s.Request(ctx, "initialize", nil)
+			done <- err
+		}()
+		require.Equal(t, "initialize", ft.nextSent(t)["method"])
+		// when
+		cancel()
+		// then
+		assert.ErrorIs(t, <-done, context.Canceled)
+		assert.Empty(t, sentMessages(t, ft))
 	})
 }
 
@@ -123,6 +445,32 @@ func TestInitialize(t *testing.T) {
 		assert.Equal(t, "notifications/initialized", sent[1]["method"])
 	})
 
+	t.Run("accepts a supported version the server downgrades to", func(t *testing.T) {
+		// given: the server does not speak the offered version and answers with an older one
+		s, in := newMemStdio(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05"}}` + "\n")
+		// when
+		err := s.initialize(t.Context())
+		// then
+		require.NoError(t, err)
+		sent := sentMessages(t, in)
+		require.Len(t, sent, 2)
+		assert.Equal(t, "notifications/initialized", sent[1]["method"])
+	})
+
+	t.Run("identifies the client with a name, title and version", func(t *testing.T) {
+		// given
+		s, in := newMemStdio(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"` + protocolVersion + `"}}` + "\n")
+		// when
+		require.NoError(t, s.initialize(t.Context()))
+		// then
+		sent := sentMessages(t, in)
+		require.Len(t, sent, 2)
+		params, ok := sent[0]["params"].(map[string]any)
+		require.True(t, ok)
+		expected := map[string]any{"name": clientName, "title": clientTitle, "version": clientVersion}
+		assert.Equal(t, expected, params["clientInfo"])
+	})
+
 	t.Run("rejects a server offering a different protocol version", func(t *testing.T) {
 		// given
 		s, in := newMemStdio(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1999-01-01"}}` + "\n")
@@ -130,7 +478,9 @@ func TestInitialize(t *testing.T) {
 		err := s.initialize(t.Context())
 		// then
 		assert.ErrorIs(t, err, ErrUnsupportedProtocolVersion)
-		assert.NotContains(t, in.String(), "notifications/initialized")
+		sent := sentMessages(t, in)
+		require.Len(t, sent, 1)
+		assert.Equal(t, "initialize", sent[0]["method"])
 	})
 
 	t.Run("rejects a server that omits the protocol version", func(t *testing.T) {
@@ -143,88 +493,24 @@ func TestInitialize(t *testing.T) {
 	})
 }
 
-func TestStdioClose(t *testing.T) {
-	t.Run("is a no-op when no process was started", func(t *testing.T) {
-		// given
-		s := &stdio{}
-		// when
-		err := s.close()
-		// then
-		assert.NoError(t, err)
-	})
-
-	t.Run("signals a process that ignores stdin close without waiting out the grace period", func(t *testing.T) {
-		// given: sleep does not exit on stdin EOF, only when signalled
-		s := startProcess(t, "sleep", "30")
-		// when
-		start := time.Now()
-		err := s.close()
-		// then: SIGTERM is sent up front, so close returns well before closeTimeout
-		require.NoError(t, err)
-		assert.Less(t, time.Since(start), closeTimeout)
-	})
-}
-
-func TestStdioWatch(t *testing.T) {
-	t.Run("invokes the disconnect callback once the process exits", func(t *testing.T) {
-		// given: a process that exits on its own, with a disconnect callback wired
-		called := make(chan struct{})
-		cmd := exec.Command("sh", "-c", "exit 0")
-		stdin, err := cmd.StdinPipe()
-		require.NoError(t, err)
-		s := &stdio{
-			cmd:                            cmd,
-			in:                             stdin,
-			exited:                         make(chan struct{}),
-			serverDisconnectedNotification: func() { close(called) },
-		}
-		require.NoError(t, cmd.Start())
-		// when
-		go s.waitForTermination()
-		// then: the callback fires after the process is reaped
-		select {
-		case <-called:
-		case <-time.After(closeTimeout):
-			t.Fatal("disconnect callback was not invoked")
-		}
-	})
-}
-
-func startProcess(t testing.TB, command string, args ...string) *stdio {
-	t.Helper()
-
-	cmd := exec.Command(command, args...)
-	stdin, err := cmd.StdinPipe()
-	require.NoError(t, err)
-
-	s := &stdio{cmd: cmd, in: stdin, exited: make(chan struct{})}
-	require.NoError(t, cmd.Start())
-	go s.waitForTermination()
-
-	return s
-}
-
+// Process lifecycle is cmdIO's job and is covered by TestCmdIOClose,
+// TestCmdIORunning and TestCmdIONotification. What is left here is the
+// delegation.
 func TestStdioConnected(t *testing.T) {
-	t.Run("returns false before any process is started", func(t *testing.T) {
+	t.Run("reports the transport as running", func(t *testing.T) {
 		// given
-		s := &stdio{}
-		// then
-		assert.False(t, s.connected())
-	})
-
-	t.Run("returns true while the server process is running", func(t *testing.T) {
-		// given: cat stays alive on stdin and exits on EOF, so close returns promptly
-		s := startProcess(t, "cat")
-		t.Cleanup(func() { _ = s.close() })
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
 		// then
 		assert.True(t, s.connected())
 	})
 
-	t.Run("returns false after the server process exits on its own", func(t *testing.T) {
+	t.Run("reports the transport as stopped once it is closed", func(t *testing.T) {
 		// given
-		s := startProcess(t, "sh", "-c", "exit 0")
-		// when: wait for the watcher to reap the self-exited process
-		<-s.exited
+		ft := newFakeTransport()
+		s := newTestStdio(ft)
+		// when
+		require.NoError(t, s.close())
 		// then
 		assert.False(t, s.connected())
 	})

@@ -61,7 +61,9 @@ func newCmdIO(command string, args []string, fn disconnectedNotification) (*cmdI
 	}()
 
 	go func() {
-		defer func() { _ = stdin.Close() }()
+		defer func() {
+			_ = stdin.Close()
+		}()
 
 		for {
 			select {

@@ -10,41 +10,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// liveClient wraps a real, still-running child process so Connected reports true.
-// cat blocks on stdin and exits on EOF, so close returns promptly.
+// liveClient wraps a still-open transport so Connected reports true.
 func liveClient(t testing.TB, name string) *Client {
 	t.Helper()
-	return &Client{config: ClientConfig{Name: name}, transport: startProcess(t, "cat")}
+	return &Client{config: ClientConfig{Name: name}, transport: newTestStdio(newFakeTransport())}
 }
 
-// deadClient wraps a child process that has already exited so Connected reports false.
+// deadClient wraps a transport that has already gone away so Connected reports false.
 func deadClient(t testing.TB, name string) *Client {
 	t.Helper()
-	s := startProcess(t, "sh", "-c", "exit 0")
-	<-s.exited
+
+	ft := newFakeTransport()
+	s := newTestStdio(ft)
+	ft.Close()
+
 	return &Client{config: ClientConfig{Name: name}, transport: s}
 }
 
-// echoServerCmd returns a command that acts as a minimal MCP server: it answers
-// the initialize handshake and a single tools/list, then stays alive.
-func echoServerCmd() ClientConfig {
+// scriptServerCmd returns a command acting as a minimal MCP server: it reads one
+// request per line and answers initialize and tools/list, ignoring anything else.
+// Responses are written only in reply to a request, because the client drops any
+// response arriving before the matching request is in flight. The loop ends on
+// stdin EOF, so Close stays prompt.
+func scriptServerCmd(toolsResp string) ClientConfig {
 	initResp := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":%q}}`, protocolVersion)
-	toolsResp := `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"Echoes","inputSchema":{"type":"object"}}]}}`
-	// After answering, drain stdin to stay alive and exit on EOF so Close is prompt.
-	script := fmt.Sprintf("echo '%s'; echo '%s'; cat >/dev/null", initResp, toolsResp)
+	script := fmt.Sprintf(
+		`while IFS= read -r line; do case "$line" in *'"method":"initialize"'*) echo '%s';; *'"method":"tools/list"'*) echo '%s';; esac; done`,
+		initResp, toolsResp,
+	)
 
 	return ClientConfig{Name: "srv", Command: "sh", Args: []string{"-c", script}}
 }
 
-// badToolServerCmd returns a command that completes the handshake and then
-// answers tools/list with a tool whose namespaced name is invalid, so
-// RegisterTools fails while the process stays alive (Connected reports true).
-func badToolServerCmd() ClientConfig {
-	initResp := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":%q}}`, protocolVersion)
-	toolsResp := `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"bad name","description":"","inputSchema":{"type":"object"}}]}}`
-	script := fmt.Sprintf("echo '%s'; echo '%s'; cat >/dev/null", initResp, toolsResp)
+// echoServerCmd answers tools/list with one usable tool.
+func echoServerCmd() ClientConfig {
+	return scriptServerCmd(`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"Echoes","inputSchema":{"type":"object"}}]}}`)
+}
 
-	return ClientConfig{Name: "srv", Command: "sh", Args: []string{"-c", script}}
+// badToolServerCmd answers tools/list with a tool whose namespaced name is
+// invalid, so RegisterTools fails while the process stays alive.
+func badToolServerCmd() ClientConfig {
+	return scriptServerCmd(`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"bad name","description":"","inputSchema":{"type":"object"}}]}}`)
 }
 
 func TestManagerStart(t *testing.T) {

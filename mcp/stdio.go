@@ -1,64 +1,50 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"sync"
-	"syscall"
 	"time"
 )
 
 const (
-	protocolVersion = "2025-06-18"
-	closeTimeout    = 5 * time.Second
-	clientName      = "ai-toolkit"
-	clientVersion   = "0.1.0"
+	jsonrpcVersion = "2.0"
+	methodNotFound = -32601
+	// answerTimeout bounds a reply to a server-initiated request. It runs on the
+	// dispatch goroutine, so an unbounded write would stall every inbound response.
+	answerTimeout = 5 * time.Second
 )
 
+type transport interface {
+	Write(ctx context.Context, msg string) error
+	Reader() <-chan string
+	Running() bool
+	Close()
+}
+
 type stdio struct {
-	cmd                            *exec.Cmd
-	in                             io.Writer
-	out                            *bufio.Reader
-	exited                         chan struct{}
-	messageID                      int
-	mu                             sync.Mutex
-	serverDisconnectedNotification func()
+	transport transport
+	messageID *seqNum
+	requests  *pendingRequest
 }
 
 func newStdIO(ctx context.Context, command string, args []string, fn func()) (*stdio, error) {
-	cmd := exec.Command(command, args...) //nolint:gosec // command and args are operator-provided server config
-
-	stdin, err := cmd.StdinPipe()
+	t, err := newCmdIO(command, args, func(error) {
+		if fn != nil {
+			fn()
+		}
+	})
 	if err != nil {
-		return nil, fmt.Errorf("opening MCP server stdin: %w", err)
-	}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("opening MCP server stdout: %w", err)
-	}
-
-	cmd.Stderr = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("fail to start MCP server: %w", err)
+		return nil, err
 	}
 
 	s := &stdio{
-		cmd:                            cmd,
-		in:                             stdin,
-		out:                            bufio.NewReader(stdout),
-		exited:                         make(chan struct{}),
-		serverDisconnectedNotification: fn,
+		transport: t,
+		messageID: newSeqNum(),
+		requests:  newPendingRequest(),
 	}
 
-	go s.waitForTermination()
+	go s.dispatch()
 
 	if err := s.initialize(ctx); err != nil {
 		_ = s.close()
@@ -68,67 +54,144 @@ func newStdIO(ctx context.Context, command string, args []string, fn func()) (*s
 	return s, nil
 }
 
-// waitForTermination reaps the server process and closes exited once it terminates, so that
-// connected can report the process dying on its own, not only being closed.
-func (s *stdio) waitForTermination() {
-	_ = s.cmd.Wait()
-	close(s.exited)
-
-	if s.serverDisconnectedNotification != nil {
-		s.serverDisconnectedNotification()
+func (s *stdio) dispatch() {
+	for line := range s.transport.Reader() {
+		for _, message := range decodeMessages(line) {
+			s.handleMessage(message)
+		}
 	}
+
+	s.requests.failAll(ErrMCPConnectionClosed)
+}
+
+// decodeMessages handles both shapes a line may carry: revisions older than
+// 2025-06-18 let a server answer with a JSON-RPC batch.
+func decodeMessages(line string) []map[string]any {
+	raw := []byte(line)
+
+	var message map[string]any
+	if json.Unmarshal(raw, &message) == nil {
+		return []map[string]any{message}
+	}
+
+	var batch []map[string]any
+	if json.Unmarshal(raw, &batch) == nil {
+		return batch
+	}
+
+	return nil
+}
+
+func (s *stdio) handleMessage(message map[string]any) {
+	// Ids are per-direction, so a server request may reuse one we have in flight.
+	if method, isRequest := message["method"].(string); isRequest {
+		s.answer(method, message["id"])
+
+		return
+	}
+
+	id, isResponse := message["id"].(float64)
+	if !isResponse {
+		return
+	}
+
+	if rpcErr, failed := message["error"]; failed {
+		s.requests.reject(int(id), fmt.Errorf("MCP server error: %s", errorMessage(rpcErr)))
+		return
+	}
+
+	result, _ := message["result"].(map[string]any)
+	s.requests.resolve(int(id), orEmpty(result))
+}
+
+// answer replies to a server-initiated request. Notifications carry no id and
+// must not be answered.
+func (s *stdio) answer(method string, id any) {
+	if id == nil {
+		return
+	}
+
+	response := map[string]any{
+		"jsonrpc": jsonrpcVersion,
+		"id":      id,
+	}
+
+	if canServe(method) {
+		response["result"] = map[string]any{}
+	} else {
+		response["error"] = map[string]any{
+			"code":    methodNotFound,
+			"message": "method not supported by this client",
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), answerTimeout)
+	defer cancel()
+
+	_ = s.sendMessage(ctx, response)
 }
 
 func (s *stdio) initialize(ctx context.Context) error {
-	params := map[string]any{
-		"protocolVersion": protocolVersion,
-		"capabilities":    map[string]any{},
-		"clientInfo": map[string]any{
-			"name":    clientName,
-			"version": clientVersion,
-		},
-	}
-
-	result, err := s.Request(ctx, "initialize", params)
+	result, err := s.Request(ctx, "initialize", initializeParams())
 	if err != nil {
 		return err
 	}
 
-	version, ok := result["protocolVersion"].(string)
-	if !ok {
-		return fmt.Errorf("%w: server did not provide protocol version", ErrUnsupportedProtocolVersion)
-	}
-
-	if version != protocolVersion {
-		return fmt.Errorf("%w: server offered %q, client supports %q", ErrUnsupportedProtocolVersion, version, protocolVersion)
+	if err := acceptProtocolVersion(result); err != nil {
+		return err
 	}
 
 	return s.notify(ctx, "notifications/initialized", nil)
 }
 
 func (s *stdio) Request(ctx context.Context, method string, params map[string]any) (map[string]any, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id := s.nextMessageID()
+	id := s.messageID.next()
+	f := s.requests.add(id)
 
 	message := map[string]any{
-		"jsonrpc": "2.0",
+		"jsonrpc": jsonrpcVersion,
 		"id":      id,
 		"method":  method,
 		"params":  orEmpty(params),
 	}
 
 	if err := s.sendMessage(ctx, message); err != nil {
+		s.requests.reject(id, err)
+
 		return nil, fmt.Errorf("sending request to MCP server: %w", err)
 	}
 
-	return s.readResponse(ctx, id)
+	// reject is a no-op once the server has answered, so it only drops the entry
+	// an abandoned request would otherwise leave behind.
+	result, err := f.AwaitWithContext(ctx)
+	if err != nil {
+		s.requests.reject(id, err)
+		s.cancelRequest(ctx, method, id, err)
+
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// cancelRequest tells the server to stop working on a request the caller has
+// abandoned. Only the caller giving up is worth cancelling: a server that
+// already answered has nothing left to stop.
+func (s *stdio) cancelRequest(ctx context.Context, method string, id int, cause error) {
+	if ctx.Err() == nil || !canCancel(method) {
+		return
+	}
+
+	// ctx is the one that just expired, so send on a detached copy.
+	_ = s.notify(context.WithoutCancel(ctx), "notifications/cancelled", map[string]any{
+		"requestId": id,
+		"reason":    cause.Error(),
+	})
 }
 
 func (s *stdio) notify(ctx context.Context, method string, params map[string]any) error {
 	notification := map[string]any{
-		"jsonrpc": "2.0",
+		"jsonrpc": jsonrpcVersion,
 		"method":  method,
 		"params":  orEmpty(params),
 	}
@@ -141,35 +204,12 @@ func (s *stdio) notify(ctx context.Context, method string, params map[string]any
 }
 
 func (s *stdio) close() error {
-	if s.cmd == nil || s.cmd.Process == nil {
-		return nil
-	}
-
-	if closer, ok := s.in.(io.Closer); ok {
-		_ = closer.Close()
-	}
-
-	// Closing stdin asks the server to exit; escalate through SIGTERM then
-	// SIGKILL, sending each signal up front and only waiting out the grace
-	// period if the process has not already exited.
-	for _, sig := range []os.Signal{syscall.SIGTERM, syscall.SIGKILL} {
-		_ = s.cmd.Process.Signal(sig)
-
-		select {
-		case <-s.exited:
-			return nil
-		case <-time.After(closeTimeout):
-		}
-	}
-
-	<-s.exited
-
+	s.transport.Close()
 	return nil
 }
 
-func (s *stdio) nextMessageID() int {
-	s.messageID++
-	return s.messageID
+func (s *stdio) connected() bool {
+	return s.transport.Running()
 }
 
 func (s *stdio) sendMessage(ctx context.Context, message map[string]any) error {
@@ -182,55 +222,7 @@ func (s *stdio) sendMessage(ctx context.Context, message map[string]any) error {
 		return fmt.Errorf("marshaling message to JSON: %w", err)
 	}
 
-	if _, err := s.in.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("writing message to MCP server: %w", err)
-	}
-
-	return nil
-}
-
-func (s *stdio) readResponse(ctx context.Context, requestID int) (map[string]any, error) {
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		line, err := s.out.ReadBytes('\n')
-
-		var message map[string]any
-		if json.Unmarshal(line, &message) == nil && message["id"] == float64(requestID) {
-			if rpcErr, ok := message["error"]; ok {
-				return nil, fmt.Errorf("MCP server error: %s", errorMessage(rpcErr))
-			}
-
-			if result, ok := message["result"].(map[string]any); ok {
-				return result, nil
-			}
-
-			return map[string]any{}, nil
-		}
-
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) {
-				return nil, ErrMCPConnectionClosed
-			}
-
-			return nil, fmt.Errorf("reading from MCP server: %w", err)
-		}
-	}
-}
-
-func (s *stdio) connected() bool {
-	if s.cmd == nil || s.cmd.Process == nil {
-		return false
-	}
-
-	select {
-	case <-s.exited:
-		return false
-	default:
-		return true
-	}
+	return s.transport.Write(ctx, string(data))
 }
 
 func orEmpty(params map[string]any) map[string]any {
