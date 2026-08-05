@@ -30,8 +30,8 @@ const callToolTimeout = 120 * time.Second
 // owns the lifetime of that server's process. Create one with NewClient and
 // always pair it with a deferred Close.
 type Client struct {
-	config    ClientConfig
-	transport *stdio
+	config  ClientConfig
+	session *session
 
 	mu      sync.Mutex // guards toolBox and tools
 	toolBox *tools.ToolBox
@@ -55,12 +55,12 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 
 	c := &Client{config: cfg}
 
-	t, err := newStdIO(ctx, cfg.Command, cfg.Args, c.serverDisconnectedCallback)
+	s, err := newSession(ctx, cfg.Command, cfg.Args, c.serverDisconnectedCallback)
 	if err != nil {
 		return nil, err
 	}
 
-	c.transport = t
+	c.session = s
 
 	return c, nil
 }
@@ -69,7 +69,7 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 // returns false once the process has exited, whether it was closed or died on
 // its own.
 func (c *Client) Connected() bool {
-	return c.transport.connected()
+	return c.session.connected()
 }
 
 // Close removes this client's tools from the ToolBox and shuts the server
@@ -79,7 +79,7 @@ func (c *Client) Connected() bool {
 func (c *Client) Close() error {
 	c.unregisterTools()
 
-	return c.transport.close()
+	return c.session.close()
 }
 
 func (c *Client) serverDisconnectedCallback() {
@@ -110,7 +110,7 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 		return ErrAlreadyRegistered
 	}
 
-	result, err := c.transport.Request(ctx, "tools/list", nil)
+	result, err := c.session.Request(ctx, "tools/list", nil)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (c *Client) makeHandler(name string) tools.Handler {
 		ctx, cancel := context.WithTimeout(ctx, callToolTimeout)
 		defer cancel()
 
-		result, err := c.transport.Request(ctx, "tools/call", map[string]any{
+		result, err := c.session.Request(ctx, "tools/call", map[string]any{
 			"name":      name,
 			"arguments": args,
 		})

@@ -10,10 +10,10 @@ import (
 )
 
 func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *fakeTransport) {
-	transport, in := newMemStdio(responses...)
+	s, in := newMemSession(responses...)
 	c := &Client{
-		config:    ClientConfig{Name: name},
-		transport: transport,
+		config:  ClientConfig{Name: name},
+		session: s,
 	}
 	return c, tools.NewToolBox(), in
 }

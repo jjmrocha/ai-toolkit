@@ -13,7 +13,7 @@ import (
 // liveClient wraps a still-open transport so Connected reports true.
 func liveClient(t testing.TB, name string) *Client {
 	t.Helper()
-	return &Client{config: ClientConfig{Name: name}, transport: newTestStdio(newFakeTransport())}
+	return &Client{config: ClientConfig{Name: name}, session: newTestSession(newFakeTransport())}
 }
 
 // deadClient wraps a transport that has already gone away so Connected reports false.
@@ -21,10 +21,10 @@ func deadClient(t testing.TB, name string) *Client {
 	t.Helper()
 
 	ft := newFakeTransport()
-	s := newTestStdio(ft)
+	s := newTestSession(ft)
 	ft.Close()
 
-	return &Client{config: ClientConfig{Name: name}, transport: s}
+	return &Client{config: ClientConfig{Name: name}, session: s}
 }
 
 // scriptServerCmd returns a command acting as a minimal MCP server: it reads one
