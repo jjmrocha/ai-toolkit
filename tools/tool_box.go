@@ -9,8 +9,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -47,10 +47,48 @@ func NewToolBox() *ToolBox {
 	}
 }
 
-// toolNamePattern matches the tool names accepted by the providers: 1 to 64
-// characters (Anthropic's limit, the strictest), each a letter, digit,
-// underscore, or hyphen.
-var toolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+// MaxToolNameLength is the longest tool name the providers accept: Anthropic's
+// limit, the strictest of them.
+const MaxToolNameLength = 64
+
+// ValidToolName reports whether name is accepted by Add: 1 to
+// MaxToolNameLength characters, each a letter, digit, underscore, or hyphen.
+// Callers that derive a tool name from an outside source, such as an MCP
+// server, can check it here instead of rediscovering the providers' rules.
+func ValidToolName(name string) bool {
+	if name == "" || len(name) > MaxToolNameLength {
+		return false
+	}
+
+	for _, r := range name {
+		if !validToolNameRune(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// SanitizeToolName replaces every character the providers reject with an
+// underscore, leaving a pure ASCII name that is safe to truncate by byte. It
+// does not bound the length: a caller that must fit MaxToolNameLength still
+// has to shorten the result.
+func SanitizeToolName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if validToolNameRune(r) {
+			return r
+		}
+
+		return '_'
+	}, name)
+}
+
+func validToolNameRune(r rune) bool {
+	return r == '_' || r == '-' ||
+		(r >= '0' && r <= '9') ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z')
+}
 
 // Add registers tool together with the handler that executes it. The
 // handler is keyed by tool.Name; registering a tool whose name already exists
@@ -61,7 +99,7 @@ var toolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 // underscore, and hyphen are allowed, up to 64 characters), or ErrNilHandler
 // if handler is nil.
 func (tb *ToolBox) Add(tool llm.Tool, handler Handler) error {
-	if !toolNamePattern.MatchString(tool.Name) {
+	if !ValidToolName(tool.Name) {
 		return fmt.Errorf("%w: %q", ErrInvalidToolName, tool.Name)
 	}
 

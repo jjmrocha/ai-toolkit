@@ -84,7 +84,7 @@ func (a *Agent) ResetSession() error {
 		return ErrNoSession
 	}
 
-	a.messages = a.messages[:1] // Keep the system message, discard the rest
+	a.messages = a.messages[:1]
 	a.fb.SessionReset()
 	return nil
 }
@@ -182,8 +182,6 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			callCount++
 
 			if err != nil {
-				// Feed the failure back to the model so it can recover
-				// instead of aborting the session.
 				a.messages = append(a.messages, llm.ToolMessage{
 					ToolCallID: call.ID,
 					ToolName:   call.Name,
@@ -241,7 +239,7 @@ func (a *Agent) ChangeModel(model string) error {
 		return err
 	}
 
-	a.modelInfo = nil // force reload on next turn
+	a.modelInfo = nil
 	a.compactThreshold = 0
 
 	return nil
@@ -261,10 +259,10 @@ func (a *Agent) ChangeEffort(e llm.Effort) {
 func (a *Agent) CompactContext(ctx context.Context) {
 	keepFrom := indexOfTheBeginningOfTurnToKeep(a.messages)
 	if keepFrom <= 1 {
-		return // nothing older to summarize
+		return
 	}
 
-	older := a.messages[1:keepFrom] // complete turns, tool pairs intact
+	older := a.messages[1:keepFrom]
 
 	reply, err := a.llm.Chat(ctx, []llm.Message{
 		llm.SystemMessage{Content: summarySystemPrompt},
@@ -276,7 +274,7 @@ func (a *Agent) CompactContext(ctx context.Context) {
 	}
 
 	compacted := make([]llm.Message, 0, 2+len(a.messages)-keepFrom)
-	compacted = append(compacted, a.messages[0]) // system message, kept once
+	compacted = append(compacted, a.messages[0])
 	compacted = append(compacted, llm.UserMessage{Content: summaryPrefix + reply.Content})
 	compacted = append(compacted, a.messages[keepFrom:]...)
 

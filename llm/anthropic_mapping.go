@@ -114,8 +114,6 @@ func toAnthropicTools(tools []Tool) []anthropicTool {
 		}
 	})
 
-	// The last tool carries a cache breakpoint so the whole tool list — the
-	// first section of the prompt — is served from the prompt cache.
 	toolList[len(toolList)-1].CacheControl = cacheEphemeral
 
 	return toolList
