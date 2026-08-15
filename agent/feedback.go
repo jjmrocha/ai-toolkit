@@ -44,6 +44,9 @@ func NewStdoutFeedback() Feedback {
 	return NewWriterFeedback(os.Stdout)
 }
 
+// NewWriterFeedback returns a [Feedback] implementation that prints each event
+// to w. [New]'s default is silent; install this with [Agent.SetFeedback] to opt
+// into printing.
 func NewWriterFeedback(w io.Writer) Feedback {
 	return &writerFeedback{
 		stdout: w,

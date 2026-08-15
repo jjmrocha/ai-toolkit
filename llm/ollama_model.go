@@ -58,8 +58,6 @@ type ollamaShowRequest struct {
 }
 
 type ollamaShowResponse struct {
-	// ModelInfo is a flat map; the context length lives under
-	// "<general.architecture>.context_length".
 	ModelInfo map[string]any `json:"model_info"`
 	Error     string         `json:"error,omitempty"`
 }

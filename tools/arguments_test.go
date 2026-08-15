@@ -295,7 +295,6 @@ func TestGetArrayOfFloat64s(t *testing.T) {
 
 	t.Run("accepts int elements by index, not by value", func(t *testing.T) {
 		// given int values that would index out of bounds if used as the slice
-		// index (regression guard for the shadowed loop variable)
 		args := NewArguments(map[string]any{"xs": []any{5, 6, 7}})
 		// when
 		result, err := args.GetArrayOfFloat64s("xs")

@@ -7,9 +7,6 @@ import (
 	"github.com/jjmrocha/go-algo/fn"
 )
 
-// toAnthropicSystem collects the content of every [SystemMessage] into the
-// single top-level system prompt Anthropic expects, joining multiple entries
-// with a blank line. It returns "" when there are no system messages.
 func toAnthropicSystem(messages []Message) string {
 	var parts []string
 
@@ -22,13 +19,8 @@ func toAnthropicSystem(messages []Message) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// cacheEphemeral marks a prompt-cache breakpoint. The tool list and the system
-// prompt are the stable prefix of every request, so caching them there saves
-// re-processing that prefix on each turn of an agent loop.
 var cacheEphemeral = &anthropicCacheControl{Type: "ephemeral"}
 
-// toAnthropicSystemBlocks wraps the collected system prompt in a text block
-// carrying a cache breakpoint. It returns nil when there is no system prompt.
 func toAnthropicSystemBlocks(messages []Message) []anthropicSystemBlock {
 	text := toAnthropicSystem(messages)
 	if text == "" {
@@ -38,11 +30,6 @@ func toAnthropicSystemBlocks(messages []Message) []anthropicSystemBlock {
 	return []anthropicSystemBlock{{Type: "text", Text: text, CacheControl: cacheEphemeral}}
 }
 
-// toAnthropicMessages converts the conversation into Anthropic messages,
-// dropping system messages (carried separately by [toAnthropicSystemBlocks]).
-// Consecutive messages that map to the same role — most commonly a run of tool
-// results answering parallel tool calls — are merged into one message, since
-// Anthropic requires user and assistant turns to alternate.
 func toAnthropicMessages(messages []Message) []anthropicMessage {
 	var result []anthropicMessage
 

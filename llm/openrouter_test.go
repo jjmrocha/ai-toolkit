@@ -137,7 +137,7 @@ func TestChat(t *testing.T) {
 		require.NoError(t, err)
 		var sent orChatRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
-		assert.Zero(t, sent.MaxTokens) // effort must not impose a max_tokens cap
+		assert.Zero(t, sent.MaxTokens)
 		require.NotNil(t, sent.Reasoning)
 		assert.Equal(t, "high", sent.Reasoning.Effort)
 	})
@@ -208,7 +208,7 @@ func TestChat(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "ok", result.Content)
-		assert.Equal(t, int32(2), calls.Load()) // the retry is the contract here
+		assert.Equal(t, int32(2), calls.Load())
 	})
 
 	t.Run("returns an error when a 2xx response carries an error body", func(t *testing.T) {

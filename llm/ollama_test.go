@@ -109,7 +109,7 @@ func TestOllamaChat(t *testing.T) {
 		require.NoError(t, err)
 		var sent ollamaChatRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
-		assert.Nil(t, sent.Options) // effort must not impose a num_predict cap
+		assert.Nil(t, sent.Options)
 		assert.Equal(t, "high", sent.Think)
 	})
 

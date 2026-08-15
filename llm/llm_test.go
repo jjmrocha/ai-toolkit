@@ -32,7 +32,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			name:        "provider construction error propagates",
-			cfg:         Config{Provider: ProviderOpenRouter, Model: "openai/gpt-4o"}, // no API key
+			cfg:         Config{Provider: ProviderOpenRouter, Model: "openai/gpt-4o"},
 			expectedErr: ErrMissingAPIKey,
 		},
 		{
@@ -60,8 +60,8 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff                 // New defaults an unset effort
-		cfg.Models = []string{"openai/gpt-4o"} // New seeds the active model
+		cfg.Effort = EffortOff
+		cfg.Models = []string{"openai/gpt-4o"}
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -73,8 +73,8 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff            // New defaults an unset effort
-		cfg.Models = []string{"llama3.2"} // New seeds the active model
+		cfg.Effort = EffortOff
+		cfg.Models = []string{"llama3.2"}
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -86,8 +86,8 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff                   // New defaults an unset effort
-		cfg.Models = []string{"claude-opus-4-8"} // New seeds the active model
+		cfg.Effort = EffortOff
+		cfg.Models = []string{"claude-opus-4-8"}
 		assert.Equal(t, cfg, result.config)
 	})
 
@@ -99,7 +99,7 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, []string{"llama3.2", "other"}, result.AvailableModels())
-		assert.NoError(t, result.ChangeModel("llama3.2")) // the active model is switchable
+		assert.NoError(t, result.ChangeModel("llama3.2"))
 	})
 
 	t.Run("does not duplicate the active model when Models already lists it", func(t *testing.T) {

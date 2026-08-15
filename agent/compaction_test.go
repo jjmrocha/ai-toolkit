@@ -45,8 +45,6 @@ func TestCompactionThreshold(t *testing.T) {
 }
 
 func TestIndexOfTheBeginningOfTurnToKeep(t *testing.T) {
-	// defaultKeepRecentTurns is 2, so the result is the start of the second-to-last
-	// turn — the earliest message the two most recent turns keep.
 
 	t.Run("keeps the last two turns, returning the earlier kept turn's user index", func(t *testing.T) {
 		// given

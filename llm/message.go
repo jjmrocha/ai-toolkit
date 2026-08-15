@@ -22,8 +22,6 @@ type Message interface {
 	isMessage()
 }
 
-// messageValue returns the concrete message of type T carried by m, accepting
-// both the value and pointer forms — callers may seed history with either.
 func messageValue[T Message](m Message) T {
 	if v, ok := m.(T); ok {
 		return v
@@ -68,11 +66,6 @@ type AssistantMessage struct {
 	// "length", Ollama's "stop"). Empty for messages not produced by [LLM.Chat].
 	StopReason string
 
-	// raw holds the provider's original response payload so it can be replayed
-	// verbatim on the next turn. Anthropic needs this to preserve thinking
-	// blocks and their signatures, which Content and ToolCalls don't capture.
-	// Empty for messages not produced by a provider (e.g. seeded history), in
-	// which case the mapper rebuilds the payload from Content and ToolCalls.
 	raw any
 }
 

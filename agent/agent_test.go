@@ -162,7 +162,7 @@ func TestResetSession(t *testing.T) {
 		err := agt.ResetSession()
 		// then
 		assert.ErrorIs(t, err, ErrNoSession)
-		assert.Empty(t, fb.events) // SessionReset not fired
+		assert.Empty(t, fb.events)
 	})
 
 	t.Run("succeeds and fires SessionReset after a session has started", func(t *testing.T) {
@@ -332,8 +332,6 @@ func TestProcess(t *testing.T) {
 
 	t.Run("compacts older turns once the threshold is crossed", func(t *testing.T) {
 		// given: two small turns, then a third that trips 90% of the 1000-token
-		// window, plus a fourth Chat call that is the summarization inside compaction.
-		// defaultKeepRecentTurns is 2, so three turns are needed for an older turn to exist.
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -355,12 +353,11 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err2)
 		require.NoError(t, err3)
 		assert.Contains(t, fb.events, "ContextCompacted")
-		assert.Equal(t, 4, fake.chatCalls) // three turns plus one summarization
+		assert.Equal(t, 4, fake.chatCalls)
 	})
 
 	t.Run("compacts after a tool round when the threshold is crossed", func(t *testing.T) {
 		// given: two completed turns, then a tool round whose final reply trips
-		// 90% of the 1000-token window
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -387,7 +384,7 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, "done", result.Content)
 		assert.Equal(t, []string{"echo"}, fb.tools)
 		assert.Contains(t, fb.events, "ContextCompacted")
-		assert.Equal(t, 5, fake.chatCalls) // four round trips plus one summarization
+		assert.Equal(t, 5, fake.chatCalls)
 	})
 
 	t.Run("summarizes without repeating the system prompt", func(t *testing.T) {
@@ -409,7 +406,6 @@ func TestProcess(t *testing.T) {
 		_, err2 := agt.Process(context.Background(), "u2")
 		_, err3 := agt.Process(context.Background(), "u3")
 		// then: the summarizer sees its own system prompt and a transcript
-		// without the session prompt, which the compacted history keeps anyway
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		require.NoError(t, err3)
@@ -462,7 +458,6 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "recovered", result.Content)
 		assert.Equal(t, 1, result.Metadata.ToolCalls)
-		// the failure is fed back as a tool message so the model can recover
 		var toolMsg *llm.ToolMessage
 		for i := range agt.messages {
 			if m, ok := agt.messages[i].(llm.ToolMessage); ok {
@@ -476,7 +471,6 @@ func TestProcess(t *testing.T) {
 
 	t.Run("skips compaction when the model info is unavailable", func(t *testing.T) {
 		// given: ModelInfo fails, so limits stay zero and compaction is skipped
-		// even though the turn reports a huge token count.
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 9999}}},
 			infoErr: errors.New("no info"),
@@ -523,8 +517,8 @@ func TestChangeModel(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "m2", fake.current)
-		assert.Nil(t, agt.modelInfo)         // forced reload on next turn
-		assert.Zero(t, agt.compactThreshold) // forced reload on next turn
+		assert.Nil(t, agt.modelInfo)
+		assert.Zero(t, agt.compactThreshold)
 	})
 
 	t.Run("propagates the client error and keeps the current model", func(t *testing.T) {
@@ -595,8 +589,8 @@ func TestCompactContext(t *testing.T) {
 		// when
 		agt.CompactContext(context.Background())
 		// then
-		assert.Len(t, agt.messages, before) // unchanged
-		assert.Zero(t, fake.chatCalls)      // no summarization attempted
+		assert.Len(t, agt.messages, before)
+		assert.Zero(t, fake.chatCalls)
 		assert.NotContains(t, fb.events, "ContextCompacted")
 	})
 
@@ -615,7 +609,7 @@ func TestCompactContext(t *testing.T) {
 		// when
 		agt.CompactContext(context.Background())
 		// then
-		assert.Equal(t, snapshot, agt.messages) // unchanged on failure
+		assert.Equal(t, snapshot, agt.messages)
 		assert.NotContains(t, fb.events, "ContextCompacted")
 		assert.Contains(t, fb.events, "ContextCompactionFailed")
 	})

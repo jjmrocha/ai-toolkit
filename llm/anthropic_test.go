@@ -174,7 +174,7 @@ func TestAnthropicChat(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "ok", result.Content)
-		assert.Equal(t, int32(2), calls.Load()) // the retry is the contract here
+		assert.Equal(t, int32(2), calls.Load())
 	})
 
 	t.Run("returns an error when the response body is malformed", func(t *testing.T) {

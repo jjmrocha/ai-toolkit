@@ -15,6 +15,47 @@ import (
 
 func noopHandler(context.Context, map[string]any) (string, error) { return "", nil }
 
+func TestValidToolName(t *testing.T) {
+	t.Run("accepts letters, digits, underscores and hyphens", func(t *testing.T) {
+		// when
+		result := ValidToolName("get_weather-2")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("rejects a name carrying a character the providers reject", func(t *testing.T) {
+		// when
+		result := ValidToolName("github.create_issue")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("rejects an empty name", func(t *testing.T) {
+		// when
+		result := ValidToolName("")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("accepts a name of exactly MaxToolNameLength", func(t *testing.T) {
+		// given
+		name := strings.Repeat("a", MaxToolNameLength)
+		// when
+		result := ValidToolName(name)
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("rejects a name longer than MaxToolNameLength", func(t *testing.T) {
+		// given
+		name := strings.Repeat("a", MaxToolNameLength+1)
+		// when
+		result := ValidToolName(name)
+		// then
+		assert.False(t, result)
+	})
+}
+
 func TestAddTool(t *testing.T) {
 	t.Run("registers a tool with a valid name", func(t *testing.T) {
 		// given
