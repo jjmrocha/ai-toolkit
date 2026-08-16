@@ -1,17 +1,5 @@
 package llm
 
-// Provider identifies a supported LLM backend.
-type Provider string
-
-const (
-	// ProviderOpenRouter selects the OpenRouter backend (https://openrouter.ai).
-	ProviderOpenRouter Provider = "openrouter"
-	// ProviderOllama selects a local or remote Ollama backend (https://ollama.com).
-	ProviderOllama Provider = "ollama"
-	// ProviderAnthropic selects the Anthropic backend (https://www.anthropic.com).
-	ProviderAnthropic Provider = "anthropic"
-)
-
 // Config configures an [LLM]. Provider and Model are always required; APIKey is
 // required for OpenRouter and Anthropic but not for Ollama. BaseURL defaults to
 // the provider's standard endpoint when empty.

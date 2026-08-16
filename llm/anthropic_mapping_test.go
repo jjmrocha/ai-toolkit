@@ -190,20 +190,8 @@ func TestToAnthropicMessages(t *testing.T) {
 		// then
 		assert.Empty(t, result)
 	})
-}
 
-func TestAnthropicToolUseInput(t *testing.T) {
-	t.Run("marshals an empty input map as an empty object", func(t *testing.T) {
-		// given: a zero-argument tool_use as decoded from an API response
-		block := anthropicContentBlock{Type: "tool_use", ID: "toolu_1", Name: "ping", Input: map[string]any{}}
-		// when
-		result, err := json.Marshal(block)
-		// then
-		require.NoError(t, err)
-		assert.Contains(t, string(result), `"input":{}`)
-	})
-
-	t.Run("rebuild path fills a missing arguments map", func(t *testing.T) {
+	t.Run("gives a tool call without arguments an empty input map", func(t *testing.T) {
 		// given: a seeded assistant turn whose tool call has nil arguments
 		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}
 		// when
@@ -212,6 +200,30 @@ func TestAnthropicToolUseInput(t *testing.T) {
 		require.Len(t, result, 1)
 		require.Len(t, result[0].Content, 1)
 		assert.NotNil(t, result[0].Content[0].Input)
+	})
+
+	t.Run("sends a tool call without arguments as an empty JSON object", func(t *testing.T) {
+		// given: the API rejects a tool_use whose input is null
+		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}
+		// when
+		result, err := json.Marshal(toAnthropicMessages(messages))
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, string(result), `"input":{}`)
+	})
+
+	t.Run("replays a redacted thinking block with its data intact", func(t *testing.T) {
+		// given: a turn the API answered with a redacted thinking block
+		resp := anthropicChatResponse{Content: []anthropicContentBlock{
+			{Type: "redacted_thinking", Data: "opaque"},
+			{Type: "text", Text: "Hello"},
+		}}
+		messages := []Message{*fromAnthropicToAssistantMessage(resp)}
+		// when
+		result, err := json.Marshal(toAnthropicMessages(messages))
+		// then: the API rejects a thinking block replayed without its data
+		require.NoError(t, err)
+		assert.Contains(t, string(result), `"data":"opaque"`)
 	})
 }
 
@@ -376,19 +388,6 @@ func TestFromAnthropicToAssistantMessage(t *testing.T) {
 		result := fromAnthropicToAssistantMessage(resp)
 		// then
 		assert.Equal(t, resp.Content, result.raw)
-	})
-}
-
-func TestAnthropicRedactedThinking(t *testing.T) {
-	t.Run("preserves the data field through a JSON round trip", func(t *testing.T) {
-		// given
-		var block anthropicContentBlock
-		require.NoError(t, json.Unmarshal([]byte(`{"type":"redacted_thinking","data":"opaque"}`), &block))
-		// when
-		result, err := json.Marshal(block)
-		// then
-		require.NoError(t, err)
-		assert.Contains(t, string(result), `"data":"opaque"`)
 	})
 }
 

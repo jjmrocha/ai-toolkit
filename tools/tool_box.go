@@ -1,7 +1,7 @@
-// Package tools helps wire model tool calls to Go code. It provides a ToolBox
-// that pairs each llm.Tool definition with the function that runs it, an
-// ObjectBuilder for constructing the JSON Schema that describes a tool's
-// parameters without hand-writing nested maps, and an Arguments wrapper for
+// Package tools helps wire model tool calls to Go code. It provides a [ToolBox]
+// that pairs each [llm.Tool] definition with the [Handler] that runs it, an
+// [ObjectBuilder] for constructing the JSON Schema that describes a tool's
+// parameters without hand-writing nested maps, and an [Arguments] wrapper for
 // reading a call's decoded arguments back out with typed accessors.
 package tools
 
@@ -16,10 +16,15 @@ import (
 	"github.com/jjmrocha/ai-toolkit/llm"
 )
 
-// Handler executes a tool call. It receives the caller's context — honor it for
-// cancellation and deadlines in any I/O — and the decoded arguments from the
-// model (values arrive with JSON types, so numbers are float64), and returns the
-// result string sent back to the model, or an error.
+// MaxToolNameLength is the longest tool name the providers accept: Anthropic's
+// limit, the strictest of them.
+const MaxToolNameLength = 64
+
+// Handler executes a tool call. It returns the result string sent back to the
+// model, or an error. The context is the caller's; honor it for cancellation and
+// deadlines in any I/O. The arguments are decoded from the model's request, so
+// they carry JSON types and numbers arrive as float64. [Arguments] reads them
+// back with typed accessors.
 type Handler func(context.Context, map[string]any) (string, error)
 
 type toolFn struct {
@@ -27,10 +32,10 @@ type toolFn struct {
 	handler Handler
 }
 
-// ToolBox is a registry that pairs llm.Tool definitions with the functions that
-// execute them, bridging a tool call requested by the model and your code:
-// register tools with Add, expose their definitions to the model with
-// Tools, and run a requested call with Execute.
+// ToolBox is a registry that pairs [llm.Tool] definitions with the functions
+// that execute them, bridging a tool call requested by the model and your code:
+// register tools with [ToolBox.Add], expose their definitions to the model with
+// [ToolBox.Tools], and run a requested call with [ToolBox.Execute].
 //
 // A ToolBox is safe for concurrent use: tools may be added and removed while
 // other goroutines list or execute them, as happens when an MCP server
@@ -40,19 +45,15 @@ type ToolBox struct {
 	tools map[string]toolFn
 }
 
-// NewToolBox returns an empty ToolBox ready for tool registration.
+// NewToolBox returns an empty [ToolBox] ready for tool registration.
 func NewToolBox() *ToolBox {
 	return &ToolBox{
 		tools: make(map[string]toolFn),
 	}
 }
 
-// MaxToolNameLength is the longest tool name the providers accept: Anthropic's
-// limit, the strictest of them.
-const MaxToolNameLength = 64
-
-// ValidToolName reports whether name is accepted by Add: 1 to
-// MaxToolNameLength characters, each a letter, digit, underscore, or hyphen.
+// ValidToolName reports whether name is accepted by [ToolBox.Add]: 1 to
+// [MaxToolNameLength] characters, each a letter, digit, underscore, or hyphen.
 // Callers that derive a tool name from an outside source, such as an MCP
 // server, can check it here instead of rediscovering the providers' rules.
 func ValidToolName(name string) bool {
@@ -71,7 +72,7 @@ func ValidToolName(name string) bool {
 
 // SanitizeToolName replaces every character the providers reject with an
 // underscore, leaving a pure ASCII name that is safe to truncate by byte. It
-// does not bound the length: a caller that must fit MaxToolNameLength still
+// does not bound the length: a caller that must fit [MaxToolNameLength] still
 // has to shorten the result.
 func SanitizeToolName(name string) string {
 	return strings.Map(func(r rune) rune {
@@ -90,14 +91,12 @@ func validToolNameRune(r rune) bool {
 		(r >= 'A' && r <= 'Z')
 }
 
-// Add registers tool together with the handler that executes it. The
-// handler is keyed by tool.Name; registering a tool whose name already exists
-// replaces the previous entry.
+// Add registers tool together with the handler that executes it. The handler is
+// keyed by tool.Name; registering a tool whose name already exists replaces the
+// previous entry.
 //
-// It returns ErrInvalidToolName without registering anything if tool.Name is
-// empty or contains a character the providers reject (only letters, digits,
-// underscore, and hyphen are allowed, up to 64 characters), or ErrNilHandler
-// if handler is nil.
+// It returns [ErrInvalidToolName] without registering anything if tool.Name is
+// rejected by [ValidToolName], or [ErrNilHandler] if handler is nil.
 func (tb *ToolBox) Add(tool llm.Tool, handler Handler) error {
 	if !ValidToolName(tool.Name) {
 		return fmt.Errorf("%w: %q", ErrInvalidToolName, tool.Name)
@@ -130,7 +129,7 @@ func (tb *ToolBox) Remove(name string) {
 }
 
 // Tools returns the definitions of all registered tools, sorted by name,
-// suitable for passing to llm.LLM.Chat. The stable order keeps the tool
+// suitable for passing to [llm.LLM.Chat]. The stable order keeps the tool
 // section of the prompt identical across requests, which providers with
 // prompt caching rely on.
 func (tb *ToolBox) Tools() []llm.Tool {
@@ -146,9 +145,9 @@ func (tb *ToolBox) Tools() []llm.Tool {
 	return tools
 }
 
-// Execute runs the handler for the requested tool call and wraps its result
-// in an llm.ToolMessage ready to append to the conversation. ctx is passed to
-// the handler for cancellation and deadlines. It returns ErrToolNotFound if no
+// Execute runs the handler for the requested tool call and wraps its result in
+// an [llm.ToolMessage] ready to append to the conversation. ctx is passed to the
+// handler for cancellation and deadlines. It returns [ErrToolNotFound] if no
 // tool matches call.Name, or a wrapped error if the handler itself fails. The
 // returned message correlates by both ToolCallID and ToolName so it works with
 // either provider.

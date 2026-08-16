@@ -39,7 +39,7 @@ func TestNewOpenRouter(t *testing.T) {
 	})
 }
 
-func TestChat(t *testing.T) {
+func TestOpenRouterChat(t *testing.T) {
 	t.Run("sends a POST request carrying auth, model, messages and tools", func(t *testing.T) {
 		// given
 		var (
@@ -248,7 +248,7 @@ func TestChat(t *testing.T) {
 	})
 }
 
-func TestModelInfo(t *testing.T) {
+func TestOpenRouterModelInfo(t *testing.T) {
 	t.Run("sends a GET request to the models endpoint with auth", func(t *testing.T) {
 		// given
 		var (

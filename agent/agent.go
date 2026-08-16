@@ -36,11 +36,10 @@ type Agent struct {
 }
 
 // New creates an [Agent] from cfg, an [llm.LLM], and a [tools.ToolBox], using a
-// silent default [Feedback]; install [NewStdoutFeedback] with [Agent.SetFeedback]
-// to print lifecycle events. It
-// returns [ErrNoLLM] when llm is nil and [ErrInvalidThreshold] when
-// Config.CompactionThresholdPercent is outside 0–100; a nil toolBox is treated
-// as an empty one.
+// silent default [Feedback]; install [NewStdoutFeedback] with
+// [Agent.SetFeedback] to print lifecycle events. It returns [ErrNoLLM] when llm
+// is nil and [ErrInvalidThreshold] when Config.CompactionThresholdPercent is
+// outside 0–100; a nil toolBox is treated as an empty one.
 func New(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox) (*Agent, error) {
 	if llm == nil {
 		return nil, ErrNoLLM
@@ -116,13 +115,13 @@ func (a *Agent) SetFeedback(fb Feedback) {
 //
 // On the first round it also queries the model's context window (see
 // [llm.LLM.ModelInfo]) to size the compaction threshold; the result is cached
-// for the agent's lifetime. Once a
-// completed turn crosses Config.CompactionThresholdPercent of that window, the
-// older turns are summarized before the next round.
+// for the agent's lifetime. Once a completed turn crosses
+// Config.CompactionThresholdPercent of that window, the older turns are
+// summarized before the next round.
 //
-// Process returns [ErrNoSession] if no session has been started, [ErrMaxIterations]
-// if Config.MaxIterations is reached first, or any error from the model. The
-// context controls cancellation and deadline.
+// Process returns [ErrNoSession] if no session has been started,
+// [ErrMaxIterations] if Config.MaxIterations is reached first, or any error from
+// the model. The context controls cancellation and deadline.
 func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error) {
 	if len(a.messages) == 0 {
 		return nil, ErrNoSession

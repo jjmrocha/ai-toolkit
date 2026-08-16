@@ -13,17 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newMemSession wires a client to a scripted server: the Nth message the client
-// sends is answered with the Nth response, and the stream ends once the script
-// runs out, the way a server closing its stdout would end it.
 func newMemSession(responses ...string) (*session, *fakeTransport) {
 	ft := newScriptedTransport(responses...)
 
 	return newTestSession(ft), ft
 }
 
-// newTestSession wires a client onto t and starts dispatching, the way
-// newSession does once it has built its stdioTransport.
 func newTestSession(t transport) *session {
 	s := &session{
 		transport: t,
@@ -31,7 +26,7 @@ func newTestSession(t transport) *session {
 		requests:  newPendingRequest(),
 	}
 
-	go s.dispatch()
+	go s.messageProcessor()
 
 	return s
 }
@@ -53,14 +48,12 @@ func sentMessages(t testing.TB, f *fakeTransport) []map[string]any {
 	}
 }
 
-// fakeTransport is a scripted transport: the test drives what the server says
-// with send, and inspects what the client wrote with nextSent.
 type fakeTransport struct {
 	written chan string
 	lines   chan string
 	closed  atomic.Bool
 
-	mu       sync.Mutex // guards script
+	mu       sync.Mutex
 	script   []string
 	scripted bool
 }
@@ -75,6 +68,10 @@ func newFakeTransport() *fakeTransport {
 func newScriptedTransport(responses ...string) *fakeTransport {
 	f := newFakeTransport()
 	f.scripted = true
+
+	if size := len(responses) + 1; size > cap(f.written) {
+		f.written = make(chan string, size)
+	}
 
 	for _, response := range responses {
 		f.script = append(f.script, strings.TrimSuffix(response, "\n"))
@@ -97,8 +94,6 @@ func (f *fakeTransport) Write(_ context.Context, msg string) error {
 	return nil
 }
 
-// replyNext releases the next scripted response, or ends the stream once the
-// script is exhausted.
 func (f *fakeTransport) replyNext() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -142,7 +137,7 @@ func (f *fakeTransport) nextSent(t testing.TB) map[string]any {
 	}
 }
 
-func TestSessionDispatch(t *testing.T) {
+func TestSessionMessageProcessor(t *testing.T) {
 	t.Run("resolves in-flight requests regardless of response order", func(t *testing.T) {
 		// given: two requests in flight, the second one issued after the first is on the wire
 		ft := newFakeTransport()
@@ -244,6 +239,29 @@ func TestSessionDispatch(t *testing.T) {
 		assert.Equal(t, map[string]any{"ok": true}, result)
 	})
 
+	t.Run("matches a response whose id came back as a string", func(t *testing.T) {
+		// given: a server that echoes the id we sent, but quotes it
+		ft := newFakeTransport()
+		s := newTestSession(ft)
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		defer cancel()
+
+		var result map[string]any
+		done := make(chan error, 1)
+
+		go func() {
+			var err error
+			result, err = s.Request(ctx, "tools/list", nil)
+			done <- err
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+		// when
+		ft.send(`{"jsonrpc":"2.0","id":"1","result":{"ok":true}}`)
+		// then: the request is settled rather than left to time out
+		require.NoError(t, <-done)
+		assert.Equal(t, map[string]any{"ok": true}, result)
+	})
+
 	t.Run("ignores a server request reusing an in-flight id", func(t *testing.T) {
 		// given: ids are per-direction, so the server may issue its own id 1
 		ft := newFakeTransport()
@@ -297,11 +315,10 @@ func TestSessionDispatch(t *testing.T) {
 		// given
 		ft := newFakeTransport()
 		s := newTestSession(ft)
+		done := make(chan error, 1)
 		// when
 		ft.send(`{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`)
 		// then: the next request is the first thing written, so nothing answered it
-		done := make(chan error, 1)
-
 		go func() {
 			_, err := s.Request(t.Context(), "tools/list", nil)
 			done <- err
@@ -330,12 +347,9 @@ func TestSessionDispatch(t *testing.T) {
 		assert.ErrorIs(t, <-done, ErrMCPConnectionClosed)
 	})
 
-	// The disconnect callback fires from stdioTransport's process-exit path
-	// rather than from the end of the stream; TestStdioTransportNotification
-	// covers it.
 }
 
-func TestRequest(t *testing.T) {
+func TestSessionRequest(t *testing.T) {
 	t.Run("frames the request and returns the result", func(t *testing.T) {
 		// given
 		s, in := newMemSession(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}` + "\n")
@@ -432,7 +446,7 @@ func TestRequest(t *testing.T) {
 	})
 }
 
-func TestInitialize(t *testing.T) {
+func TestSessionInitialize(t *testing.T) {
 	t.Run("completes the handshake when the protocol version matches", func(t *testing.T) {
 		// given
 		s, in := newMemSession(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"` + protocolVersion + `"}}` + "\n")
@@ -494,25 +508,25 @@ func TestInitialize(t *testing.T) {
 	})
 }
 
-// Process lifecycle is stdioTransport's job and is covered by
-// TestStdioTransportClose, TestStdioTransportRunning and
-// TestStdioTransportNotification. What is left here is the delegation.
 func TestSessionConnected(t *testing.T) {
 	t.Run("reports the transport as running", func(t *testing.T) {
 		// given
 		ft := newFakeTransport()
 		s := newTestSession(ft)
+		// when
+		result := s.connected()
 		// then
-		assert.True(t, s.connected())
+		assert.True(t, result)
 	})
 
 	t.Run("reports the transport as stopped once it is closed", func(t *testing.T) {
 		// given
 		ft := newFakeTransport()
 		s := newTestSession(ft)
+		s.close()
 		// when
-		require.NoError(t, s.close())
+		result := s.connected()
 		// then
-		assert.False(t, s.connected())
+		assert.False(t, result)
 	})
 }

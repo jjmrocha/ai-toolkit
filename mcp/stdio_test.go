@@ -99,7 +99,6 @@ func TestStdioTransportReader(t *testing.T) {
 
 	t.Run("stops reading a line longer than maxMessageBytes", func(t *testing.T) {
 		// given: 1 MiB + 8 KiB of output with no newline, so the cap is exceeded and
-		// the remainder still fits the pipe buffer, letting the server exit on its own
 		size := maxMessageBytes + 8*1024
 		script := "head -c " + strconv.Itoa(size) + ` /dev/zero | tr '\0' 'a'`
 		c := startStdioTransport(t, "sh", "-c", script)
@@ -107,6 +106,18 @@ func TestStdioTransportReader(t *testing.T) {
 		result := collectLines(c)
 		// then
 		assert.Empty(t, result)
+	})
+
+	t.Run("stops a server whose output can no longer be read", func(t *testing.T) {
+		// given: an over-long line, followed by a server that stays alive on stdin
+		size := maxMessageBytes + 8*1024
+		script := "head -c " + strconv.Itoa(size) + ` /dev/zero | tr '\0' 'a'; cat > /dev/null`
+		c := startStdioTransport(t, "sh", "-c", script)
+		// when: the reader gives up on the stream
+		result := collectLines(c)
+		// then: the transport stops reporting a connection it cannot read from
+		assert.Empty(t, result)
+		assert.Eventually(t, func() bool { return !c.Running() }, 5*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("closes the channel once the server exits", func(t *testing.T) {
@@ -159,22 +170,25 @@ func TestStdioTransportRunning(t *testing.T) {
 	t.Run("returns true while the server process is running", func(t *testing.T) {
 		// given
 		c := startStdioTransport(t, "cat")
+		// when
+		result := c.Running()
 		// then
-		assert.True(t, c.Running())
+		assert.True(t, result)
 	})
 
 	t.Run("returns false after the server process exits on its own", func(t *testing.T) {
-		// given
+		// given: wait for the watcher to reap the self-exited process
 		c := startStdioTransport(t, "sh", "-c", "exit 0")
-		// when: wait for the watcher to reap the self-exited process
 		<-c.exited
+		// when
+		result := c.Running()
 		// then
-		assert.False(t, c.Running())
+		assert.False(t, result)
 	})
 }
 
-func TestStdioTransportNotification(t *testing.T) {
-	t.Run("invokes the disconnect callback with the exit error", func(t *testing.T) {
+func TestNewStdioTransportOnExit(t *testing.T) {
+	t.Run("invokes the callback with the exit error", func(t *testing.T) {
 		// given
 		disconnected := make(chan error, 1)
 		c, err := newStdioTransport("sh", []string{"-c", "exit 3"}, func(err error) { disconnected <- err })
@@ -189,9 +203,11 @@ func TestStdioTransportNotification(t *testing.T) {
 		assert.Equal(t, expected, exitErr.ExitCode())
 	})
 
-	t.Run("does not panic when no callback is registered", func(t *testing.T) {
-		// given
-		c := startStdioTransport(t, "sh", "-c", "exit 0")
+	t.Run("stops the transport when no callback is registered", func(t *testing.T) {
+		// given: a server that exits on its own, with nothing to notify
+		c, err := newStdioTransport("sh", []string{"-c", "exit 0"}, nil)
+		require.NoError(t, err)
+		t.Cleanup(c.Close)
 		// when
 		<-c.exited
 		// then

@@ -2,6 +2,7 @@ package llm
 
 import "errors"
 
+// Errors returned by the llm package.
 var (
 	// ErrMissingProvider is returned by [New] when Config.Provider is empty.
 	ErrMissingProvider = errors.New("missing provider")

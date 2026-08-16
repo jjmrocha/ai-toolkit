@@ -24,7 +24,7 @@ func TestGetString(t *testing.T) {
 		// when
 		_, err := args.GetString("city")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not a string", func(t *testing.T) {
@@ -33,7 +33,7 @@ func TestGetString(t *testing.T) {
 		// when
 		_, err := args.GetString("city")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -67,7 +67,7 @@ func TestGetInt(t *testing.T) {
 		// when
 		_, err := args.GetInt("n")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is neither int nor float64", func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestGetInt(t *testing.T) {
 		// when
 		_, err := args.GetInt("n")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -107,7 +107,7 @@ func TestGetFloat64(t *testing.T) {
 		// when
 		_, err := args.GetFloat64("x")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is neither float64 nor int", func(t *testing.T) {
@@ -116,7 +116,7 @@ func TestGetFloat64(t *testing.T) {
 		// when
 		_, err := args.GetFloat64("x")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -137,7 +137,7 @@ func TestGetBool(t *testing.T) {
 		// when
 		_, err := args.GetBool("ok")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not a bool", func(t *testing.T) {
@@ -146,7 +146,7 @@ func TestGetBool(t *testing.T) {
 		// when
 		_, err := args.GetBool("ok")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -171,7 +171,7 @@ func TestGetObject(t *testing.T) {
 		// when
 		_, err := args.GetObject("address")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not an object", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestGetObject(t *testing.T) {
 		// when
 		_, err := args.GetObject("address")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -211,7 +211,7 @@ func TestGetArrayOfStrings(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfStrings("tags")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not an array", func(t *testing.T) {
@@ -220,7 +220,7 @@ func TestGetArrayOfStrings(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfStrings("tags")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 
 	t.Run("errors on a non-string element", func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestGetArrayOfStrings(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfStrings("tags")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -260,7 +260,7 @@ func TestGetArrayOfInts(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfInts("ns")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not an array", func(t *testing.T) {
@@ -269,7 +269,7 @@ func TestGetArrayOfInts(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfInts("ns")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 
 	t.Run("errors on a non-int element", func(t *testing.T) {
@@ -278,7 +278,7 @@ func TestGetArrayOfInts(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfInts("ns")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -309,7 +309,7 @@ func TestGetArrayOfFloat64s(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfFloat64s("xs")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not an array", func(t *testing.T) {
@@ -318,7 +318,7 @@ func TestGetArrayOfFloat64s(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfFloat64s("xs")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 
 	t.Run("errors on a non-float64 element", func(t *testing.T) {
@@ -327,7 +327,7 @@ func TestGetArrayOfFloat64s(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfFloat64s("xs")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -348,7 +348,7 @@ func TestGetArrayOfBools(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfBools("flags")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not an array", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestGetArrayOfBools(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfBools("flags")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 
 	t.Run("errors on a non-bool element", func(t *testing.T) {
@@ -366,7 +366,7 @@ func TestGetArrayOfBools(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfBools("flags")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -398,7 +398,7 @@ func TestGetArrayOfObjects(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfObjects("people")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFieldNotFound)
 	})
 
 	t.Run("errors when the field is not an array", func(t *testing.T) {
@@ -407,7 +407,7 @@ func TestGetArrayOfObjects(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfObjects("people")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 
 	t.Run("errors on a non-object element", func(t *testing.T) {
@@ -416,6 +416,6 @@ func TestGetArrayOfObjects(t *testing.T) {
 		// when
 		_, err := args.GetArrayOfObjects("people")
 		// then
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }

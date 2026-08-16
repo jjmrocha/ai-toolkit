@@ -17,7 +17,7 @@ func newPendingRequest() *pendingRequest {
 	}
 }
 
-func (p *pendingRequest) add(id int) *future.Future[map[string]any] {
+func (p *pendingRequest) newRequest(id int) *future.Future[map[string]any] {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -27,21 +27,19 @@ func (p *pendingRequest) add(id int) *future.Future[map[string]any] {
 }
 
 func (p *pendingRequest) resolve(id int, result map[string]any) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if f, ok := p.requests[id]; ok {
-		f.Resolve(result, nil)
-		delete(p.requests, id)
-	}
+	p.settle(id, result, nil)
 }
 
 func (p *pendingRequest) reject(id int, err error) {
+	p.settle(id, nil, err)
+}
+
+func (p *pendingRequest) settle(id int, result map[string]any, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if f, ok := p.requests[id]; ok {
-		f.Resolve(nil, err)
+		f.Resolve(result, err)
 		delete(p.requests, id)
 	}
 }
@@ -54,5 +52,5 @@ func (p *pendingRequest) failAll(err error) {
 		f.Resolve(nil, err)
 	}
 
-	p.requests = make(map[int]*future.Future[map[string]any])
+	clear(p.requests)
 }

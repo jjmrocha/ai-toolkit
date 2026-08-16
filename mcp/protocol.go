@@ -13,9 +13,6 @@ const (
 	clientVersion   = "0.1.0"
 )
 
-// supportedVersions are the revisions this client can speak. It offers
-// protocolVersion, but a server that does not support it answers with one of its
-// own, and the handshake succeeds as long as that one is in here.
 var supportedVersions = sets.New(protocolVersion, "2025-03-26", "2024-11-05")
 
 func initializeParams() map[string]any {
@@ -43,14 +40,10 @@ func acceptProtocolVersion(result map[string]any) error {
 	return nil
 }
 
-// canServe reports whether the client implements a server-initiated method.
-// Everything else is refused, so the server is never left waiting.
 func canServe(method string) bool {
 	return method == "ping"
 }
 
-// canCancel reports whether an abandoned request may be cancelled. The spec
-// forbids cancelling initialize.
 func canCancel(method string) bool {
 	return method != "initialize"
 }

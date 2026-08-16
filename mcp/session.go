@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 )
 
 const (
 	jsonrpcVersion = "2.0"
 	methodNotFound = -32601
-	// answerTimeout bounds a reply to a server-initiated request. It runs on the
-	// dispatch goroutine, so an unbounded write would stall every inbound response.
-	answerTimeout = 5 * time.Second
+	answerTimeout  = 5 * time.Second
+	requestTimeout = 30 * time.Second
 )
 
 type transport interface {
@@ -21,42 +21,6 @@ type transport interface {
 	Running() bool
 	Close()
 }
-
-// request frames an outbound call. A zero ID marks a notification: omitempty
-// keeps it off the wire.
-type request struct {
-	JSONRPC string         `json:"jsonrpc"`
-	ID      int            `json:"id,omitempty"`
-	Method  string         `json:"method"`
-	Params  map[string]any `json:"params"`
-}
-
-// response answers a server-initiated request. ID is any because it is echoed
-// verbatim and servers may use string ids. Result is any because omitempty on
-// a map would drop the empty result an accepted ping must carry.
-type response struct {
-	JSONRPC string    `json:"jsonrpc"`
-	ID      any       `json:"id"`
-	Result  any       `json:"result,omitempty"`
-	Error   *rpcError `json:"error,omitempty"`
-}
-
-// serverMessage is anything the server may put on the wire: an answer to one
-// of our requests (ID set, Method empty) or a request or notification of its
-// own (Method set).
-type serverMessage struct {
-	ID     any            `json:"id"`
-	Method string         `json:"method"`
-	Result map[string]any `json:"result"`
-	Error  *rpcError      `json:"error"`
-}
-
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-func (e *rpcError) Error() string { return e.Message }
 
 type session struct {
 	transport transport
@@ -80,17 +44,17 @@ func newSession(ctx context.Context, command string, args []string, onDisconnect
 		requests:  newPendingRequest(),
 	}
 
-	go s.dispatch()
+	go s.messageProcessor()
 
 	if err := s.initialize(ctx); err != nil {
-		_ = s.close()
+		s.close()
 		return nil, err
 	}
 
 	return s, nil
 }
 
-func (s *session) dispatch() {
+func (s *session) messageProcessor() {
 	for line := range s.transport.Reader() {
 		for _, message := range decodeMessages(line) {
 			s.handleMessage(message)
@@ -100,8 +64,6 @@ func (s *session) dispatch() {
 	s.requests.failAll(ErrMCPConnectionClosed)
 }
 
-// decodeMessages handles both shapes a line may carry: revisions older than
-// 2025-06-18 let a server answer with a JSON-RPC batch.
 func decodeMessages(line string) []serverMessage {
 	raw := []byte(line)
 
@@ -119,7 +81,6 @@ func decodeMessages(line string) []serverMessage {
 }
 
 func (s *session) handleMessage(message serverMessage) {
-	// Ids are per-direction, so a server request may reuse one we have in flight.
 	if message.Method != "" {
 		s.answer(message.Method, message.ID)
 
@@ -129,15 +90,14 @@ func (s *session) handleMessage(message serverMessage) {
 	s.settle(message)
 }
 
-// settle completes the pending request a server response belongs to.
 func (s *session) settle(message serverMessage) {
-	id, isResponse := message.ID.(float64)
+	id, isResponse := responseID(message.ID)
 	if !isResponse {
 		return
 	}
 
 	if message.Error != nil {
-		s.requests.reject(int(id), fmt.Errorf("MCP server error: %w", message.Error))
+		s.requests.reject(id, fmt.Errorf("MCP server error: %w", message.Error))
 		return
 	}
 
@@ -146,11 +106,22 @@ func (s *session) settle(message serverMessage) {
 		result = map[string]any{}
 	}
 
-	s.requests.resolve(int(id), result)
+	s.requests.resolve(id, result)
 }
 
-// answer replies to a server-initiated request. Notifications carry no id and
-// must not be answered.
+func responseID(raw any) (int, bool) {
+	switch id := raw.(type) {
+	case float64:
+		return int(id), true
+	case string:
+		parsed, err := strconv.Atoi(id)
+
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
 func (s *session) answer(method string, id any) {
 	if id == nil {
 		return
@@ -184,8 +155,11 @@ func (s *session) initialize(ctx context.Context) error {
 }
 
 func (s *session) Request(ctx context.Context, method string, params map[string]any) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+
 	id := s.requestID.next()
-	pending := s.requests.add(id)
+	pending := s.requests.newRequest(id)
 
 	if err := s.send(ctx, newRequest(id, method, params)); err != nil {
 		s.requests.reject(id, err)
@@ -193,27 +167,25 @@ func (s *session) Request(ctx context.Context, method string, params map[string]
 		return nil, fmt.Errorf("sending request to MCP server: %w", err)
 	}
 
-	// reject is a no-op once the server has answered, so it only drops the entry
-	// an abandoned request would otherwise leave behind.
 	result, err := pending.AwaitWithContext(ctx)
-	if err != nil {
-		s.requests.reject(id, err)
+	if err == nil {
+		return result, nil
+	}
 
-		abandoned := ctx.Err() != nil
-		if abandoned && canCancel(method) {
-			s.cancelRequest(ctx, id, err)
-		}
-
+	if ctx.Err() == nil {
 		return nil, err
 	}
 
-	return result, nil
+	s.requests.reject(id, err)
+
+	if canCancel(method) {
+		s.cancelRequest(ctx, id, err)
+	}
+
+	return nil, err
 }
 
-// cancelRequest tells the server to stop working on a request the caller has
-// abandoned.
 func (s *session) cancelRequest(ctx context.Context, id int, cause error) {
-	// ctx is the one that just expired, so send on a detached copy.
 	_ = s.notify(context.WithoutCancel(ctx), "notifications/cancelled", map[string]any{
 		"requestId": id,
 		"reason":    cause.Error(),
@@ -228,9 +200,8 @@ func (s *session) notify(ctx context.Context, method string, params map[string]a
 	return nil
 }
 
-func (s *session) close() error {
+func (s *session) close() {
 	s.transport.Close()
-	return nil
 }
 
 func (s *session) connected() bool {

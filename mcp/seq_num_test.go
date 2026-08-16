@@ -33,29 +33,27 @@ func TestSeqNumNext(t *testing.T) {
 }
 
 func TestSeqNumConcurrentAccess(t *testing.T) {
-	t.Run("hands out a distinct value to every caller", func(t *testing.T) {
-		// given: ids collide silently, so uniqueness is the property that matters
-		const goroutines = 100
-		s := newSeqNum()
-		results := make(chan int, goroutines)
+	// given: ids collide silently, so uniqueness is the property that matters
+	const goroutines = 100
+	s := newSeqNum()
+	results := make(chan int, goroutines)
 
-		var wg sync.WaitGroup
-		// when
-		for range goroutines {
-			wg.Go(func() {
-				results <- s.next()
-			})
-		}
+	var wg sync.WaitGroup
+	// when
+	for range goroutines {
+		wg.Go(func() {
+			results <- s.next()
+		})
+	}
 
-		wg.Wait()
-		close(results)
-		// then
-		seen := sets.New[int]()
-		for value := range results {
-			seen.Add(value)
-		}
+	wg.Wait()
+	close(results)
+	// then
+	seen := sets.New[int]()
+	for value := range results {
+		seen.Add(value)
+	}
 
-		expected := goroutines
-		assert.Equal(t, expected, seen.Len())
-	})
+	expected := goroutines
+	assert.Equal(t, expected, seen.Len())
 }

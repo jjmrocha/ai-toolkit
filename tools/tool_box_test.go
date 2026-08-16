@@ -56,7 +56,51 @@ func TestValidToolName(t *testing.T) {
 	})
 }
 
-func TestAddTool(t *testing.T) {
+func TestSanitizeToolName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "leaves an already valid name untouched", input: "get_weather-2", expected: "get_weather-2"},
+		{name: "replaces a dot", input: "github.create_issue", expected: "github_create_issue"},
+		{name: "replaces a space", input: "get weather", expected: "get_weather"},
+		{name: "replaces a multi-byte rune with a single underscore", input: "café", expected: "caf_"},
+		{name: "leaves an empty name empty", input: "", expected: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// given
+			input := tc.input
+			// when
+			result := SanitizeToolName(input)
+			// then
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+
+	t.Run("does not bound the length", func(t *testing.T) {
+		// given: a name well past the provider limit
+		input := strings.Repeat(".", MaxToolNameLength+10)
+		// when
+		result := SanitizeToolName(input)
+		// then
+		assert.Len(t, result, MaxToolNameLength+10)
+		assert.False(t, ValidToolName(result))
+	})
+
+	t.Run("produces a name ValidToolName accepts", func(t *testing.T) {
+		// given
+		input := "github.create issue!"
+		// when
+		result := SanitizeToolName(input)
+		// then
+		assert.True(t, ValidToolName(result))
+	})
+}
+
+func TestToolBoxAdd(t *testing.T) {
 	t.Run("registers a tool with a valid name", func(t *testing.T) {
 		// given
 		box := NewToolBox()
@@ -100,20 +144,20 @@ func TestAddTool(t *testing.T) {
 		assert.ErrorIs(t, err, ErrInvalidToolName)
 	})
 
-	t.Run("accepts a name of exactly 64 characters", func(t *testing.T) {
+	t.Run("accepts a name of exactly MaxToolNameLength", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		longName := strings.Repeat("a", 64)
+		longName := strings.Repeat("a", MaxToolNameLength)
 		// when
 		err := box.Add(llm.Tool{Name: longName}, noopHandler)
 		// then
 		require.NoError(t, err)
 	})
 
-	t.Run("rejects a name longer than 64 characters", func(t *testing.T) {
+	t.Run("rejects a name longer than MaxToolNameLength", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		longName := strings.Repeat("a", 65)
+		longName := strings.Repeat("a", MaxToolNameLength+1)
 		// when
 		err := box.Add(llm.Tool{Name: longName}, noopHandler)
 		// then
@@ -131,7 +175,7 @@ func TestAddTool(t *testing.T) {
 	})
 }
 
-func TestRemoveTool(t *testing.T) {
+func TestToolBoxRemove(t *testing.T) {
 	t.Run("removes a registered tool", func(t *testing.T) {
 		// given
 		box := NewToolBox()
@@ -147,12 +191,17 @@ func TestRemoveTool(t *testing.T) {
 	t.Run("is a no-op for an unknown tool", func(t *testing.T) {
 		// given
 		box := NewToolBox()
-		// then
-		assert.NotPanics(t, func() { box.Remove("ghost") })
+		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
+		// when
+		box.Remove("ghost")
+		// then: the tools that are registered stay registered
+		result := box.Tools()
+		require.Len(t, result, 1)
+		assert.Equal(t, "a", result[0].Name)
 	})
 }
 
-func TestGetTools(t *testing.T) {
+func TestToolBoxTools(t *testing.T) {
 	t.Run("returns every registered tool definition", func(t *testing.T) {
 		// given
 		box := NewToolBox()
@@ -189,35 +238,37 @@ func TestGetTools(t *testing.T) {
 	})
 }
 
-func TestToolBoxConcurrency(t *testing.T) {
-	t.Run("concurrent add, remove, list and execute are safe", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		require.NoError(t, box.Add(llm.Tool{Name: "stable"}, noopHandler))
-		var wg sync.WaitGroup
-		// when
-		for i := range 50 {
-			name := fmt.Sprintf("tool-%d", i)
-			wg.Add(2)
-			go func() {
-				defer wg.Done()
-				_ = box.Add(llm.Tool{Name: name}, noopHandler)
-				box.Remove(name)
-			}()
-			go func() {
-				defer wg.Done()
-				_ = box.Tools()
-				_, _ = box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
-			}()
-		}
-		wg.Wait()
-		// then
-		_, err := box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
-		assert.NoError(t, err)
-	})
+func TestToolBoxConcurrentAccess(t *testing.T) {
+	// given: correctness here is enforced by the race detector
+	const goroutines = 50
+
+	box := NewToolBox()
+	require.NoError(t, box.Add(llm.Tool{Name: "stable"}, noopHandler))
+
+	var wg sync.WaitGroup
+	// when
+	for i := range goroutines {
+		name := fmt.Sprintf("tool-%d", i)
+
+		wg.Go(func() {
+			_ = box.Add(llm.Tool{Name: name}, noopHandler)
+			box.Remove(name)
+		})
+		wg.Go(func() {
+			_ = box.Tools()
+			_, _ = box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
+		})
+	}
+
+	wg.Wait()
+	// then: the tool that was never removed is still registered and runnable
+	result, err := box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
+	require.NoError(t, err)
+	assert.Equal(t, "stable", result.ToolName)
+	assert.Len(t, box.Tools(), 1)
 }
 
-func TestExecuteTool(t *testing.T) {
+func TestToolBoxExecute(t *testing.T) {
 	t.Run("runs the handler and wraps its result", func(t *testing.T) {
 		// given
 		box := NewToolBox()

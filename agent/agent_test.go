@@ -82,25 +82,34 @@ func (f *recordingFeedback) SessionReset()   { f.events = append(f.events, "Sess
 func (f *recordingFeedback) SessionStarted() { f.events = append(f.events, "SessionStarted") }
 func (f *recordingFeedback) SessionClosed()  { f.events = append(f.events, "SessionClosed") }
 
-func testLLM(t *testing.T) *llm.LLM {
+func mustTestLLM(t testing.TB) *llm.LLM {
 	t.Helper()
+
 	client, err := llm.New(llm.Config{Provider: llm.ProviderOllama, Model: "test-model"})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("llm.New: unexpected error: %v", err)
+	}
+
 	return client
 }
 
-func newTestAgent(t *testing.T, cfg Config, fb Feedback) *Agent {
+func mustNewTestAgent(t testing.TB, cfg Config, fb Feedback) *Agent {
 	t.Helper()
-	agt, err := New(cfg, testLLM(t), nil)
-	require.NoError(t, err)
+
+	agt, err := New(cfg, mustTestLLM(t), nil)
+	if err != nil {
+		t.Fatalf("New(%+v): unexpected error: %v", cfg, err)
+	}
+
 	agt.SetFeedback(fb)
+
 	return agt
 }
 
 func TestNew(t *testing.T) {
 	t.Run("returns an agent for a valid configuration", func(t *testing.T) {
 		// when
-		result, err := New(Config{}, testLLM(t), nil)
+		result, err := New(Config{}, mustTestLLM(t), nil)
 		// then
 		require.NoError(t, err)
 		assert.NotNil(t, result)
@@ -116,7 +125,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent is negative", func(t *testing.T) {
 		// when
-		result, err := New(Config{CompactionThresholdPercent: -1}, testLLM(t), nil)
+		result, err := New(Config{CompactionThresholdPercent: -1}, mustTestLLM(t), nil)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -124,7 +133,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent exceeds one hundred", func(t *testing.T) {
 		// when
-		result, err := New(Config{CompactionThresholdPercent: 101}, testLLM(t), nil)
+		result, err := New(Config{CompactionThresholdPercent: 101}, mustTestLLM(t), nil)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -133,7 +142,7 @@ func TestNew(t *testing.T) {
 	t.Run("succeeds for percents within range", func(t *testing.T) {
 		for _, pct := range []int{0, 50, 100} {
 			// when
-			result, err := New(Config{CompactionThresholdPercent: pct}, testLLM(t), nil)
+			result, err := New(Config{CompactionThresholdPercent: pct}, mustTestLLM(t), nil)
 			// then
 			require.NoError(t, err, "pct=%d", pct)
 			assert.NotNil(t, result, "pct=%d", pct)
@@ -145,7 +154,7 @@ func TestStartSession(t *testing.T) {
 	t.Run("fires the SessionStarted event", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
-		agt := newTestAgent(t, Config{}, fb)
+		agt := mustNewTestAgent(t, Config{}, fb)
 		// when
 		agt.StartSession("be terse")
 		// then
@@ -157,7 +166,7 @@ func TestResetSession(t *testing.T) {
 	t.Run("returns ErrNoSession before a session has started", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
-		agt := newTestAgent(t, Config{}, fb)
+		agt := mustNewTestAgent(t, Config{}, fb)
 		// when
 		err := agt.ResetSession()
 		// then
@@ -168,7 +177,7 @@ func TestResetSession(t *testing.T) {
 	t.Run("succeeds and fires SessionReset after a session has started", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
-		agt := newTestAgent(t, Config{}, fb)
+		agt := mustNewTestAgent(t, Config{}, fb)
 		agt.StartSession("sys")
 		// when
 		err := agt.ResetSession()
@@ -182,7 +191,7 @@ func TestClose(t *testing.T) {
 	t.Run("fires the SessionClosed event", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
-		agt := newTestAgent(t, Config{}, fb)
+		agt := mustNewTestAgent(t, Config{}, fb)
 		agt.StartSession("sys")
 		// when
 		agt.Close()
@@ -196,7 +205,7 @@ func TestSetFeedback(t *testing.T) {
 		// given
 		old := &recordingFeedback{}
 		replacement := &recordingFeedback{}
-		agt := newTestAgent(t, Config{}, old)
+		agt := mustNewTestAgent(t, Config{}, old)
 		// when
 		agt.SetFeedback(replacement)
 		agt.StartSession("sys")
@@ -208,7 +217,7 @@ func TestSetFeedback(t *testing.T) {
 	t.Run("keeps the existing sink when fb is nil", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
-		agt := newTestAgent(t, Config{}, fb)
+		agt := mustNewTestAgent(t, Config{}, fb)
 		// when
 		agt.SetFeedback(nil)
 		agt.StartSession("sys")
@@ -220,9 +229,9 @@ func TestSetFeedback(t *testing.T) {
 func TestProcess(t *testing.T) {
 	t.Run("returns ErrNoSession when no session has started", func(t *testing.T) {
 		// given
-		agt := newTestAgent(t, Config{}, &recordingFeedback{})
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrNoSession)
@@ -230,11 +239,11 @@ func TestProcess(t *testing.T) {
 
 	t.Run("returns ErrNoSession after the session is closed", func(t *testing.T) {
 		// given
-		agt := newTestAgent(t, Config{}, &recordingFeedback{})
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
 		agt.StartSession("sys")
 		agt.Close()
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrNoSession)
@@ -251,7 +260,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hello", result.Content)
@@ -268,7 +277,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "max_tokens", result.Metadata.StopReason)
@@ -289,7 +298,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, tb, fb, Config{})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "done", result.Content)
@@ -312,7 +321,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, tb, &recordingFeedback{}, Config{MaxIterations: 2})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrMaxIterations)
@@ -324,7 +333,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "boom")
@@ -345,9 +354,9 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, fb, Config{CompactionThresholdPercent: 90})
 		agt.StartSession("sys")
 		// when: three turns build enough history for compaction to have an older turn
-		_, err1 := agt.Process(context.Background(), "u1")
-		_, err2 := agt.Process(context.Background(), "u2")
-		_, err3 := agt.Process(context.Background(), "u3")
+		_, err1 := agt.Process(t.Context(), "u1")
+		_, err2 := agt.Process(t.Context(), "u2")
+		_, err3 := agt.Process(t.Context(), "u3")
 		// then
 		require.NoError(t, err1)
 		require.NoError(t, err2)
@@ -373,12 +382,12 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
 		agt := agentWithLLM(fake, tb, fb, Config{CompactionThresholdPercent: 90})
 		agt.StartSession("sys")
-		_, err := agt.Process(context.Background(), "u1")
+		_, err := agt.Process(t.Context(), "u1")
 		require.NoError(t, err)
-		_, err = agt.Process(context.Background(), "u2")
+		_, err = agt.Process(t.Context(), "u2")
 		require.NoError(t, err)
 		// when
-		result, err := agt.Process(context.Background(), "u3")
+		result, err := agt.Process(t.Context(), "u3")
 		// then: the round returns its final reply and compaction runs after it
 		require.NoError(t, err)
 		assert.Equal(t, "done", result.Content)
@@ -402,9 +411,9 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, fb, Config{CompactionThresholdPercent: 90})
 		agt.StartSession("the-session-prompt")
 		// when
-		_, err1 := agt.Process(context.Background(), "u1")
-		_, err2 := agt.Process(context.Background(), "u2")
-		_, err3 := agt.Process(context.Background(), "u3")
+		_, err1 := agt.Process(t.Context(), "u1")
+		_, err2 := agt.Process(t.Context(), "u2")
+		_, err3 := agt.Process(t.Context(), "u3")
 		// then: the summarizer sees its own system prompt and a transcript
 		require.NoError(t, err1)
 		require.NoError(t, err2)
@@ -428,8 +437,8 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, fb, Config{})
 		agt.StartSession("sys")
 		// when: two turns both fail to fetch the model info
-		_, err1 := agt.Process(context.Background(), "u1")
-		_, err2 := agt.Process(context.Background(), "u2")
+		_, err1 := agt.Process(t.Context(), "u1")
+		_, err2 := agt.Process(t.Context(), "u2")
 		// then: the fetch is retried every turn, so the event fires each time
 		require.NoError(t, err1)
 		require.NoError(t, err2)
@@ -453,7 +462,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, tb, fb, Config{})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "recovered", result.Content)
@@ -478,7 +487,7 @@ func TestProcess(t *testing.T) {
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{CompactionThresholdPercent: 1})
 		agt.StartSession("sys")
 		// when
-		result, err := agt.Process(context.Background(), "hi")
+		result, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hi", result.Content)
@@ -509,7 +518,7 @@ func TestChangeModel(t *testing.T) {
 		}
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		agt.StartSession("sys")
-		_, err := agt.Process(context.Background(), "hi")
+		_, err := agt.Process(t.Context(), "hi")
 		require.NoError(t, err)
 		require.Equal(t, 1000, agt.modelInfo.ContextSize)
 		// when
@@ -542,7 +551,7 @@ func TestModelInfo(t *testing.T) {
 		}
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		// when
-		result := agt.ModelInfo(context.Background())
+		result := agt.ModelInfo(t.Context())
 		// then
 		require.NotNil(t, result)
 		assert.Equal(t, llm.ProviderAnthropic, result.Provider)
@@ -556,7 +565,7 @@ func TestModelInfo(t *testing.T) {
 		fake := &fakeLLM{infoErr: errors.New("no info")}
 		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
 		// when
-		result := agt.ModelInfo(context.Background())
+		result := agt.ModelInfo(t.Context())
 		// then
 		assert.Nil(t, result)
 	})
@@ -587,7 +596,7 @@ func TestCompactContext(t *testing.T) {
 		}
 		before := len(agt.messages)
 		// when
-		agt.CompactContext(context.Background())
+		agt.CompactContext(t.Context())
 		// then
 		assert.Len(t, agt.messages, before)
 		assert.Zero(t, fake.chatCalls)
@@ -607,7 +616,7 @@ func TestCompactContext(t *testing.T) {
 		}
 		snapshot := append([]llm.Message(nil), agt.messages...)
 		// when
-		agt.CompactContext(context.Background())
+		agt.CompactContext(t.Context())
 		// then
 		assert.Equal(t, snapshot, agt.messages)
 		assert.NotContains(t, fb.events, "ContextCompacted")

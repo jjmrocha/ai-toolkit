@@ -7,17 +7,18 @@ type field struct {
 }
 
 // ObjectBuilder builds the JSON Schema for an object-typed set of tool
-// parameters. Add fields with the Add* methods (each returns the builder for
-// chaining) and call Build to produce the schema map for llm.Tool.Schema.
-// Nested objects and arrays of objects are described with their own
-// ObjectBuilder, so schemas of any depth compose without hand-written maps.
+// parameters. Add fields with the field methods (each returns the builder for
+// chaining) and call [ObjectBuilder.Build] to produce the schema map for
+// llm.Tool.Schema. Nested objects and arrays of objects are described with
+// their own ObjectBuilder, so schemas of any depth compose without hand-written
+// maps.
 //
-// The zero value is not usable; create one with NewObjectBuilder.
+// The zero value is not usable; create one with [NewObjectBuilder].
 type ObjectBuilder struct {
 	fields []field
 }
 
-// NewObjectBuilder returns an empty ObjectBuilder.
+// NewObjectBuilder returns an empty [ObjectBuilder].
 func NewObjectBuilder() *ObjectBuilder {
 	return &ObjectBuilder{
 		fields: make([]field, 0),
@@ -85,8 +86,9 @@ func (sb *ObjectBuilder) Boolean(name string, desc string, required bool) *Objec
 	return sb
 }
 
-// Object adds a nested object field named name, whose properties are
-// described by spec. The nested object's own required fields are preserved.
+// Object adds a nested object field named name, whose properties are described
+// by spec, its own [ObjectBuilder]. The nested object's required fields are
+// preserved.
 func (sb *ObjectBuilder) Object(name string, desc string, required bool, spec *ObjectBuilder) *ObjectBuilder {
 	s := spec.Build()
 	s["description"] = desc
@@ -178,7 +180,7 @@ func (sb *ObjectBuilder) ArrayOfBooleans(name string, desc string, required bool
 }
 
 // ArrayOfObjects adds a field named name that is an array whose elements are
-// objects described by spec.
+// objects described by spec, its own [ObjectBuilder].
 func (sb *ObjectBuilder) ArrayOfObjects(name string, desc string, required bool, spec *ObjectBuilder) *ObjectBuilder {
 	s := map[string]any{
 		"type":        "array",
@@ -199,6 +201,10 @@ func (sb *ObjectBuilder) ArrayOfObjects(name string, desc string, required bool,
 // {"type":"object","properties":{...},"required":[...]}, suitable for
 // llm.Tool.Schema. The "required" key is omitted when no field is required.
 // Build can be called more than once and returns a new map each time.
+//
+// The field methods are [ObjectBuilder.String], [ObjectBuilder.Integer],
+// [ObjectBuilder.Number], [ObjectBuilder.Boolean], [ObjectBuilder.Object] and
+// the ArrayOf variants of each.
 func (sb *ObjectBuilder) Build() map[string]any {
 	fields := make(map[string]any)
 	required := make([]string, 0)

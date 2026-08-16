@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
@@ -16,6 +19,20 @@ func newMemClient(name string, responses ...string) (*Client, *tools.ToolBox, *f
 		session: s,
 	}
 	return c, tools.NewToolBox(), in
+}
+
+func endlessToolPages(count int) []string {
+	pages := make([]string, 0, count)
+
+	for id := 1; id <= count; id++ {
+		page := fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%d,"result":{"tools":[{"name":"tool%d"}],"nextCursor":"page%d"}}`,
+			id, id, id+1,
+		)
+		pages = append(pages, page)
+	}
+
+	return pages
 }
 
 func TestNewClient(t *testing.T) {
@@ -36,7 +53,27 @@ func TestNewClient(t *testing.T) {
 	})
 }
 
-func TestRegisterTools(t *testing.T) {
+func TestClientConnected(t *testing.T) {
+	t.Run("reports a client whose server is running", func(t *testing.T) {
+		// given
+		c := liveClient(t, "srv")
+		// when
+		result := c.Connected()
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("reports a client whose server is gone", func(t *testing.T) {
+		// given
+		c := deadClient(t, "srv")
+		// when
+		result := c.Connected()
+		// then
+		assert.False(t, result)
+	})
+}
+
+func TestClientRegisterTools(t *testing.T) {
 	t.Run("registers each tool namespaced with the client name", func(t *testing.T) {
 		// given
 		c, tb, _ := newMemClient("srv",
@@ -71,7 +108,7 @@ func TestRegisterTools(t *testing.T) {
 		assert.Equal(t, map[string]any{"name": "echo", "arguments": map[string]any{"city": "Lisbon"}}, sent[1]["params"])
 	})
 
-	t.Run("a tools/call error result surfaces as a handler error", func(t *testing.T) {
+	t.Run("registers a handler that fails on a tools/call error result", func(t *testing.T) {
 		// given: the server marks the call result with isError
 		c, tb, _ := newMemClient("srv",
 			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n",
@@ -106,16 +143,195 @@ func TestRegisterTools(t *testing.T) {
 		assert.ErrorIs(t, err, ErrAlreadyRegistered)
 	})
 
-	t.Run("a failed tools/list leaves the client registrable", func(t *testing.T) {
+	t.Run("surfaces the transport error when tools/list fails", func(t *testing.T) {
 		// given: an empty stream, so tools/list fails with a transport error
 		c, tb, _ := newMemClient("srv")
-		// when: the first registration fails
-		firstErr := c.RegisterTools(t.Context(), tb)
-		// then: it surfaces the transport error, not a registration state
-		require.ErrorIs(t, firstErr, ErrMCPConnectionClosed)
-		// and: a retry is not wedged by ErrAlreadyRegistered
-		secondErr := c.RegisterTools(t.Context(), tb)
-		assert.NotErrorIs(t, secondErr, ErrAlreadyRegistered)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then
+		assert.ErrorIs(t, err, ErrMCPConnectionClosed)
+		assert.Empty(t, tb.Tools())
+	})
+
+	t.Run("stays registrable after a failed tools/list", func(t *testing.T) {
+		// given: a first registration that failed on the transport
+		c, tb, _ := newMemClient("srv")
+		require.ErrorIs(t, c.RegisterTools(t.Context(), tb), ErrMCPConnectionClosed)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the retry is not wedged by ErrAlreadyRegistered
+		assert.NotErrorIs(t, err, ErrAlreadyRegistered)
+	})
+
+	t.Run("replaces the characters the providers reject", func(t *testing.T) {
+		// given: a server whose tool name carries a dot
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"github.create_issue"}]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the tool is registered under a name the ToolBox accepts
+		require.NoError(t, err)
+		registered := tb.Tools()
+		require.Len(t, registered, 1)
+		assert.Equal(t, "srv__github_create_issue", registered[0].Name)
+	})
+
+	t.Run("calls the server with the name it published", func(t *testing.T) {
+		// given: a tool registered under a sanitized name
+		c, tb, in := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"github.create_issue"}]}}`+"\n",
+			`{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"done"}]}}`+"\n",
+		)
+		require.NoError(t, c.RegisterTools(t.Context(), tb))
+		// when: the model calls it
+		_, err := tb.Execute(t.Context(), llm.ToolCall{Name: "srv__github_create_issue"})
+		// then: the server still sees the name it published
+		require.NoError(t, err)
+		sent := sentMessages(t, in)
+		require.Len(t, sent, 2)
+		params, ok := sent[1]["params"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "github.create_issue", params["name"])
+	})
+
+	t.Run("replaces a multi-byte character with a single underscore", func(t *testing.T) {
+		// given: a name whose accented rune spans two bytes
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"café"}]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the result is pure ASCII, so a later truncation cannot split a rune
+		require.NoError(t, err)
+		registered := tb.Tools()
+		require.Len(t, registered, 1)
+		assert.Equal(t, "srv__caf_", registered[0].Name)
+	})
+
+	t.Run("truncates and tags a name that is too long", func(t *testing.T) {
+		// given: a tool name that cannot fit the provider limit
+		long := strings.Repeat("a", 100)
+		c, tb, _ := newMemClient("srv",
+			fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":%q}]}}`, long)+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: it fits exactly, and the tail marks it as derived
+		require.NoError(t, err)
+		registered := tb.Tools()
+		require.Len(t, registered, 1)
+		assert.Len(t, registered[0].Name, tools.MaxToolNameLength)
+		assert.Regexp(t, `^srv__a+_[0-9a-f]{6}$`, registered[0].Name)
+	})
+
+	t.Run("keeps colliding names apart", func(t *testing.T) {
+		// given: two names that sanitize to the same string
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"a.b"},{"name":"a_b"}]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: neither tool shadows the other
+		require.NoError(t, err)
+		registered := tb.Tools()
+		require.Len(t, registered, 2)
+		assert.NotEqual(t, registered[0].Name, registered[1].Name)
+	})
+
+	t.Run("derives the same names on every registration", func(t *testing.T) {
+		// given: the same server registered once already, into its own toolbox
+		page := `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"a.b"},{"name":"a_b"}]}}` + "\n"
+		first, firstBox, _ := newMemClient("srv", page)
+		second, secondBox, _ := newMemClient("srv", page)
+		require.NoError(t, first.RegisterTools(t.Context(), firstBox))
+		// when
+		err := second.RegisterTools(t.Context(), secondBox)
+		// then: the generated names do not drift, so the prompt stays cacheable
+		require.NoError(t, err)
+		assert.Equal(t, firstBox.Tools(), secondBox.Tools())
+	})
+
+	t.Run("registers the tools of every page", func(t *testing.T) {
+		// given: a server that splits its tools over two pages
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"first"}],"nextCursor":"page2"}}`+"\n",
+			`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"second"}]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then
+		require.NoError(t, err)
+		registered := tb.Tools()
+		require.Len(t, registered, 2)
+		assert.Equal(t, "srv__first", registered[0].Name)
+		assert.Equal(t, "srv__second", registered[1].Name)
+	})
+
+	t.Run("asks for the next page with the cursor the server handed out", func(t *testing.T) {
+		// given
+		c, tb, in := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[],"nextCursor":"page2"}}`+"\n",
+			`{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the first request carries no cursor, the second carries the server's
+		require.NoError(t, err)
+		sent := sentMessages(t, in)
+		require.Len(t, sent, 2)
+		assert.Equal(t, "tools/list", sent[0]["method"])
+		assert.Equal(t, map[string]any{}, sent[0]["params"])
+		assert.Equal(t, "tools/list", sent[1]["method"])
+		assert.Equal(t, map[string]any{"cursor": "page2"}, sent[1]["params"])
+	})
+
+	t.Run("stops at an empty nextCursor", func(t *testing.T) {
+		// given: a server that answers with a cursor it left empty
+		c, tb, in := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"only"}],"nextCursor":""}}`+"\n",
+			`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"never"}]}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the second page is never asked for
+		require.NoError(t, err)
+		assert.Len(t, tb.Tools(), 1)
+		assert.Len(t, sentMessages(t, in), 1)
+	})
+
+	t.Run("registers nothing when a page fails", func(t *testing.T) {
+		// given: the script ends before the second page, so the connection closes
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"first"}],"nextCursor":"page2"}}`+"\n",
+		)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the tools of the page that did arrive are not registered
+		assert.ErrorIs(t, err, ErrMCPConnectionClosed)
+		assert.Empty(t, tb.Tools())
+	})
+
+	t.Run("stays registrable after a failed page", func(t *testing.T) {
+		// given: a first registration that lost the connection mid-pagination
+		c, tb, _ := newMemClient("srv",
+			`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"first"}],"nextCursor":"page2"}}`+"\n",
+		)
+		require.ErrorIs(t, c.RegisterTools(t.Context(), tb), ErrMCPConnectionClosed)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then: the retry is not wedged by ErrAlreadyRegistered
+		assert.NotErrorIs(t, err, ErrAlreadyRegistered)
+	})
+
+	t.Run("returns ErrTooManyToolPages when the server never ends the list", func(t *testing.T) {
+		// given: every page hands out another cursor
+		c, tb, _ := newMemClient("srv", endlessToolPages(maxToolPages)...)
+		// when
+		err := c.RegisterTools(t.Context(), tb)
+		// then
+		require.ErrorIs(t, err, ErrTooManyToolPages)
+		assert.Empty(t, tb.Tools())
 	})
 }
 
@@ -132,12 +348,51 @@ func TestClientClose(t *testing.T) {
 		assert.Empty(t, tb.Tools())
 	})
 
+	t.Run("does not queue behind a registration waiting on the server", func(t *testing.T) {
+		// given: a server that takes the request and never answers
+		ft := newFakeTransport()
+		c := &Client{config: ClientConfig{Name: "srv"}, session: newTestSession(ft)}
+		registered := make(chan error, 1)
+
+		go func() { registered <- c.RegisterTools(t.Context(), tools.NewToolBox()) }()
+		<-ft.written
+		// when
+		closed := make(chan error, 1)
+		go func() { closed <- c.Close() }()
+		// then
+		select {
+		case err := <-closed:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Close blocked behind the in-flight registration")
+		}
+	})
+
+	t.Run("aborts a registration that is waiting on the server", func(t *testing.T) {
+		// given: a registration parked on a reply that will never come
+		ft := newFakeTransport()
+		c := &Client{config: ClientConfig{Name: "srv"}, session: newTestSession(ft)}
+		registered := make(chan error, 1)
+
+		go func() { registered <- c.RegisterTools(t.Context(), tools.NewToolBox()) }()
+		<-ft.written
+		// when
+		require.NoError(t, c.Close())
+		// then: the registration gives up instead of waiting out its deadline
+		select {
+		case err := <-registered:
+			assert.ErrorIs(t, err, ErrMCPConnectionClosed)
+		case <-time.After(5 * time.Second):
+			t.Fatal("the registration outlived Close")
+		}
+	})
+
 	t.Run("is safe to call more than once", func(t *testing.T) {
-		// given: a client with its tools registered
+		// given: a client with its tools registered, already closed once
 		c, tb, _ := newMemClient("srv", `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}`+"\n")
 		require.NoError(t, c.RegisterTools(t.Context(), tb))
 		require.NoError(t, c.Close())
-		// when: Close is called a second time
+		// when
 		err := c.Close()
 		// then: it is a clean no-op and the tools stay removed
 		require.NoError(t, err)
@@ -148,37 +403,37 @@ func TestClientClose(t *testing.T) {
 func TestParseToolResult(t *testing.T) {
 	t.Run("joins the text parts with newlines and reports success", func(t *testing.T) {
 		// given
-		result := map[string]any{"content": []any{
+		toolResult := map[string]any{"content": []any{
 			map[string]any{"type": "text", "text": "a"},
 			map[string]any{"type": "image", "data": "..."},
 			map[string]any{"type": "text", "text": "b"},
 		}}
 		// when
-		text, failed := parseToolResult(result)
+		result, failed := parseToolResult(toolResult)
 		// then
-		assert.Equal(t, "a\nb", text)
+		assert.Equal(t, "a\nb", result)
 		assert.False(t, failed)
 	})
 
 	t.Run("reports failed when the result is flagged with isError", func(t *testing.T) {
 		// given
-		result := map[string]any{"content": []any{
+		toolResult := map[string]any{"content": []any{
 			map[string]any{"type": "text", "text": "boom"},
 		}, "isError": true}
 		// when
-		text, failed := parseToolResult(result)
+		result, failed := parseToolResult(toolResult)
 		// then
-		assert.Equal(t, "boom", text)
+		assert.Equal(t, "boom", result)
 		assert.True(t, failed)
 	})
 
 	t.Run("falls back to JSON when there is no text content", func(t *testing.T) {
 		// given
-		result := map[string]any{"isError": true}
+		toolResult := map[string]any{"isError": true}
 		// when
-		text, failed := parseToolResult(result)
+		result, failed := parseToolResult(toolResult)
 		// then
-		assert.JSONEq(t, `{"isError":true}`, text)
+		assert.JSONEq(t, `{"isError":true}`, result)
 		assert.True(t, failed)
 	})
 }

@@ -79,9 +79,7 @@ func TestToORMessages(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
-}
 
-func TestToORMessagesPointerForms(t *testing.T) {
 	t.Run("maps pointer messages like their value forms", func(t *testing.T) {
 		// given
 		messages := []Message{

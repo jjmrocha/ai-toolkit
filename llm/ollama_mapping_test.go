@@ -57,9 +57,7 @@ func TestToOllamaMessages(t *testing.T) {
 		// then
 		assert.Empty(t, result)
 	})
-}
 
-func TestToOllamaMessagesPointerForms(t *testing.T) {
 	t.Run("maps pointer messages like their value forms", func(t *testing.T) {
 		// given
 		messages := []Message{

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestObjectBuilder(t *testing.T) {
@@ -87,7 +88,8 @@ func TestObjectBuilder(t *testing.T) {
 			// when
 			result := b.Build()
 			// then
-			properties := result["properties"].(map[string]any)
+			properties, ok := result["properties"].(map[string]any)
+			require.True(t, ok)
 			assert.Equal(t, tc.expected, properties[tc.field])
 		})
 	}
@@ -156,7 +158,8 @@ func TestObjectBuilder(t *testing.T) {
 		// when
 		result := b.Build()
 		// then
-		properties := result["properties"].(map[string]any)
+		properties, ok := result["properties"].(map[string]any)
+		require.True(t, ok)
 		expected := map[string]any{
 			"type":        "array",
 			"description": "contact list",

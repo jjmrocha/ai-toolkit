@@ -7,9 +7,10 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// Manager registers MCP servers by name and runs them on demand against a shared
-// tools.ToolBox. Register a server with Register, then Start and Stop it by
-// name; Status reports which are running. It is safe for concurrent use.
+// Manager registers MCP servers by name and runs them on demand against a
+// shared [tools.ToolBox]. Register a server with [Manager.Register], then start
+// and stop it by name with [Manager.Start] and [Manager.Stop];
+// [Manager.Status] reports which are running. It is safe for concurrent use.
 type Manager struct {
 	toolBox *tools.ToolBox
 	configs map[string]ClientConfig
@@ -17,7 +18,7 @@ type Manager struct {
 	mu      sync.RWMutex
 }
 
-// NewManager returns an empty Manager that registers each MCP's tools into tb.
+// NewManager returns an empty [Manager] that registers each MCP's tools into tb.
 func NewManager(tb *tools.ToolBox) *Manager {
 	return &Manager{
 		toolBox: tb,
@@ -50,7 +51,7 @@ func (m *Manager) Register(cfg ClientConfig) {
 
 // Status reports the registered MCPs and whether each is currently running. A
 // client whose process has died is reported inactive and reaped, so the next
-// Start launches a fresh one. It takes the write lock because of that reaping.
+// [Manager.Start] launches a fresh one.
 func (m *Manager) Status() []Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -63,7 +64,6 @@ func (m *Manager) Status() []Status {
 			active = client.Connected()
 
 			if !active {
-				// The process has died; drop it so the next Start will launch a fresh one.
 				_ = client.Close()
 				delete(m.clients, name)
 			}
@@ -77,10 +77,10 @@ func (m *Manager) Status() []Status {
 }
 
 // Start launches the MCP registered under name and registers its tools in the
-// ToolBox. A client that is already running is reused; one whose process has
-// died is discarded and replaced. It returns ErrMCPNotRegistered when no MCP is
-// registered under name, or the underlying launch or registration error. ctx
-// bounds the startup handshake and the tools/list request.
+// [tools.ToolBox]. A client that is already running is reused; one whose process
+// has died is discarded and replaced. It returns [ErrMCPNotRegistered] when no
+// MCP is registered under name, or the underlying launch or registration error.
+// ctx bounds the startup handshake and the tools/list request.
 func (m *Manager) Start(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -95,7 +95,6 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 			return nil
 		}
 
-		// The process has died; drop it and start a fresh one below.
 		_ = client.Close()
 		delete(m.clients, name)
 	}
@@ -106,8 +105,6 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 	}
 
 	if err := client.RegisterTools(ctx, m.toolBox); err != nil {
-		// Registration failed; discard the client so it is not left behind
-		// reporting itself as running with missing tools.
 		_ = client.Close()
 		return err
 	}
@@ -118,8 +115,8 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 }
 
 // Stop shuts down the running MCP named name, removing its tools from the
-// ToolBox, and keeps its configuration so it can be started again. It returns
-// ErrMCPNotRegistered when no MCP is registered under name.
+// [tools.ToolBox], and keeps its configuration so it can be started again. It
+// returns [ErrMCPNotRegistered] when no MCP is registered under name.
 func (m *Manager) Stop(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

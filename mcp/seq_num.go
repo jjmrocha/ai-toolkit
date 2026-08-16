@@ -1,21 +1,15 @@
 package mcp
 
-import "sync"
+import "sync/atomic"
 
 type seqNum struct {
-	mu  sync.Mutex
-	val int
+	val atomic.Int64
 }
 
 func newSeqNum() *seqNum {
-	return &seqNum{
-		val: 0,
-	}
+	return &seqNum{}
 }
 
 func (s *seqNum) next() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.val++
-	return s.val
+	return int(s.val.Add(1))
 }
