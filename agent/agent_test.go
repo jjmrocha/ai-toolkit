@@ -3,9 +3,13 @@ package agent
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,13 +26,15 @@ type fakeLLM struct {
 	current   string
 	changeErr error
 	effort    llm.Effort
+	toolLists [][]llm.Tool
 }
 
-func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, _ []llm.Tool) (*llm.AssistantMessage, error) {
+func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, toolList []llm.Tool) (*llm.AssistantMessage, error) {
 	if f.chatErr != nil {
 		return nil, f.chatErr
 	}
 	f.calls = append(f.calls, messages)
+	f.toolLists = append(f.toolLists, toolList)
 	reply := f.replies[f.chatCalls]
 	f.chatCalls++
 	return reply, nil
@@ -55,11 +61,39 @@ func (f *fakeLLM) Effort() llm.Effort { return f.effort }
 
 func (f *fakeLLM) ChangeEffort(e llm.Effort) { f.effort = e }
 
-func agentWithLLM(m modelInterface, tb *tools.ToolBox, fb Feedback, cfg Config) *Agent {
-	if tb == nil {
-		tb = tools.NewToolBox()
+func agentWithLLM(m modelInterface, fb Feedback, cfg Config) *Agent {
+	return &Agent{config: cfg, llm: m, fb: fb}
+}
+
+func skillCollection(t *testing.T) *skills.Collection {
+	t.Helper()
+
+	path := t.TempDir()
+	content := "---\nname: git-release\ndescription: Draft release notes\n---\n\nDo the thing.\n"
+	require.NoError(t, os.WriteFile(filepath.Join(path, "SKILL.md"), []byte(content), 0o600))
+
+	collection := skills.NewCollection()
+	require.NoError(t, collection.Add(path))
+
+	return collection
+}
+
+func toolNames(toolBox *tools.ToolBox) []string {
+	names := make([]string, 0)
+	for _, tool := range toolBox.Tools() {
+		names = append(names, tool.Name)
 	}
-	return &Agent{config: cfg, llm: m, toolBox: tb, fb: fb}
+
+	return names
+}
+
+func systemContent(t *testing.T, messages []llm.Message) string {
+	t.Helper()
+
+	system, ok := messages[0].(llm.SystemMessage)
+	require.True(t, ok)
+
+	return system.Content
 }
 
 type recordingFeedback struct {
@@ -96,7 +130,7 @@ func mustTestLLM(t testing.TB) *llm.LLM {
 func mustNewTestAgent(t testing.TB, cfg Config, fb Feedback) *Agent {
 	t.Helper()
 
-	agt, err := New(cfg, mustTestLLM(t), nil)
+	agt, err := New(cfg, mustTestLLM(t))
 	if err != nil {
 		t.Fatalf("New(%+v): unexpected error: %v", cfg, err)
 	}
@@ -109,7 +143,7 @@ func mustNewTestAgent(t testing.TB, cfg Config, fb Feedback) *Agent {
 func TestNew(t *testing.T) {
 	t.Run("returns an agent for a valid configuration", func(t *testing.T) {
 		// when
-		result, err := New(Config{}, mustTestLLM(t), nil)
+		result, err := New(Config{}, mustTestLLM(t))
 		// then
 		require.NoError(t, err)
 		assert.NotNil(t, result)
@@ -117,7 +151,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("propagates ErrNoLLM when llm is nil", func(t *testing.T) {
 		// when
-		result, err := New(Config{}, nil, nil)
+		result, err := New(Config{}, nil)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrNoLLM)
@@ -125,7 +159,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent is negative", func(t *testing.T) {
 		// when
-		result, err := New(Config{CompactionThresholdPercent: -1}, mustTestLLM(t), nil)
+		result, err := New(Config{CompactionThresholdPercent: -1}, mustTestLLM(t))
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -133,7 +167,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent exceeds one hundred", func(t *testing.T) {
 		// when
-		result, err := New(Config{CompactionThresholdPercent: 101}, mustTestLLM(t), nil)
+		result, err := New(Config{CompactionThresholdPercent: 101}, mustTestLLM(t))
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -142,7 +176,7 @@ func TestNew(t *testing.T) {
 	t.Run("succeeds for percents within range", func(t *testing.T) {
 		for _, pct := range []int{0, 50, 100} {
 			// when
-			result, err := New(Config{CompactionThresholdPercent: pct}, mustTestLLM(t), nil)
+			result, err := New(Config{CompactionThresholdPercent: pct}, mustTestLLM(t))
 			// then
 			require.NoError(t, err, "pct=%d", pct)
 			assert.NotNil(t, result, "pct=%d", pct)
@@ -156,9 +190,139 @@ func TestStartSession(t *testing.T) {
 		fb := &recordingFeedback{}
 		agt := mustNewTestAgent(t, Config{}, fb)
 		// when
-		agt.StartSession("be terse")
+		agt.StartSession(SessionConfig{Prompt: "be terse"})
 		// then
 		assert.Equal(t, []string{"SessionStarted"}, fb.events)
+	})
+
+	t.Run("offers the session's tools to the model", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		result := fake.toolLists[0]
+		expected := []llm.Tool{{Name: "echo"}}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("offers no tools when the session has no ToolBox", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, fake.toolLists[0])
+	})
+
+	t.Run("replaces the previous session's tools", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		first := tools.NewToolBox()
+		require.NoError(t, first.Add(llm.Tool{Name: "first"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		second := tools.NewToolBox()
+		require.NoError(t, second.Add(llm.Tool{Name: "second"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: first})
+		// when
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: second})
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		result := fake.toolLists[0]
+		expected := []llm.Tool{{Name: "second"}}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("adds the skill catalog to the system message", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "be terse", Skills: skillCollection(t)})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		result := systemContent(t, fake.calls[0])
+		assert.True(t, strings.HasPrefix(result, "be terse\n\n"))
+		assert.Contains(t, result, "<name>git-release</name>")
+	})
+
+	t.Run("leaves the system message alone when the collection is empty", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "be terse", Skills: skills.NewCollection()})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "be terse", systemContent(t, fake.calls[0]))
+	})
+
+	t.Run("registers the collection's tools in the session ToolBox", func(t *testing.T) {
+		// given
+		tb := tools.NewToolBox()
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		// when
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb, Skills: skillCollection(t)})
+		// then
+		result := toolNames(tb)
+		expected := []string{skills.LoadToolName, skills.LoadFileToolName}
+		assert.ElementsMatch(t, expected, result)
+	})
+
+	t.Run("offers the skill tools when the session has no ToolBox", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hi"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", Skills: skillCollection(t)})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		var names []string
+		for _, tool := range fake.toolLists[0] {
+			names = append(names, tool.Name)
+		}
+		assert.ElementsMatch(t, []string{skills.LoadToolName, skills.LoadFileToolName}, names)
+	})
+
+	t.Run("unregisters the previous session's skills", func(t *testing.T) {
+		// given
+		tb := tools.NewToolBox()
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb, Skills: skillCollection(t)})
+		// when
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// then
+		assert.Empty(t, toolNames(tb))
 	})
 }
 
@@ -178,7 +342,7 @@ func TestResetSession(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
 		agt := mustNewTestAgent(t, Config{}, fb)
-		agt.StartSession("sys")
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		err := agt.ResetSession()
 		// then
@@ -188,11 +352,22 @@ func TestResetSession(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
+	t.Run("unregisters the session's skills", func(t *testing.T) {
+		// given
+		tb := tools.NewToolBox()
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb, Skills: skillCollection(t)})
+		// when
+		agt.Close()
+		// then
+		assert.Empty(t, toolNames(tb))
+	})
+
 	t.Run("fires the SessionClosed event", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
 		agt := mustNewTestAgent(t, Config{}, fb)
-		agt.StartSession("sys")
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		agt.Close()
 		// then
@@ -208,7 +383,7 @@ func TestSetFeedback(t *testing.T) {
 		agt := mustNewTestAgent(t, Config{}, old)
 		// when
 		agt.SetFeedback(replacement)
-		agt.StartSession("sys")
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// then
 		assert.Empty(t, old.events)
 		assert.Equal(t, []string{"SessionStarted"}, replacement.events)
@@ -220,7 +395,7 @@ func TestSetFeedback(t *testing.T) {
 		agt := mustNewTestAgent(t, Config{}, fb)
 		// when
 		agt.SetFeedback(nil)
-		agt.StartSession("sys")
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// then
 		assert.Equal(t, []string{"SessionStarted"}, fb.events)
 	})
@@ -240,7 +415,7 @@ func TestProcess(t *testing.T) {
 	t.Run("returns ErrNoSession after the session is closed", func(t *testing.T) {
 		// given
 		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
-		agt.StartSession("sys")
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		agt.Close()
 		// when
 		result, err := agt.Process(t.Context(), "hi")
@@ -257,8 +432,8 @@ func TestProcess(t *testing.T) {
 			},
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -274,8 +449,8 @@ func TestProcess(t *testing.T) {
 			replies: []*llm.AssistantMessage{{Content: "cut short", StopReason: "max_tokens"}},
 			info:    &llm.ModelInfo{ContextSize: 1000},
 		}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -295,8 +470,8 @@ func TestProcess(t *testing.T) {
 		}
 		tb := tools.NewToolBox()
 		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
-		agt := agentWithLLM(fake, tb, fb, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -318,8 +493,8 @@ func TestProcess(t *testing.T) {
 		}
 		tb := tools.NewToolBox()
 		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
-		agt := agentWithLLM(fake, tb, &recordingFeedback{}, Config{MaxIterations: 2})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{MaxIterations: 2})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -330,8 +505,8 @@ func TestProcess(t *testing.T) {
 	t.Run("propagates an error from the model", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{chatErr: errors.New("boom")}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -351,8 +526,8 @@ func TestProcess(t *testing.T) {
 			},
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
-		agt := agentWithLLM(fake, nil, fb, Config{CompactionThresholdPercent: 90})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 90})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when: three turns build enough history for compaction to have an older turn
 		_, err1 := agt.Process(t.Context(), "u1")
 		_, err2 := agt.Process(t.Context(), "u2")
@@ -380,8 +555,8 @@ func TestProcess(t *testing.T) {
 		}
 		tb := tools.NewToolBox()
 		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
-		agt := agentWithLLM(fake, tb, fb, Config{CompactionThresholdPercent: 90})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 90})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
 		_, err := agt.Process(t.Context(), "u1")
 		require.NoError(t, err)
 		_, err = agt.Process(t.Context(), "u2")
@@ -408,8 +583,8 @@ func TestProcess(t *testing.T) {
 			},
 			info: &llm.ModelInfo{ContextSize: 1000},
 		}
-		agt := agentWithLLM(fake, nil, fb, Config{CompactionThresholdPercent: 90})
-		agt.StartSession("the-session-prompt")
+		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 90})
+		agt.StartSession(SessionConfig{Prompt: "the-session-prompt"})
 		// when
 		_, err1 := agt.Process(t.Context(), "u1")
 		_, err2 := agt.Process(t.Context(), "u2")
@@ -434,8 +609,8 @@ func TestProcess(t *testing.T) {
 			replies: []*llm.AssistantMessage{{Content: "one"}, {Content: "two"}},
 			infoErr: errors.New("no info"),
 		}
-		agt := agentWithLLM(fake, nil, fb, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when: two turns both fail to fetch the model info
 		_, err1 := agt.Process(t.Context(), "u1")
 		_, err2 := agt.Process(t.Context(), "u2")
@@ -459,8 +634,8 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, tb.Add(llm.Tool{Name: "boom"}, func(context.Context, map[string]any) (string, error) {
 			return "", errors.New("kaboom")
 		}))
-		agt := agentWithLLM(fake, tb, fb, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -484,8 +659,8 @@ func TestProcess(t *testing.T) {
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 9999}}},
 			infoErr: errors.New("no info"),
 		}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{CompactionThresholdPercent: 1})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{CompactionThresholdPercent: 1})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
@@ -500,7 +675,7 @@ func TestAvailableModels(t *testing.T) {
 	t.Run("returns the underlying client's model list", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{models: []string{"m1", "m2"}}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
 		result := agt.AvailableModels()
 		// then
@@ -516,8 +691,8 @@ func TestChangeModel(t *testing.T) {
 			info:    &llm.ModelInfo{Name: "old", ContextSize: 1000},
 			models:  []string{"m2"},
 		}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
-		agt.StartSession("sys")
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
 		_, err := agt.Process(t.Context(), "hi")
 		require.NoError(t, err)
 		require.Equal(t, 1000, agt.modelInfo.ContextSize)
@@ -533,7 +708,7 @@ func TestChangeModel(t *testing.T) {
 	t.Run("propagates the client error and keeps the current model", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{changeErr: errors.New("boom"), current: "old"}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
 		err := agt.ChangeModel("m2")
 		// then
@@ -549,7 +724,7 @@ func TestModelInfo(t *testing.T) {
 			info:   &llm.ModelInfo{Provider: llm.ProviderAnthropic, Name: "m1", ContextSize: 2000},
 			effort: llm.EffortMedium,
 		}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
 		result := agt.ModelInfo(t.Context())
 		// then
@@ -563,7 +738,7 @@ func TestModelInfo(t *testing.T) {
 	t.Run("returns nil when the model info cannot be fetched", func(t *testing.T) {
 		// given: called before any turn, with a client that cannot report info
 		fake := &fakeLLM{infoErr: errors.New("no info")}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
 		result := agt.ModelInfo(t.Context())
 		// then
@@ -575,7 +750,7 @@ func TestChangeEffort(t *testing.T) {
 	t.Run("sets the effort on the underlying client", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{}
-		agt := agentWithLLM(fake, nil, &recordingFeedback{}, Config{})
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
 		agt.ChangeEffort(llm.EffortMax)
 		// then
@@ -584,11 +759,37 @@ func TestChangeEffort(t *testing.T) {
 }
 
 func TestCompactContext(t *testing.T) {
+	t.Run("keeps the skill catalog in the system message", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "a1", Stats: llm.Stats{TotalTokens: 10}},
+				{Content: "a2", Stats: llm.Stats{TotalTokens: 20}},
+				{Content: "SUMMARY"},
+				{Content: "a3", Stats: llm.Stats{TotalTokens: 30}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "be terse", Skills: skillCollection(t)})
+		_, err1 := agt.Process(t.Context(), "u1")
+		_, err2 := agt.Process(t.Context(), "u2")
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		// when
+		agt.CompactContext(t.Context())
+		_, err3 := agt.Process(t.Context(), "u3")
+		// then
+		require.NoError(t, err3)
+		result := systemContent(t, fake.calls[len(fake.calls)-1])
+		assert.Contains(t, result, "<name>git-release</name>")
+	})
+
 	t.Run("is a no-op when there is no older turn to summarize", func(t *testing.T) {
 		// given: a single completed turn — nothing older than the kept window
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{}
-		agt := agentWithLLM(fake, nil, fb, Config{})
+		agt := agentWithLLM(fake, fb, Config{})
 		agt.messages = []llm.Message{
 			llm.SystemMessage{Content: "sys"},
 			llm.UserMessage{Content: "u1"},
@@ -607,7 +808,7 @@ func TestCompactContext(t *testing.T) {
 		// given: enough turns that an older one exists, but the summarizing Chat errors
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{chatErr: errors.New("summary boom")}
-		agt := agentWithLLM(fake, nil, fb, Config{})
+		agt := agentWithLLM(fake, fb, Config{})
 		agt.messages = []llm.Message{
 			llm.SystemMessage{Content: "sys"},
 			llm.UserMessage{Content: "u1"}, llm.AssistantMessage{Content: "a1"},

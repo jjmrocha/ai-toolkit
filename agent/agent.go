@@ -1,8 +1,3 @@
-// Package agent drives a multi-turn, tool-calling conversation with an LLM. An
-// [Agent] pairs an [llm.LLM] with a [tools.ToolBox]: it sends user input to the
-// model, runs any tools the model requests, feeds the results back, and repeats
-// until the model returns a final answer. Construct one with [New], begin a
-// conversation with [Agent.StartSession], then drive turns with [Agent.Process].
 package agent
 
 import (
@@ -10,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
@@ -29,18 +25,19 @@ type Agent struct {
 	config           Config
 	llm              modelInterface
 	toolBox          *tools.ToolBox
+	skills           *skills.Collection
 	fb               Feedback
 	messages         []llm.Message
 	compactThreshold int
 	modelInfo        *llm.ModelInfo
 }
 
-// New creates an [Agent] from cfg, an [llm.LLM], and a [tools.ToolBox], using a
-// silent default [Feedback]; install [NewStdoutFeedback] with
-// [Agent.SetFeedback] to print lifecycle events. It returns [ErrNoLLM] when llm
-// is nil and [ErrInvalidThreshold] when Config.CompactionThresholdPercent is
-// outside 0–100; a nil toolBox is treated as an empty one.
-func New(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox) (*Agent, error) {
+// New creates an [Agent] from cfg and an [llm.LLM], using a silent default
+// [Feedback]; install [NewStdoutFeedback] with [Agent.SetFeedback] to print
+// lifecycle events. It returns [ErrNoLLM] when llm is nil and
+// [ErrInvalidThreshold] when Config.CompactionThresholdPercent is outside
+// 0–100.
+func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 	if llm == nil {
 		return nil, ErrNoLLM
 	}
@@ -49,30 +46,56 @@ func New(cfg Config, llm *llm.LLM, toolBox *tools.ToolBox) (*Agent, error) {
 		return nil, ErrInvalidThreshold
 	}
 
+	feedback := &nullFeedback{}
+
+	return &Agent{
+		config: cfg,
+		llm:    llm,
+		fb:     feedback,
+	}, nil
+}
+
+// StartSession begins a new conversation, discarding any previous one.
+// SessionConfig.Prompt becomes the session's system message and is preserved
+// across [Agent.ResetSession]; SessionConfig.ToolBox holds the tools the model
+// may call until the session ends. When SessionConfig.Skills carries at least
+// one skill, its tools are registered in that ToolBox and its catalog is
+// appended to the system message, both until [Agent.Close] or the next session.
+// It must be called before [Agent.Process].
+func (a *Agent) StartSession(cfg SessionConfig) {
+	a.unregisterSkills()
+
+	toolBox := cfg.ToolBox
 	if toolBox == nil {
 		toolBox = tools.NewToolBox()
 	}
 
-	feedback := &nullFeedback{}
+	a.toolBox = toolBox
+	a.skills = cfg.Skills
+	prompt := cfg.Prompt
 
-	return &Agent{
-		config:  cfg,
-		llm:     llm,
-		toolBox: toolBox,
-		fb:      feedback,
-	}, nil
-}
+	if a.skills != nil {
+		if catalog := a.skills.Catalog(); catalog != "" {
+			a.skills.RegisterTools(a.toolBox)
+			prompt += "\n\n" + catalog
+		}
+	}
 
-// StartSession begins a new conversation, discarding any previous one. The
-// prompt becomes the session's system message and is preserved across
-// [Agent.ResetSession]. It must be called before [Agent.Process].
-func (a *Agent) StartSession(prompt string) {
 	a.messages = []llm.Message{
 		llm.SystemMessage{
 			Content: prompt,
 		},
 	}
 	a.fb.SessionStarted()
+}
+
+func (a *Agent) unregisterSkills() {
+	if a.skills == nil || a.toolBox == nil {
+		return
+	}
+
+	a.skills.UnregisterTools(a.toolBox)
+	a.skills = nil
 }
 
 // ResetSession clears the conversation back to its system message, keeping the
@@ -88,9 +111,11 @@ func (a *Agent) ResetSession() error {
 	return nil
 }
 
-// Close ends the agent's session and releases its conversation state. After
-// Close, [Agent.Process] returns [ErrNoSession] until a new session is started.
+// Close ends the agent's session and releases its conversation state, removing
+// any skill tools it registered in the session's [tools.ToolBox]. After Close,
+// [Agent.Process] returns [ErrNoSession] until a new session is started.
 func (a *Agent) Close() {
+	a.unregisterSkills()
 	a.messages = nil
 	a.fb.SessionClosed()
 }

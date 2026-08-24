@@ -20,7 +20,8 @@ go get github.com/jjmrocha/ai-toolkit
 | [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | — |
 | [`tools`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools) | Registers tools and dispatches the model's calls | `llm` |
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
-| [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools` |
+| [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
+| [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
 
 The sections below are a tour. The full API reference lives on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
@@ -166,6 +167,38 @@ restart; a server whose process has died is replaced on the next `Start`.
 `Status` reports which are running and `Close` stops everything. Safe for
 concurrent use.
 
+## `skills`
+
+A skill is a folder with a `SKILL.md` inside: frontmatter carrying a `name` and a
+`description`, and a body holding the instructions. You add the folders a session
+should have — nothing is discovered automatically.
+
+```go
+collection := skills.NewCollection()
+if err := collection.Add("./skills/git-release"); err != nil {
+	log.Fatal(err)
+}
+```
+
+```markdown
+---
+name: git-release
+description: Draft release notes and propose a version bump
+---
+
+Read the merged PRs since the last tag, then ...
+```
+
+Worth knowing:
+
+- Only names and descriptions reach the model up front, as an `<available_skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
+- Two tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, and `skill_load_file` returns one of those files.
+- **`skill_load` and `skill_load_file` are reserved tool names** — available as `skills.LoadToolName` and `skills.LoadFileToolName`. A tool already registered under either is replaced while the session lasts, and removed when it ends.
+- File access is confined to the skill folder with `os.OpenRoot`, so a symlink pointing outside it is neither listed nor readable, and the model is never told the folder's real path.
+- The body and the file list are read once, by `Add`. Editing a skill on disk does not change a collection already built.
+- Frontmatter keys other than `name` and `description` are ignored. Values must be single-line; a folded or literal block scalar is rejected with `ErrInvalidFrontmatter`.
+- The catalog is sorted by name, so the system prompt stays byte-identical across sessions built from the same collection — which is what prompt caching needs.
+
 ## `agent`
 
 Ties `llm` and `tools` into a conversation loop: send user input, run whatever
@@ -173,13 +206,17 @@ tools the model asks for, feed the results back, and repeat until the model
 returns a final answer — so you don't write that loop yourself.
 
 ```go
-agt, err := agent.New(agent.Config{MaxIterations: 10}, model, toolBox)
+agt, err := agent.New(agent.Config{MaxIterations: 10}, model)
 if err != nil {
 	log.Fatal(err)
 }
 defer agt.Close()
 
-agt.StartSession("You are a helpful weather assistant.")
+agt.StartSession(agent.SessionConfig{
+	Prompt:  "You are a helpful weather assistant.",
+	ToolBox: toolBox,
+	Skills:  collection,
+})
 
 resp, err := agt.Process(ctx, "What should I wear in Lisbon today?")
 if err != nil {
@@ -197,6 +234,8 @@ Worth knowing:
 - Once a completed turn crosses `Config.CompactionThresholdPercent` of the model's context window (85% by default), the older turns are summarized into a single message while the system prompt and recent turns are kept verbatim.
 - `Config.MaxIterations` caps the model/tool rounds per `Process` call; zero means no limit, and hitting the cap returns `ErrMaxIterations`.
 - `Response.Metadata` reports token usage, stop reason, per-phase timing, and iteration and tool-call counts.
+- `StartSession` declares everything the model sees: the system prompt, the `ToolBox` it may call, and the `skills.Collection` it may load from. All three last until `Close` or the next `StartSession`, so one agent can run differently equipped sessions.
+- A `SessionConfig.Skills` collection has its tools registered in the session's `ToolBox` and its catalog appended to the prompt; `Close` removes those tools again.
 - Install a `Feedback` sink with `SetFeedback` to observe tool calls and session events; the default is silent.
 
 ## License
