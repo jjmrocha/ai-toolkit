@@ -140,6 +140,14 @@ func (c *Collection) Catalog() string {
 	return strings.Join(lines, "\n")
 }
 
+// Skills returns the names of all skills in the collection, sorted by name.
+func (c *Collection) Skills() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return slices.Sorted(maps.Keys(c.skills))
+}
+
 func (c *Collection) lookup(name string) (skill, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

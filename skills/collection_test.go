@@ -142,6 +142,40 @@ func TestCollectionCatalog(t *testing.T) {
 	})
 }
 
+func TestCollectionSkills(t *testing.T) {
+	t.Run("returns nothing when no skills were added", func(t *testing.T) {
+		// given
+		collection := NewCollection()
+		// when
+		result := collection.Skills()
+		// then
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns the name of the only skill", func(t *testing.T) {
+		// given
+		collection := NewCollection()
+		require.NoError(t, collection.Add(writeSkill(t, validSkill)))
+		// when
+		result := collection.Skills()
+		// then
+		expected := []string{"git-release"}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns the names sorted by name", func(t *testing.T) {
+		// given
+		collection := NewCollection()
+		require.NoError(t, collection.Add(writeSkill(t, "---\nname: beta\ndescription: second\n---\nb\n")))
+		require.NoError(t, collection.Add(writeSkill(t, "---\nname: alpha\ndescription: first\n---\na\n")))
+		// when
+		result := collection.Skills()
+		// then
+		expected := []string{"alpha", "beta"}
+		assert.Equal(t, expected, result)
+	})
+}
+
 func TestCollectionConcurrentUse(t *testing.T) {
 	t.Run("adds and renders from several goroutines", func(t *testing.T) {
 		// given
