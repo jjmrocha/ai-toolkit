@@ -69,7 +69,7 @@ func TestCollectionRegisterTools(t *testing.T) {
 		collection.RegisterTools(toolBox)
 		// then
 		result := toolNames(toolBox)
-		expected := []string{LoadToolName, LoadFileToolName}
+		expected := []string{loadToolName, loadFileToolName}
 		assert.ElementsMatch(t, expected, result)
 	})
 
@@ -119,12 +119,10 @@ func TestLoadTool(t *testing.T) {
 		})
 		collection := collectionWith(t, path)
 		// when
-		result, err := executeTool(t, collection, LoadToolName, map[string]any{"skill_name": "git-release"})
+		result, err := executeTool(t, collection, loadToolName, map[string]any{"skill_name": "git-release"})
 		// then
 		require.NoError(t, err)
 		expected := "<skill name=\"git-release\">\n" +
-			"# Skill: git-release\n" +
-			"\n" +
 			"Do the thing.\n" +
 			"\n" +
 			"Files available via skill_load_file:\n" +
@@ -138,12 +136,10 @@ func TestLoadTool(t *testing.T) {
 		// given
 		collection := collectionWith(t, writeSkill(t, validSkill))
 		// when
-		result, err := executeTool(t, collection, LoadToolName, map[string]any{"skill_name": "git-release"})
+		result, err := executeTool(t, collection, loadToolName, map[string]any{"skill_name": "git-release"})
 		// then
 		require.NoError(t, err)
 		expected := "<skill name=\"git-release\">\n" +
-			"# Skill: git-release\n" +
-			"\n" +
 			"Do the thing.\n" +
 			"</skill>"
 		assert.Equal(t, expected, result)
@@ -153,7 +149,7 @@ func TestLoadTool(t *testing.T) {
 		// given
 		collection := collectionWith(t, writeSkill(t, validSkill))
 		// when
-		_, err := executeTool(t, collection, LoadToolName, map[string]any{"skill_name": "nope"})
+		_, err := executeTool(t, collection, loadToolName, map[string]any{"skill_name": "nope"})
 		// then
 		require.ErrorIs(t, err, ErrSkillNotFound)
 		assert.ErrorContains(t, err, "git-release")
@@ -163,7 +159,7 @@ func TestLoadTool(t *testing.T) {
 		// given
 		collection := collectionWith(t, writeSkill(t, validSkill))
 		// when
-		_, err := executeTool(t, collection, LoadToolName, map[string]any{})
+		_, err := executeTool(t, collection, loadToolName, map[string]any{})
 		// then
 		assert.ErrorIs(t, err, tools.ErrFieldNotFound)
 	})
@@ -175,7 +171,7 @@ func TestLoadFileTool(t *testing.T) {
 		path := writeSkillWithFiles(t, validSkill, map[string]string{"references/notes.md": "the notes"})
 		collection := collectionWith(t, path)
 		// when
-		result, err := executeTool(t, collection, LoadFileToolName, map[string]any{
+		result, err := executeTool(t, collection, loadFileToolName, map[string]any{
 			"skill_name": "git-release",
 			"path":       "references/notes.md",
 		})
@@ -189,7 +185,7 @@ func TestLoadFileTool(t *testing.T) {
 		path := writeSkillWithFiles(t, validSkill, map[string]string{"references/notes.md": "the notes"})
 		collection := collectionWith(t, path)
 		// when
-		_, err := executeTool(t, collection, LoadFileToolName, map[string]any{
+		_, err := executeTool(t, collection, loadFileToolName, map[string]any{
 			"skill_name": "git-release",
 			"path":       "references/missing.md",
 		})
@@ -202,12 +198,30 @@ func TestLoadFileTool(t *testing.T) {
 		// given
 		collection := collectionWith(t, writeSkill(t, validSkill))
 		// when
-		_, err := executeTool(t, collection, LoadFileToolName, map[string]any{
+		_, err := executeTool(t, collection, loadFileToolName, map[string]any{
 			"skill_name": "nope",
 			"path":       "whatever.md",
 		})
 		// then
 		assert.ErrorIs(t, err, ErrSkillNotFound)
+	})
+
+	t.Run("reads a relative symlink pointing inside the skill folder", func(t *testing.T) {
+		// given
+		path := writeSkillWithFiles(t, validSkill, map[string]string{"references/notes.md": "the notes"})
+		require.NoError(t, os.Symlink("references/notes.md", filepath.Join(path, "shortcut.md")))
+		collection := collectionWith(t, path)
+		// when
+		listing, listErr := executeTool(t, collection, loadToolName, map[string]any{"skill_name": "git-release"})
+		result, readErr := executeTool(t, collection, loadFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "shortcut.md",
+		})
+		// then
+		require.NoError(t, listErr)
+		require.NoError(t, readErr)
+		assert.Contains(t, listing, "shortcut.md")
+		assert.Equal(t, "the notes", result)
 	})
 
 	t.Run("does not expose a symlink pointing outside the skill folder", func(t *testing.T) {
@@ -218,8 +232,8 @@ func TestLoadFileTool(t *testing.T) {
 		require.NoError(t, os.Symlink(secret, filepath.Join(path, "escape.txt")))
 		collection := collectionWith(t, path)
 		// when
-		listing, listErr := executeTool(t, collection, LoadToolName, map[string]any{"skill_name": "git-release"})
-		_, readErr := executeTool(t, collection, LoadFileToolName, map[string]any{
+		listing, listErr := executeTool(t, collection, loadToolName, map[string]any{"skill_name": "git-release"})
+		_, readErr := executeTool(t, collection, loadFileToolName, map[string]any{
 			"skill_name": "git-release",
 			"path":       "escape.txt",
 		})

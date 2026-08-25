@@ -7,9 +7,9 @@
 // Only names and descriptions reach the model up front, as the catalog an agent
 // appends to its system message (see [Collection.Catalog]). The bodies stay out
 // of the conversation until the model asks for one, through the two tools
-// [Collection.RegisterTools] adds to a ToolBox: [LoadToolName] returns a skill's
+// [Collection.RegisterTools] adds to a ToolBox: [loadToolName] returns a skill's
 // instructions together with the list of files that skill ships, and
-// [LoadFileToolName] returns one of those files.
+// [loadFileToolName] returns one of those files.
 //
 // Nothing is discovered automatically. A skill reaches a model only because the
 // caller added its folder.

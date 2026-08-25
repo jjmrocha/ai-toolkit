@@ -86,6 +86,7 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 			Content: prompt,
 		},
 	}
+
 	a.fb.SessionStarted()
 }
 
@@ -116,6 +117,7 @@ func (a *Agent) ResetSession() error {
 // [Agent.Process] returns [ErrNoSession] until a new session is started.
 func (a *Agent) Close() {
 	a.unregisterSkills()
+	a.toolBox = nil
 	a.messages = nil
 	a.fb.SessionClosed()
 }

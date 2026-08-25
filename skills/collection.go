@@ -11,12 +11,10 @@ import (
 	"sync"
 )
 
-// LoadToolName is the name of the tool that loads a skill's instructions. It is
-// reserved: a [tools.ToolBox] handed to a [Collection] must not already hold a
-// tool under this name.
-const LoadToolName = "skill_load"
-
-const skillFile = "SKILL.md"
+const (
+	loadToolName = "skill_load"
+	skillFile    = "SKILL.md"
+)
 
 type skill struct {
 	name        string
@@ -124,9 +122,6 @@ func (c *Collection) Catalog() string {
 	}
 
 	lines := []string{
-		"Skills provide specialized instructions and workflows for specific tasks.",
-		"Use the " + LoadToolName + " tool to load a skill when a task matches its description.",
-		"",
 		"<available_skills>",
 	}
 
@@ -166,7 +161,8 @@ func listFiles(fsys fs.FS) ([]string, error) {
 			return err
 		}
 
-		if !entry.Type().IsRegular() || path == skillFile {
+		info, err := fs.Stat(fsys, path)
+		if err != nil || !info.Mode().IsRegular() || path == skillFile {
 			return nil
 		}
 

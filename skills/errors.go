@@ -29,11 +29,11 @@ var (
 	// same name has already been added.
 	ErrDuplicateSkill = errors.New("skill already added")
 
-	// ErrSkillNotFound is returned by the [LoadToolName] and [LoadFileToolName]
+	// ErrSkillNotFound is returned by the [loadToolName] and [loadFileToolName]
 	// tools when no skill in the collection matches the requested name.
 	ErrSkillNotFound = errors.New("skill not found")
 
-	// ErrFileNotFound is returned by the [LoadFileToolName] tool when the skill
+	// ErrFileNotFound is returned by the [loadFileToolName] tool when the skill
 	// ships no file under the requested path.
 	ErrFileNotFound = errors.New("file not found")
 )

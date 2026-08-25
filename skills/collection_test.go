@@ -128,10 +128,7 @@ func TestCollectionCatalog(t *testing.T) {
 		// when
 		result := collection.Catalog()
 		// then
-		expected := "Skills provide specialized instructions and workflows for specific tasks.\n" +
-			"Use the skill_load tool to load a skill when a task matches its description.\n" +
-			"\n" +
-			"<available_skills>\n" +
+		expected := "<available_skills>\n" +
 			"  <skill>\n" +
 			"    <name>alpha</name>\n" +
 			"    <description>first</description>\n" +

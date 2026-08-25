@@ -12,23 +12,20 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// LoadFileToolName is the name of the tool that reads one file from a skill's
-// folder. It is reserved on the same terms as [LoadToolName].
-const LoadFileToolName = "skill_load_file"
-
 const (
-	skillNameArg = "skill_name"
-	pathArg      = "path"
+	loadFileToolName = "skill_load_file"
+	skillNameArg     = "skill_name"
+	pathArg          = "path"
 )
 
-// RegisterTools adds the collection's two tools — [LoadToolName] and
-// [LoadFileToolName] — to tb, so the model can load a skill's instructions and
+// RegisterTools adds the collection's two tools — [loadToolName] and
+// [loadFileToolName] — to tb, so the model can load a skill's instructions and
 // read the files that skill ships. Both names are reserved: a tool already
 // registered under either is replaced. Remove them again with
 // [Collection.UnregisterTools].
 func (c *Collection) RegisterTools(tb *tools.ToolBox) {
 	loadTool := llm.Tool{
-		Name: LoadToolName,
+		Name: loadToolName,
 		Description: "Load a specialized skill when the task at hand matches one of the available skills. " +
 			"The output carries the skill's instructions and the list of files that skill ships.",
 		Schema: tools.NewObjectBuilder().
@@ -38,9 +35,9 @@ func (c *Collection) RegisterTools(tb *tools.ToolBox) {
 	_ = tb.Add(loadTool, c.loadSkill)
 
 	loadFileTool := llm.Tool{
-		Name: LoadFileToolName,
+		Name: loadFileToolName,
 		Description: "Read one of the files a skill ships, using a path from the file list returned by " +
-			LoadToolName + ".",
+			loadToolName + ".",
 		Schema: tools.NewObjectBuilder().
 			String(skillNameArg, "The name of the skill the file belongs to", true).
 			String(pathArg, "A path from the skill's file list", true).
@@ -52,8 +49,8 @@ func (c *Collection) RegisterTools(tb *tools.ToolBox) {
 // UnregisterTools removes the collection's two tools from tb, leaving every
 // other tool in place. It is a no-op when they are not registered.
 func (c *Collection) UnregisterTools(tb *tools.ToolBox) {
-	tb.Remove(LoadToolName)
-	tb.Remove(LoadFileToolName)
+	tb.Remove(loadToolName)
+	tb.Remove(loadFileToolName)
 }
 
 func (c *Collection) loadSkill(_ context.Context, args map[string]any) (string, error) {
@@ -69,13 +66,11 @@ func (c *Collection) loadSkill(_ context.Context, args map[string]any) (string, 
 
 	lines := []string{
 		`<skill name="` + s.name + `">`,
-		"# Skill: " + s.name,
-		"",
 		strings.TrimSpace(s.body),
 	}
 
 	if len(s.files) > 0 {
-		lines = append(lines, "", "Files available via "+LoadFileToolName+":")
+		lines = append(lines, "", "Files available via "+loadFileToolName+":")
 
 		for _, file := range s.files {
 			lines = append(lines, "  "+file)
