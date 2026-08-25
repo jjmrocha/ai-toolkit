@@ -193,7 +193,8 @@ Worth knowing:
 
 - Only names and descriptions reach the model up front, as an `<available_skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
 - Two tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, and `skill_load_file` returns one of those files.
-- **`skill_load` and `skill_load_file` are reserved tool names** — available as `skills.LoadToolName` and `skills.LoadFileToolName`. A tool already registered under either is replaced while the session lasts, and removed when it ends.
+- **`skill_load` and `skill_load_file` are reserved tool names.** A tool already registered under either is replaced while the session lasts, and removed when it ends.
+- An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the two tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available_skills>` block, and `Skills` lists the names added so far, sorted.
 - File access is confined to the skill folder with `os.OpenRoot`, so a symlink pointing outside it is neither listed nor readable, and the model is never told the folder's real path.
 - The body and the file list are read once, by `Add`. Editing a skill on disk does not change a collection already built.
 - Frontmatter keys other than `name` and `description` are ignored. Values must be single-line; a folded or literal block scalar is rejected with `ErrInvalidFrontmatter`.
