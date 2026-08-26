@@ -1,6 +1,10 @@
 package mcp
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/jjmrocha/ai-toolkit/helper"
+)
 
 // Errors returned by the mcp package.
 var (
@@ -30,9 +34,9 @@ var (
 	// ErrProcessClosed is returned by any request to the server — the
 	// [NewClient] handshake, [Client.RegisterTools], or a registered tool's
 	// handler — when the server process has already stopped.
-	ErrProcessClosed = errors.New("process closed")
+	ErrProcessClosed = helper.ErrProcessClosed
 	// ErrInvalidMessage is returned by any request to the server — the
 	// [NewClient] handshake, [Client.RegisterTools], or a registered tool's
 	// handler — when the message cannot be framed for the wire as a single line.
-	ErrInvalidMessage = errors.New("invalid message")
+	ErrInvalidMessage = helper.ErrInvalidMessage
 )

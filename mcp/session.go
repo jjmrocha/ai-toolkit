@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/jjmrocha/ai-toolkit/helper"
 )
 
 const (
@@ -15,9 +17,11 @@ const (
 	requestTimeout = 30 * time.Second
 )
 
+const maxMessageBytes = 1024 * 1024 // 1 MiB
+
 type transport interface {
 	Write(ctx context.Context, msg string) error
-	Reader() <-chan string
+	Output() <-chan string
 	Running() bool
 	Close()
 }
@@ -29,10 +33,16 @@ type session struct {
 }
 
 func newSession(ctx context.Context, command string, args []string, onDisconnect func()) (*session, error) {
-	t, err := newStdioTransport(command, args, func(error) {
-		if onDisconnect != nil {
-			onDisconnect()
-		}
+	t, err := helper.NewProcess(helper.ProcessConfig{
+		Path:         command,
+		Args:         args,
+		AllowInput:   true,
+		MaxLineBytes: maxMessageBytes,
+		OnExit: func(error) {
+			if onDisconnect != nil {
+				onDisconnect()
+			}
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -55,7 +65,11 @@ func newSession(ctx context.Context, command string, args []string, onDisconnect
 }
 
 func (s *session) messageProcessor() {
-	for line := range s.transport.Reader() {
+	for line := range s.transport.Output() {
+		if line == "" {
+			continue
+		}
+
 		for _, message := range decodeMessages(line) {
 			s.handleMessage(message)
 		}

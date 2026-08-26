@@ -291,7 +291,7 @@ func TestStartSession(t *testing.T) {
 		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb, Skills: skillCollection(t)})
 		// then
 		result := toolNames(tb)
-		expected := []string{"skill_load", "skill_load_file"}
+		expected := []string{"skill_load", "skill_load_file", "skill_execute_file"}
 		assert.ElementsMatch(t, expected, result)
 	})
 
@@ -311,7 +311,7 @@ func TestStartSession(t *testing.T) {
 		for _, tool := range fake.toolLists[0] {
 			names = append(names, tool.Name)
 		}
-		assert.ElementsMatch(t, []string{"skill_load", "skill_load_file"}, names)
+		assert.ElementsMatch(t, []string{"skill_load", "skill_load_file", "skill_execute_file"}, names)
 	})
 
 	t.Run("unregisters the previous session's skills", func(t *testing.T) {

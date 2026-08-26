@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
@@ -26,6 +27,14 @@ func writeSkillWithFiles(t *testing.T, content string, files map[string]string) 
 	return path
 }
 
+func writeExecutable(t *testing.T, path string, name string, script string) {
+	t.Helper()
+
+	full := filepath.Join(path, name)
+	require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o700))
+	require.NoError(t, os.WriteFile(full, []byte(script), 0o700))
+}
+
 func collectionWith(t *testing.T, paths ...string) *Collection {
 	t.Helper()
 
@@ -40,10 +49,16 @@ func collectionWith(t *testing.T, paths ...string) *Collection {
 func executeTool(t *testing.T, collection *Collection, name string, args map[string]any) (string, error) {
 	t.Helper()
 
+	return executeToolContext(t, t.Context(), collection, name, args)
+}
+
+func executeToolContext(t *testing.T, ctx context.Context, collection *Collection, name string, args map[string]any) (string, error) {
+	t.Helper()
+
 	toolBox := tools.NewToolBox()
 	collection.RegisterTools(toolBox)
 
-	message, err := toolBox.Execute(t.Context(), llm.ToolCall{ID: "c1", Name: name, Arguments: args})
+	message, err := toolBox.Execute(ctx, llm.ToolCall{ID: "c1", Name: name, Arguments: args})
 	if err != nil {
 		return "", err
 	}
@@ -61,7 +76,7 @@ func toolNames(toolBox *tools.ToolBox) []string {
 }
 
 func TestCollectionRegisterTools(t *testing.T) {
-	t.Run("registers the load and load-file tools", func(t *testing.T) {
+	t.Run("registers the load, load-file and execute-file tools", func(t *testing.T) {
 		// given
 		collection := collectionWith(t, writeSkill(t, validSkill))
 		toolBox := tools.NewToolBox()
@@ -69,7 +84,7 @@ func TestCollectionRegisterTools(t *testing.T) {
 		collection.RegisterTools(toolBox)
 		// then
 		result := toolNames(toolBox)
-		expected := []string{loadToolName, loadFileToolName}
+		expected := []string{loadToolName, loadFileToolName, executeFileToolName}
 		assert.ElementsMatch(t, expected, result)
 	})
 
@@ -86,7 +101,7 @@ func TestCollectionRegisterTools(t *testing.T) {
 }
 
 func TestCollectionUnregisterTools(t *testing.T) {
-	t.Run("removes the load and load-file tools", func(t *testing.T) {
+	t.Run("removes the load, load-file and execute-file tools", func(t *testing.T) {
 		// given
 		collection := collectionWith(t, writeSkill(t, validSkill))
 		toolBox := tools.NewToolBox()
@@ -224,6 +239,22 @@ func TestLoadFileTool(t *testing.T) {
 		assert.Equal(t, "the notes", result)
 	})
 
+	t.Run("never names the skill folder when it is gone", func(t *testing.T) {
+		// given
+		path := writeSkillWithFiles(t, validSkill, map[string]string{"notes.md": "the notes"})
+		collection := collectionWith(t, path)
+		require.NoError(t, os.RemoveAll(path))
+		// when
+		_, err := executeTool(t, collection, loadFileToolName, map[string]any{
+			"skill_name": validSkillName,
+			"path":       "notes.md",
+		})
+		// then
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "no such file or directory")
+		assert.NotContains(t, err.Error(), path)
+	})
+
 	t.Run("does not expose a symlink pointing outside the skill folder", func(t *testing.T) {
 		// given
 		secret := filepath.Join(t.TempDir(), "secret.txt")
@@ -241,5 +272,253 @@ func TestLoadFileTool(t *testing.T) {
 		require.NoError(t, listErr)
 		assert.NotContains(t, listing, "escape.txt")
 		assert.ErrorIs(t, readErr, ErrFileNotFound)
+	})
+}
+
+func TestExecuteFileTool(t *testing.T) {
+	t.Run("returns the output and the exit status", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "scripts/hello.sh", "#!/bin/sh\necho hello\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "scripts/hello.sh",
+		})
+		// then
+		require.NoError(t, err)
+		expected := "exit status: 0\n<output>\nhello\n</output>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("passes the arguments in order", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "scripts/echo.sh", "#!/bin/sh\nfor a in \"$@\"; do echo \"[$a]\"; done\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "scripts/echo.sh",
+			"args":       []any{"one", "two three", "four"},
+		})
+		// then
+		require.NoError(t, err)
+		expected := "exit status: 0\n<output>\n[one]\n[two three]\n[four]\n</output>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("captures stdout and stderr in the order they were written", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "run.sh", "#!/bin/sh\necho out1\necho err1 >&2\necho out2\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "run.sh",
+		})
+		// then
+		require.NoError(t, err)
+		expected := "exit status: 0\n<output>\nout1\nerr1\nout2\n</output>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("runs in the skill folder", func(t *testing.T) {
+		// given
+		path := writeSkillWithFiles(t, validSkill, map[string]string{"data.txt": "payload"})
+		writeExecutable(t, path, "run.sh", "#!/bin/sh\ncat data.txt\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "run.sh",
+		})
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "payload")
+	})
+
+	t.Run("reports a non-zero exit without failing", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "run.sh", "#!/bin/sh\necho broken >&2\nexit 3\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "run.sh",
+		})
+		// then
+		require.NoError(t, err)
+		expected := "exit status: 3\n<output>\nbroken\n</output>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("truncates output past the cap", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "flood.sh", "#!/bin/sh\nawk 'BEGIN{for(i=0;i<1600;i++) printf \"%1000s\\n\", \"x\"}'\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "flood.sh",
+		})
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, `<output truncated="true">`)
+		assert.Less(t, len(result), maxOutputBytes+1024)
+	})
+
+	t.Run("rejects a file it may not run", func(t *testing.T) {
+		testCases := []struct {
+			name     string
+			setup    func(t *testing.T) (*Collection, string)
+			file     string
+			expected error
+		}{
+			{
+				name: "unknown skill",
+				setup: func(t *testing.T) (*Collection, string) {
+					return collectionWith(t, writeSkill(t, validSkill)), "nope"
+				},
+				file:     "run.sh",
+				expected: ErrSkillNotFound,
+			},
+			{
+				name: "path outside the skill's file list",
+				setup: func(t *testing.T) (*Collection, string) {
+					path := writeSkill(t, validSkill)
+					writeExecutable(t, path, "run.sh", "#!/bin/sh\necho hello\n")
+
+					return collectionWith(t, path), validSkillName
+				},
+				file:     "scripts/other.sh",
+				expected: ErrFileNotFound,
+			},
+			{
+				name: "path escaping the skill folder",
+				setup: func(t *testing.T) (*Collection, string) {
+					return collectionWith(t, writeSkill(t, validSkill)), validSkillName
+				},
+				file:     "../../../bin/sh",
+				expected: ErrFileNotFound,
+			},
+			{
+				name: "symlink pointing outside the skill folder",
+				setup: func(t *testing.T) (*Collection, string) {
+					target := filepath.Join(t.TempDir(), "outside.sh")
+					require.NoError(t, os.WriteFile(target, []byte("#!/bin/sh\necho leaked\n"), 0o700))
+					path := writeSkill(t, validSkill)
+					require.NoError(t, os.Symlink(target, filepath.Join(path, "escape.sh")))
+
+					return collectionWith(t, path), validSkillName
+				},
+				file:     "escape.sh",
+				expected: ErrFileNotFound,
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				// given
+				collection, skillName := testCase.setup(t)
+				// when
+				_, err := executeTool(t, collection, executeFileToolName, map[string]any{
+					"skill_name": skillName,
+					"path":       testCase.file,
+				})
+				// then
+				assert.ErrorIs(t, err, testCase.expected)
+			})
+		}
+	})
+
+	t.Run("fails to run a file without the execute bit", func(t *testing.T) {
+		// given
+		path := writeSkillWithFiles(t, validSkill, map[string]string{"run.sh": "#!/bin/sh\necho hello\n"})
+		collection := collectionWith(t, path)
+		// when
+		_, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "run.sh",
+		})
+		// then
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrFileNotFound)
+		assert.ErrorContains(t, err, "permission denied")
+		assert.NotContains(t, err.Error(), path)
+	})
+
+	t.Run("stops when the context is done", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "sleep.sh", "#!/bin/sh\nsleep 30\n")
+		collection := collectionWith(t, path)
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		defer cancel()
+		// when
+		_, err := executeToolContext(t, ctx, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "sleep.sh",
+		})
+		// then
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("runs a skill added under a relative path", func(t *testing.T) {
+		// given
+		base := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(base, "myskill"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(base, "myskill", skillFile), []byte(validSkill), 0o600))
+		writeExecutable(t, filepath.Join(base, "myskill"), "run.sh", "#!/bin/sh\necho hello\n")
+		t.Chdir(base)
+		collection := NewCollection()
+		require.NoError(t, collection.Add("myskill"))
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": validSkillName,
+			"path":       "run.sh",
+		})
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "exit status: 0\n<output>\nhello\n</output>", result)
+	})
+
+	t.Run("runs a skill added under a relative path after the process moves", func(t *testing.T) {
+		// given
+		base := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(base, "myskill"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(base, "myskill", skillFile), []byte(validSkill), 0o600))
+		writeExecutable(t, filepath.Join(base, "myskill"), "run.sh", "#!/bin/sh\necho hello\n")
+		t.Chdir(base)
+		collection := NewCollection()
+		require.NoError(t, collection.Add("myskill"))
+		t.Chdir(t.TempDir())
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": validSkillName,
+			"path":       "run.sh",
+		})
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "exit status: 0\n<output>\nhello\n</output>", result)
+	})
+
+	t.Run("never names the skill folder", func(t *testing.T) {
+		// given
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "run.sh", "#!/bin/sh\necho hello\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "run.sh",
+		})
+		// then
+		require.NoError(t, err)
+		assert.NotContains(t, result, path)
 	})
 }

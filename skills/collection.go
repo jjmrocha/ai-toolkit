@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -20,7 +21,7 @@ type skill struct {
 	name        string
 	description string
 	body        string
-	path        string
+	skillPath   string
 	files       []string
 }
 
@@ -43,7 +44,9 @@ func NewCollection() *Collection {
 
 // Add reads path/SKILL.md and registers the skill it describes under the name
 // from its frontmatter. The rest of the folder is listed so the model can read
-// those files later, and the listing is taken once, here.
+// those files later, and the listing is taken once, here. A relative path is
+// resolved against the working directory as it stands now, so a later chdir
+// does not move the skill.
 //
 // It returns [ErrSkillFolderNotFound] when path is not a directory,
 // [ErrNoSkillFile] when the folder holds no SKILL.md, [ErrInvalidFrontmatter]
@@ -51,6 +54,11 @@ func NewCollection() *Collection {
 // [ErrDescriptionRequired] when the frontmatter omits either, and
 // [ErrDuplicateSkill] when the name is already taken.
 func (c *Collection) Add(path string) error {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
+	}
+
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
@@ -101,7 +109,7 @@ func (c *Collection) Add(path string) error {
 		name:        name,
 		description: description,
 		body:        body,
-		path:        path,
+		skillPath:   path,
 		files:       files,
 	}
 	c.skills[name] = s

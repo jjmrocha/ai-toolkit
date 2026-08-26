@@ -13,6 +13,8 @@ import (
 
 const validSkill = "---\nname: git-release\ndescription: Draft release notes\n---\n\nDo the thing.\n"
 
+const validSkillName = "git-release"
+
 func writeSkill(t *testing.T, content string) string {
 	t.Helper()
 

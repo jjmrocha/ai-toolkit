@@ -109,7 +109,7 @@ func (f *fakeTransport) replyNext() {
 	f.lines <- line
 }
 
-func (f *fakeTransport) Reader() <-chan string { return f.lines }
+func (f *fakeTransport) Output() <-chan string { return f.lines }
 
 func (f *fakeTransport) Running() bool { return !f.closed.Load() }
 
@@ -175,6 +175,26 @@ func TestSessionMessageProcessor(t *testing.T) {
 		r1 := <-first
 		require.NoError(t, r1.err)
 		assert.Equal(t, map[string]any{"which": "first"}, r1.result)
+	})
+
+	t.Run("ignores a blank line between messages", func(t *testing.T) {
+		// given
+		ft := newFakeTransport()
+		s := newTestSession(ft)
+
+		reply := make(chan map[string]any, 1)
+
+		go func() {
+			result, _ := s.Request(t.Context(), "first", nil)
+			reply <- result
+		}()
+		require.Equal(t, float64(1), ft.nextSent(t)["id"])
+		// when: the server writes a blank line before answering
+		ft.send("")
+		ft.send(`{"jsonrpc":"2.0","id":1,"result":{"which":"first"}}`)
+		// then
+		expected := map[string]any{"which": "first"}
+		assert.Equal(t, expected, <-reply)
 	})
 
 	t.Run("resolves every response in a batched reply", func(t *testing.T) {

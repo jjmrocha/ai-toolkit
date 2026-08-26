@@ -18,9 +18,10 @@ go get github.com/jjmrocha/ai-toolkit
 | Package | What it does | Builds on |
 | --- | --- | --- |
 | [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | — |
+| [`helper`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/helper) | Building blocks shared across the toolkit | — |
 | [`tools`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools) | Registers tools and dispatches the model's calls | `llm` |
-| [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
-| [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
+| [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `helper`, `llm`, `tools` |
+| [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `helper`, `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
 
 The sections below are a tour. The full API reference lives on
@@ -59,6 +60,72 @@ Worth knowing:
 - Every reply carries `Stats` — including prompt-cache reads and writes — and the provider's native `StopReason`.
 - `Config.Effort` maps one knob, `EffortOff` through `EffortMax`, onto Anthropic's thinking-token budget and OpenRouter/Ollama's reasoning level.
 - `Config.Models` lists what `ChangeModel` may switch to mid-conversation; the active model is always included.
+
+## `helper`
+
+Pieces the rest of the toolkit shares, and that are useful on their own.
+
+### `Process`
+
+Runs a child process and delivers its output one line at a time. It owns the child's
+whole life: start, read, write to stdin, and a shutdown that tries SIGTERM before
+SIGKILL and waits for the process to be reaped.
+
+```go
+process, err := helper.NewProcess(helper.ProcessConfig{
+	Path:          "./report.sh",
+	Args:          []string{"--since", "monday"},
+	Dir:           "/srv/reports",
+	IncludeStderr: true,
+	OnExit:        func(err error) { log.Println("finished:", err) },
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+defer process.Close()
+
+for line := range process.Output() {
+	fmt.Println(line)
+}
+```
+
+Worth knowing:
+
+- `IncludeStderr` decides what `Output` carries. Unset, it carries stdout alone and stderr is discarded — what a process speaking a line protocol over stdout wants. Set, stdout and stderr share a single pipe, so lines arrive in the order the process wrote them — what capturing a script's output wants.
+- Sharing one pipe is what makes the ordering real rather than reconstructed: the kernel interleaves the two streams. Two separate pipes could not put them back in order afterwards.
+- Blank lines are delivered like any other line.
+- `MaxLineBytes` bounds a single line; a longer one ends the stream, `Output` closes, and the process is stopped. Left zero there is no limit, so a process that never writes a newline grows the read buffer until memory runs out.
+- `OnExit` is called once with the result of waiting on the process. An exit status is recovered from it with `errors.As` on an `*exec.ExitError`.
+- `AllowInput` decides whether the process gets a stdin at all. Without it the process reads from the null device, so anything waiting on input sees end of input at once rather than hanging.
+- `Write` sends one line to the process's stdin. A message containing a newline is rejected with `ErrInvalidMessage`, writing to a process built without `AllowInput` returns `ErrInputNotAllowed`, and writing to a process that has gone returns `ErrProcessClosed`.
+- `Close` is safe to call more than once, and must be called even when the process exits on its own.
+- `Path` and `Args` are run without a shell, so they are trusted input: the process runs with the same authority as the program that started it.
+
+### `Run`
+
+Runs a command to completion and hands back what it wrote and the status it exited with.
+
+```go
+result, err := helper.Run(ctx, helper.RunConfig{
+	Path: "./report.sh",
+	Args: []string{"--since", "monday"},
+	Dir:  "/srv/reports",
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Println(result.ExitCode, strings.Join(result.Output, "\n"))
+```
+
+Worth knowing:
+
+- A non-zero exit status is part of the `Result`, not an error. `Run` returns an error only when the command could not be started, when `ctx` ended first, or when waiting on it failed for some other reason.
+- `ctx` cancels the run: the command is sent SIGTERM, then SIGKILL if it does not go.
+- The command's stderr is always merged into the output, in the order it was written. Reach for `NewProcess` to read stdout on its own.
+- `MaxOutputBytes` is how much output `Run` collects before stopping the command, counting each line plus its newline. The line that passes the limit is kept, so the result can run over by that much. `Truncated` is set. Left zero, everything is collected and only `ctx` bounds the run.
+- A stopped command's `ExitCode` describes the kill, not a choice it made — unless it had already finished, in which case its own status survives.
 
 ## `tools`
 
@@ -192,10 +259,15 @@ Read the merged PRs since the last tag, then ...
 Worth knowing:
 
 - Only names and descriptions reach the model up front, as an `<available_skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
-- Two tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, and `skill_load_file` returns one of those files.
-- **`skill_load` and `skill_load_file` are reserved tool names.** A tool already registered under either is replaced while the session lasts, and removed when it ends.
-- An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the two tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available_skills>` block, and `Skills` lists the names added so far, sorted.
+- Three tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, `skill_load_file` returns one of those files, and `skill_execute_file` runs one of them.
+- **`skill_load`, `skill_load_file` and `skill_execute_file` are reserved tool names.** A tool already registered under any of them is replaced while the session lasts, and removed when it ends.
+- An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the three tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available_skills>` block, and `Skills` lists the names added so far, sorted.
 - File access is confined to the skill folder with `os.OpenRoot`, so a symlink pointing outside it is neither listed nor readable, and the model is never told the folder's real path.
+- `skill_execute_file` runs the file directly, from the skill's folder, with the arguments the model supplies and no shell. The file needs its own execute bit and shebang; the package never changes file modes, and it infers no interpreter from the extension. A file the skill does not ship cannot be run.
+- A non-zero exit is a result, not a failure: the tool returns the process's combined output and its exit status, and reports an error only when the process could not run at all.
+- Output is collected up to 1 MiB, after which the script is stopped and the result is marked truncated. A stopped script's exit status describes the kill rather than a choice it made.
+- The script gets no stdin, so one that reads input sees end of input at once instead of waiting.
+- Execution honours the context passed to `Process` and nothing else — there is no built-in timeout. It also leaves the `os.OpenRoot` sandbox behind: the process runs with the same authority as the program that started it and inherits its environment, credentials included, so add only folders you trust, exactly as with an `mcp` server command.
 - The body and the file list are read once, by `Add`. Editing a skill on disk does not change a collection already built.
 - Frontmatter keys other than `name` and `description` are ignored. Values must be single-line; a folded or literal block scalar is rejected with `ErrInvalidFrontmatter`.
 - The catalog is sorted by name, so the system prompt stays byte-identical across sessions built from the same collection — which is what prompt caching needs.

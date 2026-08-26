@@ -6,10 +6,16 @@
 //
 // Only names and descriptions reach the model up front, as the catalog an agent
 // appends to its system message (see [Collection.Catalog]). The bodies stay out
-// of the conversation until the model asks for one, through the two tools
+// of the conversation until the model asks for one, through the three tools
 // [Collection.RegisterTools] adds to a ToolBox: [loadToolName] returns a skill's
-// instructions together with the list of files that skill ships, and
-// [loadFileToolName] returns one of those files.
+// instructions together with the list of files that skill ships,
+// [loadFileToolName] returns one of those files, and [executeFileToolName] runs
+// one of them and returns its output.
+//
+// A skill folder is trusted input, the way an mcp server command is: whatever
+// [executeFileToolName] runs does so with the authority of the program that
+// started it, and inherits its environment, including any credentials held
+// there.
 //
 // Nothing is discovered automatically. A skill reaches a model only because the
 // caller added its folder.
