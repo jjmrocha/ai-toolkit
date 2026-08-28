@@ -1,12 +1,13 @@
 package llm
 
 type anthropicChatRequest struct {
-	Model     string                 `json:"model"`
-	MaxTokens int                    `json:"max_tokens"`
-	System    []anthropicSystemBlock `json:"system,omitempty"`
-	Messages  []anthropicMessage     `json:"messages"`
-	Tools     []anthropicTool        `json:"tools,omitempty"`
-	Thinking  *anthropicThinking     `json:"thinking,omitempty"`
+	Model        string                 `json:"model"`
+	MaxTokens    int                    `json:"max_tokens"`
+	System       []anthropicSystemBlock `json:"system,omitempty"`
+	Messages     []anthropicMessage     `json:"messages"`
+	Tools        []anthropicTool        `json:"tools,omitempty"`
+	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
 }
 
 type anthropicSystemBlock struct {
@@ -20,8 +21,11 @@ type anthropicCacheControl struct {
 }
 
 type anthropicThinking struct {
-	Type         string `json:"type"`
-	BudgetTokens int    `json:"budget_tokens"`
+	Type string `json:"type"`
+}
+
+type anthropicOutputConfig struct {
+	Effort string `json:"effort,omitempty"`
 }
 
 type anthropicMessage struct {

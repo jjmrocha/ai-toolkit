@@ -58,7 +58,7 @@ Worth knowing:
 
 - Ollama needs no API key.
 - Every reply carries `Stats` — including prompt-cache reads and writes — and the provider's native `StopReason`.
-- `Config.Effort` maps one knob, `EffortOff` through `EffortMax`, onto Anthropic's thinking-token budget and OpenRouter/Ollama's reasoning level.
+- `Config.Effort` maps one knob, `EffortOff` through `EffortMax`, onto Anthropic's adaptive-thinking effort level and OpenRouter/Ollama's reasoning level. The values are relative rungs, not provider literals, so the same `Effort` reaches each backend as whatever that backend calls it.
 - `Config.Models` lists what `ChangeModel` may switch to mid-conversation; the active model is always included.
 
 ## `helper`

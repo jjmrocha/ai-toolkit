@@ -1,13 +1,16 @@
 package llm
 
 // Effort controls how much reasoning ("thinking") the model does before it
-// answers. It maps onto each provider's native reasoning control: an
-// extended-thinking token budget for Anthropic and a reasoning-effort level for
-// OpenRouter and Ollama. An empty Effort is treated as [EffortOff] by [New].
+// answers. Its values are relative rungs, not provider literals: each provider
+// maps them onto its own scale, so the same Effort reaches the wire as
+// different values on different backends. An empty Effort is treated as
+// [EffortOff] by [New].
 type Effort string
 
 const (
-	// EffortOff disables reasoning; the model answers directly.
+	// EffortOff asks for as little reasoning as the provider allows. It turns
+	// reasoning off on OpenRouter and Ollama; Anthropic has no off switch that
+	// is safe for tool calling, so it receives the lowest effort level instead.
 	EffortOff Effort = "off"
 	// EffortLow requests a small amount of reasoning.
 	EffortLow Effort = "low"
@@ -24,17 +27,6 @@ func (e Effort) valid() bool {
 	default:
 		return false
 	}
-}
-
-var effortBudgets = map[Effort]int{
-	EffortOff:    0,
-	EffortLow:    2000,
-	EffortMedium: 4000,
-	EffortMax:    16000,
-}
-
-func (e Effort) tokenBudget() int {
-	return effortBudgets[e]
 }
 
 var effortLevels = map[Effort]string{

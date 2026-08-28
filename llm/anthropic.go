@@ -46,12 +46,13 @@ func newAnthropic(cfg Config) (*anthropic, error) {
 
 func (a *anthropic) chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
 	request := anthropicChatRequest{
-		Model:     a.config.Model,
-		MaxTokens: a.config.MaxTokens + a.config.Effort.tokenBudget(),
-		System:    toAnthropicSystemBlocks(messages),
-		Messages:  toAnthropicMessages(messages),
-		Tools:     toAnthropicTools(tools),
-		Thinking:  toAnthropicThinking(a.config.Effort),
+		Model:        a.config.Model,
+		MaxTokens:    a.config.MaxTokens,
+		System:       toAnthropicSystemBlocks(messages),
+		Messages:     toAnthropicMessages(messages),
+		Tools:        toAnthropicTools(tools),
+		Thinking:     thinkingAdaptive,
+		OutputConfig: toAnthropicOutputConfig(a.config.Effort),
 	}
 
 	var apiResp anthropicChatResponse

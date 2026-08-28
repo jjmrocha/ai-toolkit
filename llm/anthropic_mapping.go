@@ -21,6 +21,8 @@ func toAnthropicSystem(messages []Message) string {
 
 var cacheEphemeral = &anthropicCacheControl{Type: "ephemeral"}
 
+var thinkingAdaptive = &anthropicThinking{Type: "adaptive"}
+
 func toAnthropicSystemBlocks(messages []Message) []anthropicSystemBlock {
 	text := toAnthropicSystem(messages)
 	if text == "" {
@@ -93,12 +95,20 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 	return result
 }
 
-func toAnthropicThinking(e Effort) *anthropicThinking {
-	if e == EffortOff {
+var anthropicEffortLevels = map[Effort]string{
+	EffortOff:    "low",
+	EffortLow:    "medium",
+	EffortMedium: "high",
+	EffortMax:    "max",
+}
+
+func toAnthropicOutputConfig(e Effort) *anthropicOutputConfig {
+	level := anthropicEffortLevels[e]
+	if level == "" {
 		return nil
 	}
 
-	return &anthropicThinking{Type: "enabled", BudgetTokens: e.tokenBudget()}
+	return &anthropicOutputConfig{Effort: level}
 }
 
 func toAnthropicTools(tools []Tool) []anthropicTool {

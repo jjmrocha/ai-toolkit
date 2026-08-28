@@ -227,10 +227,10 @@ func TestToAnthropicMessages(t *testing.T) {
 	})
 }
 
-func TestToAnthropicThinking(t *testing.T) {
-	t.Run("returns nil when effort is off", func(t *testing.T) {
+func TestToAnthropicOutputConfig(t *testing.T) {
+	t.Run("returns nil when the effort is not recognized", func(t *testing.T) {
 		// when
-		result := toAnthropicThinking(EffortOff)
+		result := toAnthropicOutputConfig(Effort("bogus"))
 		// then
 		assert.Nil(t, result)
 	})
@@ -238,29 +238,34 @@ func TestToAnthropicThinking(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    Effort
-		expected *anthropicThinking
+		expected *anthropicOutputConfig
 	}{
 		{
-			name:     "low effort enables thinking with the low budget",
+			name:     "off asks for the lowest effort",
+			input:    EffortOff,
+			expected: &anthropicOutputConfig{Effort: "low"},
+		},
+		{
+			name:     "low asks for medium effort",
 			input:    EffortLow,
-			expected: &anthropicThinking{Type: "enabled", BudgetTokens: 2000},
+			expected: &anthropicOutputConfig{Effort: "medium"},
 		},
 		{
-			name:     "medium effort enables thinking with the medium budget",
+			name:     "medium asks for high effort",
 			input:    EffortMedium,
-			expected: &anthropicThinking{Type: "enabled", BudgetTokens: 4000},
+			expected: &anthropicOutputConfig{Effort: "high"},
 		},
 		{
-			name:     "max effort enables thinking with the max budget",
+			name:     "max asks for max effort",
 			input:    EffortMax,
-			expected: &anthropicThinking{Type: "enabled", BudgetTokens: 16000},
+			expected: &anthropicOutputConfig{Effort: "max"},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// when
-			result := toAnthropicThinking(tc.input)
+			result := toAnthropicOutputConfig(tc.input)
 			// then
 			assert.Equal(t, tc.expected, result)
 		})

@@ -94,6 +94,8 @@ func TestAnthropicChat(t *testing.T) {
 		assert.Equal(t, "user", sent.Messages[0].Role)
 		require.Len(t, sent.Tools, 1)
 		assert.Equal(t, "get_weather", sent.Tools[0].Name)
+		assert.Equal(t, &anthropicThinking{Type: "adaptive"}, sent.Thinking)
+		assert.Equal(t, &anthropicOutputConfig{Effort: "low"}, sent.OutputConfig)
 	})
 
 	t.Run("omits the tools field when no tools are provided", func(t *testing.T) {
@@ -272,7 +274,7 @@ func newTestAnthropic(t testing.TB, handler http.HandlerFunc) *anthropic {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	a, err := newAnthropic(Config{APIKey: "sk-test", Model: "claude-opus-4-8", BaseURL: server.URL})
+	a, err := newAnthropic(Config{APIKey: "sk-test", Model: "claude-opus-4-8", BaseURL: server.URL, Effort: EffortOff})
 	if err != nil {
 		t.Fatalf("newAnthropic: unexpected error: %v", err)
 	}
