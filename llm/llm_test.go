@@ -258,6 +258,53 @@ func TestLLMChangeModel(t *testing.T) {
 	})
 }
 
+func TestLLMChangeEffort(t *testing.T) {
+	t.Run("sets the effort via the provider", func(t *testing.T) {
+		// given
+		var changed Effort
+		llm := &LLM{
+			provider: fakeProvider{
+				changeEffortFunc: func(e Effort) { changed = e },
+			},
+		}
+		// when
+		err := llm.ChangeEffort(EffortMax)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, EffortMax, changed)
+	})
+
+	t.Run("treats an empty effort as EffortOff", func(t *testing.T) {
+		// given
+		var changed Effort
+		llm := &LLM{
+			provider: fakeProvider{
+				changeEffortFunc: func(e Effort) { changed = e },
+			},
+		}
+		// when
+		err := llm.ChangeEffort("")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, EffortOff, changed)
+	})
+
+	t.Run("returns ErrInvalidEffort and leaves the effort alone", func(t *testing.T) {
+		// given
+		called := false
+		llm := &LLM{
+			provider: fakeProvider{
+				changeEffortFunc: func(Effort) { called = true },
+			},
+		}
+		// when
+		err := llm.ChangeEffort(Effort("bogus"))
+		// then
+		assert.ErrorIs(t, err, ErrInvalidEffort)
+		assert.False(t, called)
+	})
+}
+
 type fakeProvider struct {
 	chatFunc         func(context.Context, []Message, []Tool) (*AssistantMessage, error)
 	modelInfoFunc    func(context.Context) (*ModelInfo, error)

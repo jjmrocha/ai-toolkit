@@ -4,7 +4,7 @@ package llm
 // answers. Its values are relative rungs, not provider literals: each provider
 // maps them onto its own scale, so the same Effort reaches the wire as
 // different values on different backends. An empty Effort is treated as
-// [EffortOff] by [New].
+// [EffortOff] by [New] and [LLM.ChangeEffort].
 type Effort string
 
 const (

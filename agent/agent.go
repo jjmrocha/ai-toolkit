@@ -15,7 +15,7 @@ type modelInterface interface {
 	AvailableModels() []string
 	ChangeModel(model string) error
 	Effort() llm.Effort
-	ChangeEffort(e llm.Effort)
+	ChangeEffort(e llm.Effort) error
 }
 
 // Agent runs a tool-calling chat loop against an LLM, holding the conversation
@@ -271,9 +271,11 @@ func (a *Agent) ChangeModel(model string) error {
 	return nil
 }
 
-// ChangeEffort sets the reasoning effort applied to subsequent turns.
-func (a *Agent) ChangeEffort(e llm.Effort) {
-	a.llm.ChangeEffort(e)
+// ChangeEffort sets the reasoning effort applied to subsequent turns. It
+// propagates the underlying client's error, leaving the current effort in
+// place.
+func (a *Agent) ChangeEffort(e llm.Effort) error {
+	return a.llm.ChangeEffort(e)
 }
 
 // CompactContext summarizes the conversation up to the most recent turn, keeping

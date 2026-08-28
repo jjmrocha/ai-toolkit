@@ -26,7 +26,9 @@ type fakeLLM struct {
 	current   string
 	changeErr error
 	effort    llm.Effort
-	toolLists [][]llm.Tool
+
+	changeEffortErr error
+	toolLists       [][]llm.Tool
 }
 
 func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, toolList []llm.Tool) (*llm.AssistantMessage, error) {
@@ -59,7 +61,13 @@ func (f *fakeLLM) ChangeModel(model string) error {
 
 func (f *fakeLLM) Effort() llm.Effort { return f.effort }
 
-func (f *fakeLLM) ChangeEffort(e llm.Effort) { f.effort = e }
+func (f *fakeLLM) ChangeEffort(e llm.Effort) error {
+	if f.changeEffortErr != nil {
+		return f.changeEffortErr
+	}
+	f.effort = e
+	return nil
+}
 
 func agentWithLLM(m modelInterface, fb Feedback, cfg Config) *Agent {
 	return &Agent{config: cfg, llm: m, fb: fb}
@@ -752,9 +760,21 @@ func TestChangeEffort(t *testing.T) {
 		fake := &fakeLLM{}
 		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
-		agt.ChangeEffort(llm.EffortMax)
+		err := agt.ChangeEffort(llm.EffortMax)
 		// then
+		require.NoError(t, err)
 		assert.Equal(t, llm.EffortMax, fake.effort)
+	})
+
+	t.Run("propagates the client error and leaves the effort alone", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{changeEffortErr: llm.ErrInvalidEffort}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		// when
+		err := agt.ChangeEffort(llm.Effort("bogus"))
+		// then
+		assert.ErrorIs(t, err, llm.ErrInvalidEffort)
+		assert.Empty(t, fake.effort)
 	})
 }
 

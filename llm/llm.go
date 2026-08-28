@@ -144,10 +144,23 @@ func (l *LLM) Effort() Effort {
 	return l.provider.effort()
 }
 
-// ChangeEffort sets the reasoning effort applied to subsequent requests.
-func (l *LLM) ChangeEffort(e Effort) {
+// ChangeEffort sets the reasoning effort applied to subsequent requests. An
+// empty Effort selects [EffortOff], matching [New]. It returns
+// [ErrInvalidEffort] without changing anything when e is not a recognized
+// [Effort].
+func (l *LLM) ChangeEffort(e Effort) error {
+	if e == "" {
+		e = EffortOff
+	}
+
+	if !e.valid() {
+		return ErrInvalidEffort
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	l.provider.changeEffort(e)
+
+	return nil
 }
