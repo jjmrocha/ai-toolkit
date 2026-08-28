@@ -52,10 +52,6 @@ type ProcessConfig struct {
 	// order the process wrote it. When false, Output carries stdout alone and
 	// stderr is discarded.
 	IncludeStderr bool
-	// MaxLineBytes is the longest line [Process.Output] delivers. A longer one
-	// ends the output. A zero MaxLineBytes sets no limit, so a process that
-	// never writes a newline grows the read buffer until memory runs out.
-	MaxLineBytes int
 	// AllowInput gives the process a stdin for [Process.Write] to send to.
 	// Without it the process reads from the null device, so anything waiting on
 	// stdin sees end of input at once.
@@ -123,13 +119,8 @@ func NewProcess(cfg ProcessConfig) (*Process, error) {
 		exited:     make(chan struct{}),
 	}
 
-	maxLineBytes := cfg.MaxLineBytes
-	if maxLineBytes <= 0 {
-		maxLineBytes = math.MaxInt
-	}
-
 	go p.reap(cfg.OnExit)
-	go p.readLoop(reader, maxLineBytes)
+	go p.readLoop(reader)
 
 	if stdin != nil {
 		go p.writeLoop(stdin)
@@ -165,15 +156,15 @@ func (p *Process) writeLoop(stdin io.WriteCloser) {
 	}
 }
 
-func (p *Process) readLoop(stdout io.ReadCloser, maxLineBytes int) {
+func (p *Process) readLoop(stdout io.ReadCloser) {
 	defer func() {
 		_ = stdout.Close()
 		close(p.incoming)
 	}()
 
 	scanner := bufio.NewScanner(stdout)
-	buffer := make([]byte, 0, min(initialLineBytes, maxLineBytes))
-	scanner.Buffer(buffer, maxLineBytes)
+	buffer := make([]byte, 0, initialLineBytes)
+	scanner.Buffer(buffer, math.MaxInt)
 
 	for scanner.Scan() {
 		line := scanner.Text()

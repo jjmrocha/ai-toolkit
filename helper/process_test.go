@@ -111,8 +111,8 @@ func TestProcessOutput(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("delivers a long line when MaxLineBytes is not set", func(t *testing.T) {
-		// given: far more than the old default, with no newline anywhere
+	t.Run("delivers a line of any length", func(t *testing.T) {
+		// given: far more than bufio's default, with no newline anywhere
 		size := 1024*1024 + 8*1024
 		script := "head -c " + strconv.Itoa(size) + ` /dev/zero | tr '\0' 'a'`
 		p := startProcess(t, "sh", "-c", script)
@@ -121,40 +121,6 @@ func TestProcessOutput(t *testing.T) {
 		// then
 		require.Len(t, result, 1)
 		assert.Len(t, result[0], size)
-	})
-
-	t.Run("stops reading a line longer than MaxLineBytes", func(t *testing.T) {
-		// given
-		p, err := NewProcess(ProcessConfig{
-			Path:         "sh",
-			Args:         []string{"-c", "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-			MaxLineBytes: 8,
-		})
-		require.NoError(t, err)
-		t.Cleanup(p.Close)
-		// when
-		result := collectLines(p)
-		// then
-		assert.Empty(t, result)
-	})
-
-	t.Run("stops a process whose output can no longer be read", func(t *testing.T) {
-		// given: an over-long line, followed by a process that stays alive on stdin
-		size := 64 * 1024
-		script := "head -c " + strconv.Itoa(size) + ` /dev/zero | tr '\0' 'a'; cat > /dev/null`
-		p, err := NewProcess(ProcessConfig{
-			Path:         "sh",
-			Args:         []string{"-c", script},
-			AllowInput:   true,
-			MaxLineBytes: 8 * 1024,
-		})
-		require.NoError(t, err)
-		t.Cleanup(p.Close)
-		// when: the reader gives up on the stream
-		result := collectLines(p)
-		// then: the process stops reporting a stream it cannot read from
-		assert.Empty(t, result)
-		assert.Eventually(t, func() bool { return !p.Running() }, 5*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("closes the channel once the process exits", func(t *testing.T) {

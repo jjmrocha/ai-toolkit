@@ -35,6 +35,38 @@ func endlessToolPages(count int) []string {
 	return pages
 }
 
+func TestClientLargeToolResult(t *testing.T) {
+	t.Run("delivers a tool result larger than a megabyte", func(t *testing.T) {
+		// given: a server whose tool result exceeds the old 1 MiB message ceiling
+		const payloadBytes = 2 * 1024 * 1024
+
+		initResp := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":%q}}`, protocolVersion)
+		listResp := `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"big","description":"Big","inputSchema":{"type":"object"}}]}}`
+		script := fmt.Sprintf(
+			`big=$(head -c %d /dev/zero | tr '\0' 'a')
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*) echo '%s';;
+    *'"method":"tools/list"'*) echo '%s';;
+    *'"method":"tools/call"'*) printf '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"%%s"}]}}\n' "$big";;
+  esac
+done`,
+			payloadBytes, initResp, listResp,
+		)
+
+		tb := tools.NewToolBox()
+		client, err := NewClient(t.Context(), ClientConfig{Name: "srv", Command: "sh", Args: []string{"-c", script}})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		require.NoError(t, client.RegisterTools(t.Context(), tb))
+		// when
+		result, err := tb.Execute(t.Context(), llm.ToolCall{Name: "srv__big"})
+		// then
+		require.NoError(t, err)
+		assert.Len(t, result.Content, payloadBytes)
+	})
+}
+
 func TestNewClient(t *testing.T) {
 	t.Run("returns ErrNameRequired when the name is empty", func(t *testing.T) {
 		// when

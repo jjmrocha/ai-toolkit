@@ -96,7 +96,7 @@ Worth knowing:
 - `IncludeStderr` decides what `Output` carries. Unset, it carries stdout alone and stderr is discarded — what a process speaking a line protocol over stdout wants. Set, stdout and stderr share a single pipe, so lines arrive in the order the process wrote them — what capturing a script's output wants.
 - Sharing one pipe is what makes the ordering real rather than reconstructed: the kernel interleaves the two streams. Two separate pipes could not put them back in order afterwards.
 - Blank lines are delivered like any other line.
-- `MaxLineBytes` bounds a single line; a longer one ends the stream, `Output` closes, and the process is stopped. Left zero there is no limit, so a process that never writes a newline grows the read buffer until memory runs out.
+- A line has no length limit, so a process that never writes a newline grows the read buffer until memory runs out.
 - `OnExit` is called once with the result of waiting on the process. An exit status is recovered from it with `errors.As` on an `*exec.ExitError`.
 - `AllowInput` decides whether the process gets a stdin at all. Without it the process reads from the null device, so anything waiting on input sees end of input at once rather than hanging.
 - `Write` sends one line to the process's stdin. A message containing a newline is rejected with `ErrInvalidMessage`, writing to a process built without `AllowInput` returns `ErrInputNotAllowed`, and writing to a process that has gone returns `ErrProcessClosed`.

@@ -17,8 +17,6 @@ const (
 	requestTimeout = 30 * time.Second
 )
 
-const maxMessageBytes = 1024 * 1024 // 1 MiB
-
 type transport interface {
 	Write(ctx context.Context, msg string) error
 	Output() <-chan string
@@ -34,10 +32,9 @@ type session struct {
 
 func newSession(ctx context.Context, command string, args []string, onDisconnect func()) (*session, error) {
 	t, err := helper.NewProcess(helper.ProcessConfig{
-		Path:         command,
-		Args:         args,
-		AllowInput:   true,
-		MaxLineBytes: maxMessageBytes,
+		Path:       command,
+		Args:       args,
+		AllowInput: true,
 		OnExit: func(error) {
 			if onDisconnect != nil {
 				onDisconnect()
