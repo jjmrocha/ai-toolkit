@@ -528,6 +528,56 @@ func TestSessionInitialize(t *testing.T) {
 	})
 }
 
+func TestSessionSupportsTools(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected bool
+	}{
+		{
+			name:     "assumes tools when the handshake is missing",
+			input:    nil,
+			expected: true,
+		},
+		{
+			name:     "assumes tools when the server declares no capabilities",
+			input:    map[string]any{"protocolVersion": protocolVersion},
+			expected: true,
+		},
+		{
+			name:     "assumes tools when capabilities is not an object",
+			input:    map[string]any{"capabilities": "nonsense"},
+			expected: true,
+		},
+		{
+			name:     "reports tools when the server declares them",
+			input:    map[string]any{"capabilities": map[string]any{"tools": map[string]any{}}},
+			expected: true,
+		},
+		{
+			name:     "reports no tools when capabilities omits them",
+			input:    map[string]any{"capabilities": map[string]any{"resources": map[string]any{}}},
+			expected: false,
+		},
+		{
+			name:     "reports no tools when capabilities is empty",
+			input:    map[string]any{"capabilities": map[string]any{}},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// given
+			s := &session{handshake: tc.input}
+			// when
+			result := s.supportsTools()
+			// then
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func TestSessionConnected(t *testing.T) {
 	t.Run("reports the transport as running", func(t *testing.T) {
 		// given

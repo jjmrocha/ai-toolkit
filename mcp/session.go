@@ -28,6 +28,7 @@ type session struct {
 	transport transport
 	requestID *seqNum
 	requests  *pendingRequest
+	handshake map[string]any
 }
 
 func newSession(ctx context.Context, command string, args []string, onDisconnect func()) (*session, error) {
@@ -162,6 +163,8 @@ func (s *session) initialize(ctx context.Context) error {
 		return err
 	}
 
+	s.handshake = result
+
 	return s.notify(ctx, "notifications/initialized", nil)
 }
 
@@ -213,6 +216,17 @@ func (s *session) notify(ctx context.Context, method string, params map[string]a
 
 func (s *session) close() {
 	s.transport.Close()
+}
+
+func (s *session) supportsTools() bool {
+	capabilities, ok := s.handshake["capabilities"].(map[string]any)
+	if !ok {
+		return true
+	}
+
+	_, ok = capabilities["tools"]
+
+	return ok
 }
 
 func (s *session) connected() bool {

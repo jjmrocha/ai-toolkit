@@ -98,12 +98,23 @@ func (c *Client) unregisterTools() {
 // here are removed again by [Client.Close]. Only a successful registration
 // latches: it returns [ErrAlreadyRegistered] on a later call, while a failed one
 // leaves the client free to try again.
+//
+// A server whose handshake declared no tools capability is never asked for a
+// tool list: nothing is registered and the call succeeds, leaving the server
+// running for whatever else it offers. Because nothing was registered, that
+// call does not latch, so a later one is free to try again rather than
+// returning [ErrAlreadyRegistered]. A server that declares none at all is asked
+// anyway.
 func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.toolBox != nil {
 		return ErrAlreadyRegistered
+	}
+
+	if !c.session.supportsTools() {
+		return nil
 	}
 
 	specs, err := c.listTools(ctx)

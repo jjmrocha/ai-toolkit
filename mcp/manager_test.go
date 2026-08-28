@@ -50,8 +50,38 @@ func echoServerCmd() ClientConfig {
 	return scriptServerCmd(`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"Echoes","inputSchema":{"type":"object"}}]}}`)
 }
 
+func resourcesOnlyServerCmd() ClientConfig {
+	initResp := fmt.Sprintf(
+		`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":%q,"capabilities":{"resources":{}}}}`,
+		protocolVersion,
+	)
+	script := fmt.Sprintf(
+		`while IFS= read -r line; do case "$line" in *'"method":"initialize"'*) echo '%s';; *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"method not found"}}';; esac; done`,
+		initResp,
+	)
+
+	return ClientConfig{Name: "srv", Command: "sh", Args: []string{"-c", script}}
+}
+
 func failingToolsServerCmd() ClientConfig {
 	return scriptServerCmd(`{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"tools unavailable"}}`)
+}
+
+func TestManagerStartResourcesOnlyServer(t *testing.T) {
+	t.Run("keeps a server that declares no tools capability", func(t *testing.T) {
+		// given: the server errors on tools/list, so success proves it was never asked
+		tb := tools.NewToolBox()
+		m := NewManager(tb)
+		m.Register(resourcesOnlyServerCmd())
+		t.Cleanup(m.Close)
+		// when
+		err := m.Start(t.Context(), "srv")
+		// then
+		require.NoError(t, err)
+		expected := map[string]bool{"srv": true}
+		assert.Equal(t, expected, activeByName(t, m))
+		assert.Empty(t, tb.Tools())
+	})
 }
 
 func TestNewManager(t *testing.T) {

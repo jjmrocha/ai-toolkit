@@ -202,6 +202,7 @@ Worth knowing:
 
 - Tools are namespaced `"<Name>__<tool>"`, e.g. `playwright__browser_navigate`. A namespaced name the providers would reject is rewritten rather than dropped; the server is still called by the name it published.
 - Requests are matched to responses by id, so several may be in flight at once. One blocked on a silent server returns when its context is cancelled or its deadline expires.
+- A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed.
 - `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server.
 - `Command` and `Args` are run without a shell, but they are still trusted input: supply them from operator configuration, never from an untrusted source.
 
