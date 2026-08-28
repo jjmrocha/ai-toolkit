@@ -93,13 +93,22 @@ func decodeMessages(line string) []serverMessage {
 }
 
 func (s *session) handleMessage(message serverMessage) {
-	if message.Method != "" {
+	switch {
+	case message.Method != "" && message.ID == nil:
+		s.notified(message.Method)
+	case message.Method != "":
 		s.answer(message.Method, message.ID)
+	default:
+		s.settle(message)
+	}
+}
 
+func (s *session) notified(method string) {
+	if method != toolsListChangedMethod {
 		return
 	}
 
-	s.settle(message)
+	// TODO: refresh the client's tool list.
 }
 
 func (s *session) settle(message serverMessage) {
@@ -135,10 +144,6 @@ func responseID(raw any) (int, bool) {
 }
 
 func (s *session) answer(method string, id any) {
-	if id == nil {
-		return
-	}
-
 	reply := response{JSONRPC: jsonrpcVersion, ID: id}
 
 	if canServe(method) {

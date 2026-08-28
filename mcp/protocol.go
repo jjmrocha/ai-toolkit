@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	toolsListChangedMethod = "notifications/tools/list_changed"
+
 	protocolVersion = "2025-06-18"
 	clientName      = "ai-toolkit"
 	clientTitle     = "AI Toolkit"
