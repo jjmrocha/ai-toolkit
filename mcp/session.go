@@ -174,7 +174,7 @@ func (s *session) initialize(ctx context.Context) error {
 }
 
 func (s *session) Request(ctx context.Context, method string, params map[string]any) (map[string]any, error) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	ctx, cancel := helper.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
 	id := s.requestID.next()

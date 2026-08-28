@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -65,6 +66,76 @@ done`,
 		require.NoError(t, err)
 		assert.Len(t, result.Content, payloadBytes)
 	})
+}
+
+func silentToolServerCmd(name string, timeout time.Duration) ClientConfig {
+	initResp := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":%q}}`, protocolVersion)
+	listResp := `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"slow","description":"Slow","inputSchema":{"type":"object"}}]}}`
+	script := fmt.Sprintf(
+		`while IFS= read -r line; do case "$line" in *'"method":"initialize"'*) echo '%s';; *'"method":"tools/list"'*) echo '%s';; esac; done`,
+		initResp, listResp,
+	)
+
+	return ClientConfig{
+		Name:            name,
+		Command:         "sh",
+		Args:            []string{"-c", script},
+		ToolCallTimeout: timeout,
+	}
+}
+
+func silentToolBox(t *testing.T, timeout time.Duration) *tools.ToolBox {
+	t.Helper()
+
+	tb := tools.NewToolBox()
+	client, err := NewClient(t.Context(), silentToolServerCmd("srv", timeout))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	require.NoError(t, client.RegisterTools(t.Context(), tb))
+
+	return tb
+}
+
+func TestClientToolCallTimeout(t *testing.T) {
+	t.Run("gives up on a silent server once the configured timeout passes", func(t *testing.T) {
+		// given
+		tb := silentToolBox(t, 200*time.Millisecond)
+		// when
+		start := time.Now()
+		_, err := tb.Execute(t.Context(), llm.ToolCall{Name: "srv__slow"})
+		elapsed := time.Since(start)
+		// then
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Less(t, elapsed, 5*time.Second)
+	})
+
+	timeouts := []struct {
+		name  string
+		input time.Duration
+	}{
+		{name: "unset falls back to the default", input: 0},
+		{name: "negative falls back to the default", input: -time.Second},
+	}
+
+	for _, tc := range timeouts {
+		t.Run(tc.name, func(t *testing.T) {
+			// given: a timeout used as-is would expire the call at once
+			tb := silentToolBox(t, tc.input)
+			done := make(chan struct{})
+			// when
+			go func() {
+				defer close(done)
+				_, _ = tb.Execute(t.Context(), llm.ToolCall{Name: "srv__slow"})
+			}()
+			// then: still waiting, so the default is in force rather than the given value
+			select {
+			case <-done:
+				t.Fatal("the call ended immediately; the configured value was used instead of the default")
+			case <-time.After(500 * time.Millisecond):
+			}
+		})
+	}
 }
 
 func TestNewClient(t *testing.T) {

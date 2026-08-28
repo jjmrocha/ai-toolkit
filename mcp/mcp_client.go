@@ -11,15 +11,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jjmrocha/ai-toolkit/helper"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
 const (
-	callToolTimeout    = 120 * time.Second
-	listToolsTimeout   = 30 * time.Second
-	maxToolPages       = 100
-	toolNameHashLength = 6
+	defaultToolCallTimeout = 2 * time.Minute
+	listToolsTimeout       = 30 * time.Second
+	maxToolPages           = 100
+	toolNameHashLength     = 6
 )
 
 // Client registers the tools exposed by a single MCP server into a
@@ -169,7 +170,7 @@ func hashToolName(original string) string {
 }
 
 func (c *Client) listTools(ctx context.Context) ([]toolSpec, error) {
-	ctx, cancel := context.WithTimeout(ctx, listToolsTimeout)
+	ctx, cancel := helper.WithTimeout(ctx, listToolsTimeout)
 	defer cancel()
 
 	var specs []toolSpec
@@ -221,7 +222,13 @@ func parseToolSpecs(result map[string]any) []toolSpec {
 
 func (c *Client) makeHandler(name string) tools.Handler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
-		ctx, cancel := context.WithTimeout(ctx, callToolTimeout)
+		toolTimeout := defaultToolCallTimeout
+
+		if c.config.ToolCallTimeout > 0 {
+			toolTimeout = c.config.ToolCallTimeout
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 		defer cancel()
 
 		result, err := c.session.Request(ctx, "tools/call", map[string]any{

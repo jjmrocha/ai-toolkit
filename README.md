@@ -104,6 +104,20 @@ Worth knowing:
 - Shutdown is unhurried: a process that is still running gets a grace period to leave on its own before SIGTERM, and another before SIGKILL. `Close` blocks until the process is reaped, so closing a healthy process is not instant. One that has already exited is reaped straight away.
 - `Path` and `Args` are run without a shell, so they are trusted input: the process runs with the same authority as the program that started it.
 
+### `WithTimeout`
+
+Applies a default deadline to a context that has none, and leaves one the caller already
+chose in place — unlike `context.WithTimeout`, which always takes the earlier of the two.
+It is how a library gives an unbounded call a sane bound without overriding a deadline the
+caller set deliberately.
+
+```go
+ctx, cancel := helper.WithTimeout(ctx, 30*time.Second)
+defer cancel()
+```
+
+The returned cancel must be called on either path, as with `context.WithTimeout`.
+
 ### `Run`
 
 Runs a command to completion and hands back what it wrote and the status it exited with.
@@ -204,6 +218,7 @@ Worth knowing:
 - Requests are matched to responses by id, so several may be in flight at once. One blocked on a silent server returns when its context is cancelled or its deadline expires.
 - A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed.
 - `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server.
+- `ToolCallTimeout` bounds one call to this server's tools, defaulting to two minutes. It is a ceiling inside the caller's own context, so a server that goes quiet fails that single call and leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn.
 - `Command` and `Args` are run without a shell, but they are still trusted input: supply them from operator configuration, never from an untrusted source.
 
 ### `Manager`
