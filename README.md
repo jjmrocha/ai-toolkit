@@ -101,6 +101,7 @@ Worth knowing:
 - `AllowInput` decides whether the process gets a stdin at all. Without it the process reads from the null device, so anything waiting on input sees end of input at once rather than hanging.
 - `Write` sends one line to the process's stdin. A message containing a newline is rejected with `ErrInvalidMessage`, writing to a process built without `AllowInput` returns `ErrInputNotAllowed`, and writing to a process that has gone returns `ErrProcessClosed`.
 - `Close` is safe to call more than once, and must be called even when the process exits on its own.
+- Shutdown is unhurried: a process that is still running gets a grace period to leave on its own before SIGTERM, and another before SIGKILL. `Close` blocks until the process is reaped, so closing a healthy process is not instant. One that has already exited is reaped straight away.
 - `Path` and `Args` are run without a shell, so they are trusted input: the process runs with the same authority as the program that started it.
 
 ### `Run`
@@ -123,7 +124,7 @@ fmt.Println(result.ExitCode, strings.Join(result.Output, "\n"))
 Worth knowing:
 
 - A non-zero exit status is part of the `Result`, not an error. `Run` returns an error only when the command could not be started, when `ctx` ended first, or when waiting on it failed for some other reason.
-- `ctx` cancels the run: the command is sent SIGTERM, then SIGKILL if it does not go.
+- `ctx` cancels the run: `Run` returns as soon as `ctx` ends, and the command is stopped behind it on the same unhurried path `Close` uses — a grace period, SIGTERM, another grace period, SIGKILL.
 - The command's stderr is always merged into the output, in the order it was written. Reach for `NewProcess` to read stdout on its own.
 - `MaxOutputBytes` is how much output `Run` collects before stopping the command, counting each line plus its newline. The line that passes the limit is kept, so the result can run over by that much. `Truncated` is set. Left zero, everything is collected and only `ctx` bounds the run.
 - A stopped command's `ExitCode` describes the kill, not a choice it made — unless it had already finished, in which case its own status survives.

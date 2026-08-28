@@ -179,9 +179,12 @@ func (p *Process) readLoop(stdout io.ReadCloser) {
 	go p.Close()
 }
 
-// Close stops the process and releases everything [NewProcess] started. It
-// signals the process with SIGTERM, then SIGKILL if it is still running, and
-// waits for it to be reaped. Calling Close more than once is safe.
+// Close stops the process and releases everything [NewProcess] started. A
+// process that has already exited is reaped at once. One that is still running
+// is given a grace period to leave on its own, then sent SIGTERM; if it
+// outlasts a second grace period it is sent SIGKILL. Close returns once the
+// process has been reaped, so it blocks for as long as those periods take.
+// Calling Close more than once is safe.
 func (p *Process) Close() {
 	p.closeOnce.Do(func() {
 		close(p.closing)
