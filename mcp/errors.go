@@ -3,7 +3,7 @@ package mcp
 import (
 	"errors"
 
-	"github.com/jjmrocha/ai-toolkit/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/helper"
 )
 
 // Errors returned by the mcp package.

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jjmrocha/ai-toolkit/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/helper"
 )
 
 const (

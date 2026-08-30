@@ -1,5 +1,4 @@
-// Package helper holds the building blocks the rest of the toolkit shares, and
-// that a caller may reach for directly.
+// Package helper holds the building blocks the rest of the toolkit shares.
 //
 // [Process] runs a child process and hands back its output one line at a time,
 // owning the child from [NewProcess] until [Process.Close]. [Run] wraps it for

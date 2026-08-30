@@ -18,10 +18,9 @@ go get github.com/jjmrocha/ai-toolkit
 | Package | What it does | Builds on |
 | --- | --- | --- |
 | [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | — |
-| [`helper`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/helper) | Building blocks shared across the toolkit | — |
 | [`tools`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools) | Registers tools and dispatches the model's calls | `llm` |
-| [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `helper`, `llm`, `tools` |
-| [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `helper`, `llm`, `tools` |
+| [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
+| [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
 
 The sections below are a tour. The full API reference lives on
@@ -61,87 +60,6 @@ Worth knowing:
 - `Config.Effort` maps one knob, `EffortOff` through `EffortMax`, onto Anthropic's adaptive-thinking effort level and OpenRouter/Ollama's reasoning level. The values are relative rungs, not provider literals, so the same `Effort` reaches each backend as whatever that backend calls it.
 - `Config.Models` lists what `ChangeModel` may switch to mid-conversation; the active model is always included.
 - `ChangeModel` and `ChangeEffort` both validate before they mutate and return an error otherwise, so a rejected switch leaves the client on its current settings.
-
-## `helper`
-
-Pieces the rest of the toolkit shares, and that are useful on their own.
-
-### `Process`
-
-Runs a child process and delivers its output one line at a time. It owns the child's
-whole life: start, read, write to stdin, and a shutdown that tries SIGTERM before
-SIGKILL and waits for the process to be reaped.
-
-```go
-process, err := helper.NewProcess(helper.ProcessConfig{
-	Path:          "./report.sh",
-	Args:          []string{"--since", "monday"},
-	Dir:           "/srv/reports",
-	IncludeStderr: true,
-	OnExit:        func(err error) { log.Println("finished:", err) },
-})
-if err != nil {
-	log.Fatal(err)
-}
-
-defer process.Close()
-
-for line := range process.Output() {
-	fmt.Println(line)
-}
-```
-
-Worth knowing:
-
-- `IncludeStderr` decides what `Output` carries. Unset, it carries stdout alone and stderr is discarded — what a process speaking a line protocol over stdout wants. Set, stdout and stderr share a single pipe, so lines arrive in the order the process wrote them — what capturing a script's output wants.
-- Sharing one pipe is what makes the ordering real rather than reconstructed: the kernel interleaves the two streams. Two separate pipes could not put them back in order afterwards.
-- Blank lines are delivered like any other line.
-- A line has no length limit, so a process that never writes a newline grows the read buffer until memory runs out.
-- `OnExit` is called once with the result of waiting on the process. An exit status is recovered from it with `errors.As` on an `*exec.ExitError`.
-- `AllowInput` decides whether the process gets a stdin at all. Without it the process reads from the null device, so anything waiting on input sees end of input at once rather than hanging.
-- `Write` sends one line to the process's stdin. A message containing a newline is rejected with `ErrInvalidMessage`, writing to a process built without `AllowInput` returns `ErrInputNotAllowed`, and writing to a process that has gone returns `ErrProcessClosed`.
-- `Close` is safe to call more than once, and must be called even when the process exits on its own.
-- Shutdown is unhurried: a process that is still running gets a grace period to leave on its own before SIGTERM, and another before SIGKILL. `Close` blocks until the process is reaped, so closing a healthy process is not instant. One that has already exited is reaped straight away.
-- `Path` and `Args` are run without a shell, so they are trusted input: the process runs with the same authority as the program that started it.
-
-### `WithTimeout`
-
-Applies a default deadline to a context that has none, and leaves one the caller already
-chose in place — unlike `context.WithTimeout`, which always takes the earlier of the two.
-It is how a library gives an unbounded call a sane bound without overriding a deadline the
-caller set deliberately.
-
-```go
-ctx, cancel := helper.WithTimeout(ctx, 30*time.Second)
-defer cancel()
-```
-
-The returned cancel must be called on either path, as with `context.WithTimeout`.
-
-### `Run`
-
-Runs a command to completion and hands back what it wrote and the status it exited with.
-
-```go
-result, err := helper.Run(ctx, helper.RunConfig{
-	Path: "./report.sh",
-	Args: []string{"--since", "monday"},
-	Dir:  "/srv/reports",
-})
-if err != nil {
-	log.Fatal(err)
-}
-
-fmt.Println(result.ExitCode, strings.Join(result.Output, "\n"))
-```
-
-Worth knowing:
-
-- A non-zero exit status is part of the `Result`, not an error. `Run` returns an error only when the command could not be started, when `ctx` ended first, or when waiting on it failed for some other reason.
-- `ctx` cancels the run: `Run` returns as soon as `ctx` ends, and the command is stopped behind it on the same unhurried path `Close` uses — a grace period, SIGTERM, another grace period, SIGKILL.
-- The command's stderr is always merged into the output, in the order it was written. Reach for `NewProcess` to read stdout on its own.
-- `MaxOutputBytes` is how much output `Run` collects before stopping the command, counting each line plus its newline. The line that passes the limit is kept, so the result can run over by that much. `Truncated` is set. Left zero, everything is collected and only `ctx` bounds the run.
-- A stopped command's `ExitCode` describes the kill, not a choice it made — unless it had already finished, in which case its own status survives.
 
 ## `tools`
 

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jjmrocha/ai-toolkit/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/helper"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
