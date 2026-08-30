@@ -22,6 +22,7 @@ go get github.com/jjmrocha/ai-toolkit
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
 | [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
+| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles backed by an MCP server | `mcp`, `tools` |
 
 The sections below are a tour. The full API reference lives on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
@@ -207,6 +208,32 @@ Worth knowing:
 - The body and the file list are read once, by `Add`. Editing a skill on disk does not change a collection already built.
 - Frontmatter keys other than `name` and `description` are ignored. Values must be single-line; a folded or literal block scalar is rejected with `ErrInvalidFrontmatter`.
 - The catalog is sorted by name, so the system prompt stays byte-identical across sessions built from the same collection — which is what prompt caching needs.
+
+## `packs`
+
+A pack is a bundle of tools that arrives ready to use: one call registers it in
+a `ToolBox`, and the returned `ToolPack` takes it back out again.
+
+```go
+pack, err := packs.WebTools(ctx, toolBox)
+if err != nil {
+	log.Fatal(err)
+}
+
+defer pack.Close()
+```
+
+`WebTools` gives the model web search, page fetching and site crawling, backed by
+[DonSeTch](https://github.com/dondai44423/donsetch). It is keyless, so the only
+prerequisite is the `donsetch` executable on `PATH`.
+
+Worth knowing:
+
+- The server publishes `web_search`, `web_fetch` and `web_crawl`, registered as `donsetch__web_search`, `donsetch__web_fetch` and `donsetch__web_crawl`.
+- `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
+- A registration that fails closes the server before returning, so a failed `WebTools` leaves nothing behind.
+- The tool call ceiling is 15 minutes rather than the two-minute default. `web_crawl` accepts a `deadline_s` of up to 600 seconds and the other two a `deadline_ms` of up to 600000, so a shorter ceiling would kill a long call before the server could report its own deadline — and the server's error tells the model what to do next, where a client-side timeout does not.
+- The three tools carry roughly 15 KB of descriptions and schemas, which every request pays for while they are registered. Close the pack when a session has finished with the web.
 
 ## `agent`
 
