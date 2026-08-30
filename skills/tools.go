@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	loadToolName        = "skill_load"
 	loadFileToolName    = "skill_load_file"
 	executeFileToolName = "skill_execute_file"
 	skillNameArg        = "skill_name"

@@ -12,10 +12,7 @@ import (
 	"sync"
 )
 
-const (
-	loadToolName = "skill_load"
-	skillFile    = "SKILL.md"
-)
+const skillFile = "SKILL.md"
 
 type skill struct {
 	name        string
