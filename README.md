@@ -223,6 +223,8 @@ if err != nil {
 defer pack.Close()
 ```
 
+### `WebTools`
+
 `WebTools` gives the model web search, page fetching and site crawling, backed by
 [DonSeTch](https://github.com/dondai44423/donsetch). It is keyless, so the only
 prerequisite is the `donsetch` executable on `PATH`.
@@ -234,6 +236,35 @@ Worth knowing:
 - A registration that fails closes the server before returning, so a failed `WebTools` leaves nothing behind.
 - The tool call ceiling is 15 minutes rather than the two-minute default. `web_crawl` accepts a `deadline_s` of up to 600 seconds and the other two a `deadline_ms` of up to 600000, so a shorter ceiling would kill a long call before the server could report its own deadline — and the server's error tells the model what to do next, where a client-side timeout does not.
 - The three tools carry roughly 15 KB of descriptions and schemas, which every request pays for while they are registered. Close the pack when a session has finished with the web.
+
+### `CodingTools`
+
+`CodingTools` gives the model a code base: symbol-aware navigation and editing,
+diagnostics, file and directory access, shell execution and project memories,
+backed by [Serena](https://github.com/oraios/serena). It is keyless, so the only
+prerequisite is the `uvx` executable on `PATH`.
+
+```go
+pack, err := packs.CodingTools(ctx, toolBox)
+if err != nil {
+	log.Fatal(err)
+}
+
+defer pack.Close()
+```
+
+Worth knowing:
+
+- The server starts with no project. The model reaches a code base by calling `serena__activate_project`, and the symbolic tools fail until it does.
+- This pack writes files and runs commands. Serena inherits the authority of the program that started it — the whole filesystem, the environment and its credentials — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with a shell, and remember that anything the model reads out of a repository can steer what it does next.
+- The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: build the `mcp.ClientConfig` by hand against a tag and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
+- Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
+- The tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes, so it moves with Serena's own development rather than being fixed here.
+- The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
+- The first symbolic call on a newly activated project is the slow one: Serena downloads that language's server if it is missing and indexes the project inside that call's budget.
+- `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
+- A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind.
+- This is a far wider pack than `WebTools`: 29 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
 
 ## `agent`
 
