@@ -5,7 +5,10 @@
 // [WebTools] is the web pack: search, page fetching and site crawling.
 // [CodingTools] is the coding pack: symbol-aware navigation and editing,
 // diagnostics, files and shell. Both are served by an MCP server the pack
-// launches and owns. [ShellTools] is the shell pack: one tool that runs a
-// command line with /bin/sh, served by the program itself, so its ToolPack has
-// no server to stop and only unregisters.
+// launches and owns.
+//
+// [ShellTools] runs a command line with /bin/sh, and [FileTools] reads, writes,
+// edits, lists and deletes files under one folder it cannot leave. The program
+// serves both itself, so their ToolPack has no server to stop and only
+// unregisters.
 package packs

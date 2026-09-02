@@ -291,6 +291,40 @@ Worth knowing:
 - `ToolPack.Close` only removes the tool from the `ToolBox`. There is no process to leak, so a dropped `ToolPack` costs nothing beyond the tool staying registered.
 - The tool carries roughly 700 bytes of description and schema, which every request pays for while it is registered.
 
+### `FileTools`
+
+`FileTools` gives the model files under one folder it cannot leave — for an
+agent that writes reports or notes rather than code, and so has no business
+loading `CodingTools`:
+
+```go
+pack, err := packs.FileTools(toolBox, "./workspace")
+if err != nil {
+	log.Fatal(err)
+}
+
+defer pack.Close()
+```
+
+| Tool | What it does |
+| --- | --- |
+| `file_read` | Reads a text file a page at a time: `path`, and optionally `offset` and `limit` |
+| `file_write` | Writes a file whole, creating the folders its path needs |
+| `file_edit` | Replaces one piece of text inside a file |
+| `file_list` | Lists one folder, sorted by name |
+| `file_delete` | Removes a file, or a folder that is already empty |
+
+Worth knowing:
+
+- The confinement is `os.Root`. Paths are relative to the root, and one that leaves it — by climbing out, by being absolute, or through a symbolic link — is refused rather than followed. This is the one pack with a boundary: `CodingTools` and `ShellTools` both run with the program's full authority.
+- `FileTools` fails, registering nothing, when the root cannot be opened. The folder has to exist; the pack does not create it.
+- `file_read` returns `<file lines="1-40 of 120">`, so the model can tell a page from a whole file and call again with a larger `offset`. It reads at most 2000 lines by default and stops at 1 MiB, whichever comes first.
+- `file_edit` writes nothing unless its `old_string` appears exactly once — zero matches is `ErrNoMatch`, several is `ErrManyMatches`. An edit never lands somewhere the model did not mean, and the file is left untouched on either error.
+- `file_delete` will not empty a folder: a folder that still holds anything is kept, so nothing recursive happens behind one call. Deleting a tree means deleting its files first.
+- Error text quotes the path the model asked for and the underlying cause, never the root's absolute path.
+- `ToolPack.Close` removes the five tools and closes the root. There is no process to leak.
+- The five tools carry roughly 1.5 KB of descriptions and schemas, which every request pays for while they are registered.
+
 ## `agent`
 
 Ties `llm` and `tools` into a conversation loop: send user input, run whatever
