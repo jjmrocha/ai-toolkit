@@ -22,7 +22,7 @@ go get github.com/jjmrocha/ai-toolkit
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
 | [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
-| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles backed by an MCP server | `mcp`, `tools` |
+| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles, registered in one call | `mcp`, `tools` |
 
 The sections below are a tour. The full API reference lives on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
@@ -265,6 +265,31 @@ Worth knowing:
 - `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
 - A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind.
 - This is a far wider pack than `WebTools`: 29 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
+
+### `ShellTools`
+
+`ShellTools` gives the model one tool, `shell_run`, that runs a command line
+with `/bin/sh`. Nothing is launched to serve it, so it takes no context and
+cannot fail:
+
+```go
+pack := packs.ShellTools(toolBox)
+
+defer pack.Close()
+```
+
+Worth knowing:
+
+- The call supplies the `command`, and optionally a `workdir` and a `timeout_ms`. The command runs as `/bin/sh -c <command>` from the program's own working directory unless `workdir` says otherwise.
+- `timeout_ms` runs from 1 to 600000 and defaults to 120000. A value outside that range is rejected with `ErrInvalidTimeout` before anything runs.
+- A command that outlasts its timeout is stopped, and the model is told to retry with a larger `timeout_ms` — a result rather than an error, because the error text alone would not say what to do next. The output collected up to that point is lost.
+- The result carries the exit status and the combined stdout and stderr, in the order the command wrote them, in the same shape `skill_execute_file` uses. A non-zero exit is a result, not an error.
+- Output is collected up to 1 MiB, after which the command is stopped and the result is marked truncated. A stopped command's exit status describes the kill rather than a choice it made.
+- The command gets no stdin, so one that reads input sees end of input at once instead of waiting.
+- The shell runs with the authority of the program that registered the tool: the whole filesystem, the environment and its credentials. Register it only for a model and a conversation you would trust with a shell.
+- `/bin/sh` is fixed, and no startup file is read. `PATH` is the one the program itself inherited, so a directory added only in an interactive shell's `.zshrc` or `.bashrc` is not on it.
+- `ToolPack.Close` only removes the tool from the `ToolBox`. There is no process to leak, so a dropped `ToolPack` costs nothing beyond the tool staying registered.
+- The tool carries roughly 700 bytes of description and schema, which every request pays for while it is registered.
 
 ## `agent`
 
