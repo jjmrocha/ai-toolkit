@@ -206,7 +206,7 @@ Worth knowing:
 - The script gets no stdin, so one that reads input sees end of input at once instead of waiting.
 - Execution honours the context passed to `Process` and nothing else — there is no built-in timeout. It also leaves the `os.OpenRoot` sandbox behind: the process runs with the same authority as the program that started it and inherits its environment, credentials included, so add only folders you trust, exactly as with an `mcp` server command.
 - The body and the file list are read once, by `Add`. Editing a skill on disk does not change a collection already built.
-- Frontmatter keys other than `name` and `description` are ignored. Values must be single-line; a folded or literal block scalar is rejected with `ErrInvalidFrontmatter`.
+- Frontmatter is parsed as YAML, so any valid YAML scalar works for `name` and `description` — quoted, folded (`>`) or literal (`|`). Keys other than those two are ignored whatever they hold, including nested mappings and sequences. Content that is not valid YAML, or that maps either key to something other than a scalar, is rejected with `ErrInvalidFrontmatter`.
 - The catalog is sorted by name, so the system prompt stays byte-identical across sessions built from the same collection — which is what prompt caching needs.
 
 ## `packs`

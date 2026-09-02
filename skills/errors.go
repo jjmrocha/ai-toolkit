@@ -13,8 +13,8 @@ var (
 	ErrNoSkillFile = errors.New("SKILL.md not found")
 
 	// ErrInvalidFrontmatter is returned by [Collection.Add] when SKILL.md does
-	// not open with a --- fence, never closes it, or holds a value the parser
-	// cannot read, such as a folded or literal block scalar.
+	// not open with a --- fence, never closes it, or fences a block that is not
+	// a YAML mapping of scalars.
 	ErrInvalidFrontmatter = errors.New("invalid skill frontmatter")
 
 	// ErrNameRequired is returned by [Collection.Add] when the frontmatter

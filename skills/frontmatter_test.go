@@ -20,9 +20,9 @@ func TestParseFrontmatter(t *testing.T) {
 		assert.Equal(t, "Do the thing.\n", body)
 	})
 
-	t.Run("keeps colons inside a value", func(t *testing.T) {
+	t.Run("keeps colons inside a quoted value", func(t *testing.T) {
 		// given
-		content := "---\nname: review\ndescription: Use when auditing: diffs, PRs — or a branch\n---\nbody\n"
+		content := "---\nname: review\ndescription: \"Use when auditing: diffs, PRs — or a branch\"\n---\nbody\n"
 		// when
 		_, result, _, err := parseFrontmatter(content)
 		// then
@@ -53,15 +53,44 @@ func TestParseFrontmatter(t *testing.T) {
 		}
 	})
 
+	t.Run("reads block scalars", func(t *testing.T) {
+		tests := map[string]struct {
+			content  string
+			expected string
+		}{
+			"folded":          {content: "---\nname: skill\ndescription: >-\n  does things\n  and more\n---\nbody\n", expected: "does things and more"},
+			"literal":         {content: "---\nname: skill\ndescription: |-\n  does things\n---\nbody\n", expected: "does things"},
+			"plain multiline": {content: "---\nname: skill\ndescription: does things\n  and more\n---\nbody\n", expected: "does things and more"},
+		}
+
+		for name, tc := range tests {
+			t.Run(name, func(t *testing.T) {
+				// when
+				_, result, _, err := parseFrontmatter(tc.content)
+				// then
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, result)
+			})
+		}
+	})
+
 	t.Run("ignores unknown keys", func(t *testing.T) {
-		// given
-		content := "---\nname: skill\nlicense: MIT\ndescription: does things\ncompatibility: opencode\n---\nbody\n"
-		// when
-		name, description, _, err := parseFrontmatter(content)
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "skill", name)
-		assert.Equal(t, "does things", description)
+		tests := map[string]string{
+			"scalar values":  "---\nname: skill\nlicense: MIT\ndescription: does things\ncompatibility: opencode\n---\nbody\n",
+			"nested mapping": "---\nname: skill\ndescription: does things\nmetadata:\n  author: someone\n  version: 2\n---\nbody\n",
+			"sequence":       "---\nname: skill\ndescription: does things\nallowed-tools:\n  - Read\n  - Bash\n---\nbody\n",
+		}
+
+		for name, content := range tests {
+			t.Run(name, func(t *testing.T) {
+				// when
+				name, description, _, err := parseFrontmatter(content)
+				// then
+				require.NoError(t, err)
+				assert.Equal(t, "skill", name)
+				assert.Equal(t, "does things", description)
+			})
+		}
 	})
 
 	t.Run("skips blank lines inside the frontmatter", func(t *testing.T) {
@@ -97,15 +126,22 @@ func TestParseFrontmatter(t *testing.T) {
 		assert.Equal(t, "does things", description)
 	})
 
-	t.Run("returns an empty value when a key is absent", func(t *testing.T) {
-		// given
-		content := "---\nname: skill\n---\nbody\n"
-		// when
-		name, description, _, err := parseFrontmatter(content)
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "skill", name)
-		assert.Empty(t, description)
+	t.Run("returns an empty value when a key carries none", func(t *testing.T) {
+		tests := map[string]string{
+			"key absent": "---\nname: skill\n---\nbody\n",
+			"key empty":  "---\nname: skill\ndescription:\n---\nbody\n",
+		}
+
+		for name, content := range tests {
+			t.Run(name, func(t *testing.T) {
+				// when
+				name, description, _, err := parseFrontmatter(content)
+				// then
+				require.NoError(t, err)
+				assert.Equal(t, "skill", name)
+				assert.Empty(t, description)
+			})
+		}
 	})
 
 	t.Run("returns ErrInvalidFrontmatter for malformed content", func(t *testing.T) {
@@ -114,9 +150,10 @@ func TestParseFrontmatter(t *testing.T) {
 			"no opening fence":         "name: skill\ndescription: does things\n---\nbody\n",
 			"no closing fence":         "---\nname: skill\ndescription: does things\nbody\n",
 			"line without a colon":     "---\nname: skill\nnonsense\ndescription: does things\n---\nbody\n",
-			"folded block scalar":      "---\nname: skill\ndescription: >-\n  does things\n---\nbody\n",
-			"literal block scalar":     "---\nname: skill\ndescription: |\n  does things\n---\nbody\n",
-			"empty value":              "---\nname: skill\ndescription:\n---\nbody\n",
+			"unquoted colon in value":  "---\nname: skill\ndescription: Use when auditing: diffs\n---\nbody\n",
+			"duplicate key":            "---\nname: skill\nname: other\ndescription: does things\n---\nbody\n",
+			"not a mapping":            "---\njust a string\n---\nbody\n",
+			"non-string value":         "---\nname: skill\ndescription:\n  - does things\n---\nbody\n",
 			"body text before a fence": "not frontmatter\n---\nname: skill\n---\nbody\n",
 		}
 
