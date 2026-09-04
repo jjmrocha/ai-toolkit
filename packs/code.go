@@ -8,15 +8,21 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-var serena = mcp.ClientConfig{
-	Name:    "serena",
-	Command: "uvx",
-	Args: []string{
-		"--from", "git+https://github.com/oraios/serena",
-		"serena", "start-mcp-server",
-		"--context", "desktop-app",
-	},
-	ToolCallTimeout: 360 * time.Second,
+// SerenaMCPConfig returns the [mcp.ClientConfig] that [CodingTools] starts
+// Serena from. Every call returns a fresh value that shares nothing with the
+// pack, so the returned config can be adjusted — pinned to a revision, say —
+// and passed to [mcp.NewClient] directly.
+func SerenaMCPConfig() mcp.ClientConfig {
+	return mcp.ClientConfig{
+		Name:    "serena",
+		Command: "uvx",
+		Args: []string{
+			"--from", "git+https://github.com/oraios/serena",
+			"serena", "start-mcp-server",
+			"--context", "desktop-app",
+		},
+		ToolCallTimeout: 360 * time.Second,
+	}
 }
 
 // CodingTools registers symbol-aware code navigation and editing, diagnostics,
@@ -34,7 +40,7 @@ var serena = mcp.ClientConfig{
 // behind. A server that later dies on its own also removes its own tools from
 // m, so a pack whose server is gone leaves no tool the model can still call.
 func CodingTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, serena)
+	client, err := mcp.NewClient(ctx, SerenaMCPConfig())
 	if err != nil {
 		return nil, err
 	}

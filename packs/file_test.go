@@ -61,7 +61,7 @@ func TestFileTools(t *testing.T) {
 			names = append(names, tool.Name)
 		}
 
-		expected := []string{deleteToolName, editToolName, listToolName, readToolName, writeToolName}
+		expected := []string{deleteToolName, editToolName, listToolName, readToolName, workdirToolName, writeToolName}
 		assert.Equal(t, expected, names)
 	})
 
@@ -99,6 +99,36 @@ func TestFileTools(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, pack)
 		assert.Empty(t, toolBox.Tools())
+	})
+}
+
+func TestFileWorkdirTool(t *testing.T) {
+	t.Run("returns the absolute path of the folder the tools are confined to", func(t *testing.T) {
+		// given
+		root := rootWith(t, nil)
+		// when
+		result, err := runFileTool(t, root, workdirToolName, map[string]any{})
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, root, result)
+	})
+
+	t.Run("returns an absolute path for a pack rooted at a relative one", func(t *testing.T) {
+		// given
+		root := rootWith(t, nil)
+		t.Chdir(root)
+		// when
+		result, err := runFileTool(t, ".", workdirToolName, map[string]any{})
+		// then
+		require.NoError(t, err)
+		assert.True(t, filepath.IsAbs(result))
+
+		wanted, err := os.Stat(root)
+		require.NoError(t, err)
+
+		got, err := os.Stat(result)
+		require.NoError(t, err)
+		assert.True(t, os.SameFile(wanted, got))
 	})
 }
 
@@ -220,7 +250,7 @@ func TestFileWriteTool(t *testing.T) {
 		result, err := runFileTool(t, root, writeToolName, args)
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, "wrote 8 bytes to notes.md", result)
+		assert.Equal(t, "wrote 8 bytes to notes.md - "+filepath.Join(root, "notes.md"), result)
 		written, err := os.ReadFile(filepath.Join(root, "notes.md"))
 		require.NoError(t, err)
 		assert.Equal(t, "one\ntwo\n", string(written))
@@ -244,9 +274,10 @@ func TestFileWriteTool(t *testing.T) {
 		root := rootWith(t, nil)
 		args := map[string]any{"path": "reports/2026/q1.md", "content": "payload\n"}
 		// when
-		_, err := runFileTool(t, root, writeToolName, args)
+		result, err := runFileTool(t, root, writeToolName, args)
 		// then
 		require.NoError(t, err)
+		assert.Equal(t, "wrote 8 bytes to reports/2026/q1.md - "+filepath.Join(root, "reports/2026/q1.md"), result)
 		written, err := os.ReadFile(filepath.Join(root, "reports/2026/q1.md"))
 		require.NoError(t, err)
 		assert.Equal(t, "payload\n", string(written))
@@ -417,7 +448,10 @@ func TestFileListTool(t *testing.T) {
 		result, err := runFileTool(t, root, listToolName, map[string]any{})
 		// then
 		require.NoError(t, err)
-		expected := "<dir path=\".\">\nnotes.md 8\nreports/\n</dir>"
+		expected := "<dir path=\".\">\n" +
+			"<file name=\"notes.md\" size=\"8\" path=\"" + filepath.Join(root, "notes.md") + "\"/>\n" +
+			"<dir name=\"reports\" path=\"" + filepath.Join(root, "reports") + "\"/>\n" +
+			"</dir>"
 		assert.Equal(t, expected, result)
 	})
 
@@ -428,7 +462,9 @@ func TestFileListTool(t *testing.T) {
 		result, err := runFileTool(t, root, listToolName, map[string]any{"path": "reports"})
 		// then
 		require.NoError(t, err)
-		expected := "<dir path=\"reports\">\nq1.md 8\n</dir>"
+		expected := "<dir path=\"reports\">\n" +
+			"<file name=\"q1.md\" size=\"8\" path=\"" + filepath.Join(root, "reports/q1.md") + "\"/>\n" +
+			"</dir>"
 		assert.Equal(t, expected, result)
 	})
 

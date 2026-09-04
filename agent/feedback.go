@@ -12,8 +12,12 @@ import (
 // a silent default that ignores every event; pass [NewStdoutFeedback] to
 // [Agent.SetFeedback] to print them instead.
 type Feedback interface {
-	// ToolCalled fires just before the agent executes the named tool.
-	ToolCalled(toolName string)
+	// ToolCalled fires just before the agent executes the named tool, with the
+	// arguments the model supplied for the call. The arguments are nil when the
+	// call carries none, and they arrive with JSON types, so numbers are
+	// float64. The map is the one the tool is about to run with and must not be
+	// modified.
+	ToolCalled(toolName string, args map[string]any)
 	// ContextCompacted fires when the conversation context is compacted to fit
 	// the model's window (see Config.CompactionThresholdPercent).
 	ContextCompacted()
@@ -53,8 +57,13 @@ func NewWriterFeedback(w io.Writer) Feedback {
 	}
 }
 
-func (s *writerFeedback) ToolCalled(toolName string) {
-	_, _ = fmt.Fprintln(s.stdout, "Tool called:", toolName)
+func (s *writerFeedback) ToolCalled(toolName string, args map[string]any) {
+	if len(args) == 0 {
+		_, _ = fmt.Fprintln(s.stdout, "Tool called:", toolName)
+		return
+	}
+
+	_, _ = fmt.Fprintln(s.stdout, "Tool called:", toolName, args)
 }
 
 func (s *writerFeedback) ContextCompacted() {
@@ -83,7 +92,7 @@ func (s *writerFeedback) SessionClosed() {
 
 type nullFeedback struct{}
 
-func (nullFeedback) ToolCalled(_ string) {
+func (nullFeedback) ToolCalled(_ string, _ map[string]any) {
 }
 
 func (nullFeedback) ContextCompacted() {

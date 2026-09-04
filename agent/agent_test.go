@@ -105,12 +105,14 @@ func systemContent(t *testing.T, messages []llm.Message) string {
 }
 
 type recordingFeedback struct {
-	events []string
-	tools  []string
+	events   []string
+	tools    []string
+	toolArgs []map[string]any
 }
 
-func (f *recordingFeedback) ToolCalled(toolName string) {
+func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
 	f.tools = append(f.tools, toolName)
+	f.toolArgs = append(f.toolArgs, args)
 	f.events = append(f.events, "ToolCalled")
 }
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
@@ -471,7 +473,7 @@ func TestProcess(t *testing.T) {
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
-				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}},
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo", Arguments: map[string]any{"text": "hi"}}}},
 				{Content: "done", Stats: llm.Stats{TotalTokens: 20}},
 			},
 			info: &llm.ModelInfo{ContextSize: 1000},
@@ -488,6 +490,7 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, 1, result.Metadata.ToolCalls)
 		assert.Equal(t, 1, result.Metadata.Iterations)
 		assert.Equal(t, []string{"echo"}, fb.tools)
+		assert.Equal(t, []map[string]any{{"text": "hi"}}, fb.toolArgs)
 	})
 
 	t.Run("returns ErrMaxIterations when the iteration cap is reached", func(t *testing.T) {

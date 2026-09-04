@@ -29,6 +29,10 @@ var (
 	// same name has already been added.
 	ErrDuplicateSkill = errors.New("skill already added")
 
+	// ErrInvalidSkillName is returned by [Collection.AddClaudeSkill] when the
+	// name is not a single folder inside the Claude skills folder.
+	ErrInvalidSkillName = errors.New("invalid skill name")
+
 	// ErrSkillNotFound is returned by the [loadToolName], [loadFileToolName] and
 	// [executeFileToolName] tools when no skill in the collection matches the
 	// requested name.

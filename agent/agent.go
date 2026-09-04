@@ -200,7 +200,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		}
 
 		for _, call := range response.ToolCalls {
-			a.fb.ToolCalled(call.Name)
+			a.fb.ToolCalled(call.Name, call.Arguments)
 
 			t0 := time.Now()
 			result, err := a.toolBox.Execute(ctx, call)

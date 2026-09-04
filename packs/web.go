@@ -8,11 +8,17 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-var donsetch = mcp.ClientConfig{
-	Name:            "donsetch",
-	Command:         "donsetch",
-	Args:            []string{"mcp", "--supervised"},
-	ToolCallTimeout: 15 * time.Minute,
+// DonSeTchMCPConfig returns the [mcp.ClientConfig] that [WebTools] starts
+// DonSeTch from. Every call returns a fresh value that shares nothing with the
+// pack, so the returned config can be adjusted — pinned to a revision, say —
+// and passed to [mcp.NewClient] directly.
+func DonSeTchMCPConfig() mcp.ClientConfig {
+	return mcp.ClientConfig{
+		Name:            "donsetch",
+		Command:         "donsetch",
+		Args:            []string{"mcp", "--supervised"},
+		ToolCallTimeout: 15 * time.Minute,
+	}
 }
 
 // WebTools registers web search, page fetching and site crawling in m, served
@@ -25,7 +31,7 @@ var donsetch = mcp.ClientConfig{
 // behind. A server that later dies on its own also removes its own tools from
 // m, so a pack whose server is gone leaves no tool the model can still call.
 func WebTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, donsetch)
+	client, err := mcp.NewClient(ctx, DonSeTchMCPConfig())
 	if err != nil {
 		return nil, err
 	}

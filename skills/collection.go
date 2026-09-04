@@ -12,7 +12,10 @@ import (
 	"sync"
 )
 
-const skillFile = "SKILL.md"
+const (
+	skillFile        = "SKILL.md"
+	claudeSkillsPath = ".claude/skills"
+)
 
 type skill struct {
 	name        string
@@ -112,6 +115,31 @@ func (c *Collection) Add(path string) error {
 	c.skills[name] = s
 
 	return nil
+}
+
+// AddClaudeSkill registers the skill stored under skillName in the user's
+// Claude skills folder, ~/.claude/skills, the way [Collection.Add] registers a
+// skill given its path. The name must be a single folder in that directory, so
+// a skill outside it cannot be reached.
+//
+// Beyond the errors [Collection.Add] returns — [ErrSkillFolderNotFound] when
+// the folder holds no such skill — it returns [ErrInvalidSkillName] when
+// skillName is not a single folder, and reports the failure when the home
+// directory cannot be located.
+func (c *Collection) AddClaudeSkill(skillName string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("locating the home directory: %w", err)
+	}
+
+	skillsPath := filepath.Join(home, claudeSkillsPath)
+
+	path := filepath.Join(skillsPath, skillName)
+	if filepath.Dir(path) != skillsPath {
+		return fmt.Errorf("%w: %q", ErrInvalidSkillName, skillName)
+	}
+
+	return c.Add(path)
 }
 
 // Catalog renders the block of skill names and descriptions an agent adds to

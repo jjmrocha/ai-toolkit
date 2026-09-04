@@ -11,7 +11,7 @@ import (
 
 func exerciseAllEvents(fb Feedback) {
 	fb.SessionStarted()
-	fb.ToolCalled("echo")
+	fb.ToolCalled("echo", nil)
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
 	fb.ModelInfoUnavailable()
@@ -32,8 +32,13 @@ func TestNewWriterFeedback(t *testing.T) {
 		},
 		{
 			name:     "tool called",
-			fire:     func(fb Feedback) { fb.ToolCalled("get_weather") },
-			expected: "Tool called: get_weather\n",
+			fire:     func(fb Feedback) { fb.ToolCalled("get_weather", map[string]any{"city": "Lisbon"}) },
+			expected: "Tool called: get_weather map[city:Lisbon]\n",
+		},
+		{
+			name:     "tool called without arguments",
+			fire:     func(fb Feedback) { fb.ToolCalled("echo", nil) },
+			expected: "Tool called: echo\n",
 		},
 		{
 			name:     "context compacted",

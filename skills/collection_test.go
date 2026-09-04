@@ -112,6 +112,65 @@ func TestCollectionAdd(t *testing.T) {
 	})
 }
 
+func TestCollectionAddClaudeSkill(t *testing.T) {
+	writeClaudeSkill := func(t *testing.T, name, content string) {
+		t.Helper()
+
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+
+		path := filepath.Join(home, ".claude", "skills", name)
+		require.NoError(t, os.MkdirAll(path, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(path, "SKILL.md"), []byte(content), 0o600))
+	}
+
+	t.Run("adds a skill from the user's Claude skills folder", func(t *testing.T) {
+		// given
+		writeClaudeSkill(t, "git-release", validSkill)
+		collection := NewCollection()
+		// when
+		err := collection.AddClaudeSkill("git-release")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{validSkillName}, collection.Skills())
+	})
+
+	t.Run("returns ErrSkillFolderNotFound when the folder holds no such skill", func(t *testing.T) {
+		// given
+		writeClaudeSkill(t, "git-release", validSkill)
+		collection := NewCollection()
+		// when
+		err := collection.AddClaudeSkill("nope")
+		// then
+		assert.ErrorIs(t, err, ErrSkillFolderNotFound)
+		assert.Empty(t, collection.Skills())
+	})
+
+	t.Run("returns ErrInvalidSkillName when the name is not a single folder", func(t *testing.T) {
+		tests := map[string]string{
+			"empty":            "",
+			"parent":           "..",
+			"escaping path":    "../../etc",
+			"nested path":      "team/git-release",
+			"trailing dot dot": "git-release/..",
+		}
+
+		for name, skillName := range tests {
+			t.Run(name, func(t *testing.T) {
+				// given
+				writeClaudeSkill(t, "git-release", validSkill)
+				collection := NewCollection()
+				// when
+				err := collection.AddClaudeSkill(skillName)
+				// then
+				assert.ErrorIs(t, err, ErrInvalidSkillName)
+				assert.Empty(t, collection.Skills())
+			})
+		}
+	})
+}
+
 func TestCollectionCatalog(t *testing.T) {
 	t.Run("returns an empty string when no skills were added", func(t *testing.T) {
 		// given

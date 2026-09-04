@@ -182,6 +182,10 @@ collection := skills.NewCollection()
 if err := collection.Add("./skills/git-release"); err != nil {
 	log.Fatal(err)
 }
+
+if err := collection.AddClaudeSkill("git-release"); err != nil {
+	log.Fatal(err)
+}
 ```
 
 ```markdown
@@ -198,6 +202,7 @@ Worth knowing:
 - Only names and descriptions reach the model up front, as an `<available_skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
 - Three tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, `skill_load_file` returns one of those files, and `skill_execute_file` runs one of them.
 - **`skill_load`, `skill_load_file` and `skill_execute_file` are reserved tool names.** A tool already registered under any of them is replaced while the session lasts, and removed when it ends.
+- `AddClaudeSkill` adds a skill by name from the user's Claude skills folder, `~/.claude/skills`, and is `Add` in every other respect. The name has to be a single folder in there — anything that would step outside it, `../other` included, is rejected with `ErrInvalidSkillName`, and a name that is not there gets `Add`'s own `ErrSkillFolderNotFound`.
 - An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the three tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available_skills>` block, and `Skills` lists the names added so far, sorted.
 - File access is confined to the skill folder with `os.OpenRoot`, so a symlink pointing outside it is neither listed nor readable, and the model is never told the folder's real path.
 - `skill_execute_file` runs the file directly, from the skill's folder, with the arguments the model supplies and no shell. The file needs its own execute bit and shebang; the package never changes file modes, and it infers no interpreter from the extension. A file the skill does not ship cannot be run.
@@ -236,6 +241,7 @@ Worth knowing:
 - A registration that fails closes the server before returning, so a failed `WebTools` leaves nothing behind.
 - The tool call ceiling is 15 minutes rather than the two-minute default. `web_crawl` accepts a `deadline_s` of up to 600 seconds and the other two a `deadline_ms` of up to 600000, so a shorter ceiling would kill a long call before the server could report its own deadline — and the server's error tells the model what to do next, where a client-side timeout does not.
 - The three tools carry roughly 15 KB of descriptions and schemas, which every request pays for while they are registered. Close the pack when a session has finished with the web.
+- `packs.DonSeTchMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from, a fresh value each call that shares nothing with the pack. Adjust the returned config freely — a variant built from it goes through `mcp.NewClient` and `RegisterTools`, not through `WebTools`.
 
 ### `CodingTools`
 
@@ -257,7 +263,7 @@ Worth knowing:
 
 - The server starts with no project. The model reaches a code base by calling `serena__activate_project`, and the symbolic tools fail until it does.
 - This pack writes files and runs commands. Serena inherits the authority of the program that started it — the whole filesystem, the environment and its credentials — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with a shell, and remember that anything the model reads out of a repository can steer what it does next.
-- The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: build the `mcp.ClientConfig` by hand against a tag and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
+- The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig()`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
 - Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
 - The tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes, so it moves with Serena's own development rather than being fixed here.
 - The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
@@ -265,6 +271,7 @@ Worth knowing:
 - `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
 - A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind.
 - This is a far wider pack than `WebTools`: 29 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
+- `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from, on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
 
 ### `ShellTools`
 
@@ -311,19 +318,22 @@ defer pack.Close()
 | `file_read` | Reads a text file a page at a time: `path`, and optionally `offset` and `limit` |
 | `file_write` | Writes a file whole, creating the folders its path needs |
 | `file_edit` | Replaces one piece of text inside a file |
-| `file_list` | Lists one folder, sorted by name |
+| `file_list` | Lists one folder, sorted by name, with each entry's full path |
 | `file_delete` | Removes a file, or a folder that is already empty |
+| `file_workdir` | Returns the root's absolute path, for naming a file to a tool outside the root |
 
 Worth knowing:
 
 - The confinement is `os.Root`. Paths are relative to the root, and one that leaves it — by climbing out, by being absolute, or through a symbolic link — is refused rather than followed. This is the one pack with a boundary: `CodingTools` and `ShellTools` both run with the program's full authority.
 - `FileTools` fails, registering nothing, when the root cannot be opened. The folder has to exist; the pack does not create it.
 - `file_read` returns `<file lines="1-40 of 120">`, so the model can tell a page from a whole file and call again with a larger `offset`. It reads at most 2000 lines by default and stops at 1 MiB, whichever comes first.
+- Arguments are always relative to the root; an absolute path is refused, even one that points inside it. Two results hand out absolute paths anyway, for the model to pass on to a tool that is not confined here: `file_write` answers `wrote 8 bytes to notes.md - /Users/you/workspace/notes.md`, and `file_list` gives one element per entry — `<file name="q1.md" size="8" path="/Users/you/workspace/reports/q1.md"/>` and `<dir name="2026" path="/Users/you/workspace/reports/2026"/>`.
 - `file_edit` writes nothing unless its `old_string` appears exactly once — zero matches is `ErrNoMatch`, several is `ErrManyMatches`. An edit never lands somewhere the model did not mean, and the file is left untouched on either error.
 - `file_delete` will not empty a folder: a folder that still holds anything is kept, so nothing recursive happens behind one call. Deleting a tree means deleting its files first.
-- Error text quotes the path the model asked for and the underlying cause, never the root's absolute path.
-- `ToolPack.Close` removes the five tools and closes the root. There is no process to leak.
-- The five tools carry roughly 1.5 KB of descriptions and schemas, which every request pays for while they are registered.
+- Error text quotes the path the model asked for and the underlying cause, never the root's absolute path. `file_workdir` is the one way out of that: it hands the model the root's absolute path on request, which is what lets a file written here be named to `shell_run` or a `CodingTools` tool. Root the pack at a folder whose path is safe to disclose.
+- `file_workdir` takes no arguments and reports the root as an absolute path, resolved when the pack was built. A pack rooted at a relative path still reports an absolute one, and a later `chdir` does not change the answer.
+- `ToolPack.Close` removes the six tools and closes the root. There is no process to leak.
+- The six tools carry roughly 1.7 KB of descriptions and schemas, which every request pays for while they are registered.
 
 ## `agent`
 
@@ -362,7 +372,7 @@ Worth knowing:
 - `Response.Metadata` reports token usage, stop reason, per-phase timing, and iteration and tool-call counts.
 - `StartSession` declares everything the model sees: the system prompt, the `ToolBox` it may call, and the `skills.Collection` it may load from. All three last until `Close` or the next `StartSession`, so one agent can run differently equipped sessions.
 - A `SessionConfig.Skills` collection has its tools registered in the session's `ToolBox` and its catalog appended to the prompt; `Close` removes those tools again.
-- Install a `Feedback` sink with `SetFeedback` to observe tool calls and session events; the default is silent.
+- Install a `Feedback` sink with `SetFeedback` to observe tool calls and session events; the default is silent. `ToolCalled(toolName string, args map[string]any)` fires just before each tool runs, with the arguments the model supplied — JSON-typed, so numbers are `float64`, and nil for a call with none. The map is the one the tool is about to run with, so a sink must read it, not modify it.
 
 ## License
 
