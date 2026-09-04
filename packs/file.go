@@ -72,9 +72,9 @@ func (p *filePack) Close() error {
 // refused rather than followed. So a pack rooted at a folder cannot touch the
 // rest of the filesystem, which is what separates it from [CodingTools] and
 // [ShellTools]; inside that folder the tools carry the authority of the program
-// that registered them. Errors never quote root's absolute path, but
-// "file_workdir" hands it to the model on request, so register the pack under a
-// folder whose path is safe to disclose.
+// that registered them. The boundary is not a secret: "file_workdir",
+// "file_write", "file_list" and the error text all name root's absolute path, so
+// register the pack under a folder whose path is safe to disclose.
 //
 // Two refusals are deliberate. "file_edit" writes nothing unless its text
 // appears exactly once, so an edit never lands somewhere the model did not mean.
@@ -83,12 +83,12 @@ func (p *filePack) Close() error {
 func FileTools(m *tools.ToolBox, root string) (ToolPack, error) {
 	path, err := filepath.Abs(root)
 	if err != nil {
-		return nil, fmt.Errorf("opening root: %w", hideRootPath(err))
+		return nil, fmt.Errorf("opening root: %w", err)
 	}
 
 	opened, err := os.OpenRoot(path)
 	if err != nil {
-		return nil, fmt.Errorf("opening root: %w", hideRootPath(err))
+		return nil, fmt.Errorf("opening root: %w", err)
 	}
 
 	pack := &filePack{toolBox: m, root: opened, path: path}
@@ -197,14 +197,14 @@ func (p *filePack) readFile(_ context.Context, args map[string]any) (string, err
 
 	file, err := p.root.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("reading %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("reading %q: %w", path, err)
 	}
 
 	defer func() { _ = file.Close() }()
 
 	lines, total, err := readPage(file, offset, limit)
 	if err != nil {
-		return "", fmt.Errorf("reading %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("reading %q: %w", path, err)
 	}
 
 	return renderPage(lines, offset, total), nil
@@ -225,12 +225,12 @@ func (p *filePack) writeFile(_ context.Context, args map[string]any) (string, er
 
 	if dir := filepath.Dir(path); dir != "." {
 		if err = p.root.MkdirAll(dir, 0o700); err != nil {
-			return "", fmt.Errorf("writing %q: %w", path, hideRootPath(err))
+			return "", fmt.Errorf("writing %q: %w", path, err)
 		}
 	}
 
 	if err = p.root.WriteFile(path, []byte(content), 0o600); err != nil {
-		return "", fmt.Errorf("writing %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("writing %q: %w", path, err)
 	}
 
 	return "wrote " + strconv.Itoa(len(content)) + " bytes to " + path + " - " + p.fullPath(path), nil
@@ -256,7 +256,7 @@ func (p *filePack) editFile(_ context.Context, args map[string]any) (string, err
 
 	content, err := p.root.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("editing %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("editing %q: %w", path, err)
 	}
 
 	switch strings.Count(string(content), oldString) {
@@ -270,7 +270,7 @@ func (p *filePack) editFile(_ context.Context, args map[string]any) (string, err
 	edited := strings.Replace(string(content), oldString, newString, 1)
 
 	if err = p.root.WriteFile(path, []byte(edited), 0o600); err != nil {
-		return "", fmt.Errorf("editing %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("editing %q: %w", path, err)
 	}
 
 	return "edited " + path, nil
@@ -288,7 +288,7 @@ func (p *filePack) listDir(_ context.Context, args map[string]any) (string, erro
 
 	entries, err := fs.ReadDir(p.root.FS(), path)
 	if err != nil {
-		return "", fmt.Errorf("listing %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("listing %q: %w", path, err)
 	}
 
 	lines := make([]string, 0, len(entries))
@@ -304,7 +304,7 @@ func (p *filePack) listDir(_ context.Context, args map[string]any) (string, erro
 
 		info, err := entry.Info()
 		if err != nil {
-			return "", fmt.Errorf("listing %q: %w", path, hideRootPath(err))
+			return "", fmt.Errorf("listing %q: %w", path, err)
 		}
 
 		lines = append(lines, renderFileEntry(entry.Name(), info.Size(), full))
@@ -337,7 +337,7 @@ func (p *filePack) deleteFile(_ context.Context, args map[string]any) (string, e
 	}
 
 	if err = p.root.Remove(path); err != nil {
-		return "", fmt.Errorf("deleting %q: %w", path, hideRootPath(err))
+		return "", fmt.Errorf("deleting %q: %w", path, err)
 	}
 
 	return "deleted " + path, nil
@@ -399,12 +399,4 @@ func renderPage(lines []string, offset int, total int) string {
 	page := strconv.Itoa(from) + "-" + strconv.Itoa(to) + " of " + strconv.Itoa(total)
 
 	return "<file lines=\"" + page + "\">\n" + strings.Join(lines, "\n") + "\n</file>"
-}
-
-func hideRootPath(err error) error {
-	if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
-		return pathErr.Err
-	}
-
-	return err
 }

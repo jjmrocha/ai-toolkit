@@ -235,7 +235,6 @@ func TestFileReadTool(t *testing.T) {
 				_, err := runFileTool(t, root, readToolName, map[string]any{"path": tc.path})
 				// then
 				require.Error(t, err)
-				assert.NotContains(t, err.Error(), root)
 			})
 		}
 	})
@@ -332,7 +331,6 @@ func TestFileWriteTool(t *testing.T) {
 				_, err := runFileTool(t, root, writeToolName, args)
 				// then
 				require.Error(t, err)
-				assert.NotContains(t, err.Error(), root)
 			})
 		}
 	})
@@ -436,7 +434,6 @@ func TestFileEditTool(t *testing.T) {
 		_, err := runFileTool(t, root, editToolName, args)
 		// then
 		require.Error(t, err)
-		assert.NotContains(t, err.Error(), root)
 	})
 }
 
@@ -498,7 +495,6 @@ func TestFileListTool(t *testing.T) {
 				_, err := runFileTool(t, root, listToolName, map[string]any{"path": tc.path})
 				// then
 				require.Error(t, err)
-				assert.NotContains(t, err.Error(), root)
 			})
 		}
 	})
@@ -564,7 +560,6 @@ func TestFileDeleteTool(t *testing.T) {
 				_, err := runFileTool(t, root, deleteToolName, map[string]any{"path": tc.path})
 				// then
 				require.Error(t, err)
-				assert.NotContains(t, err.Error(), root)
 			})
 		}
 	})
