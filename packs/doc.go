@@ -4,8 +4,8 @@
 //
 // [WebTools] is the web pack: search, page fetching and site crawling.
 // [CodingTools] is the coding pack: symbol-aware navigation and editing,
-// diagnostics, files and shell. Both are served by an MCP server the pack
-// launches and owns.
+// diagnostics, files, shell and read-only queries against other projects. Both
+// are served by an MCP server the pack launches and owns.
 //
 // [ShellTools] runs a command line with /bin/sh, and [FileTools] reads, writes,
 // edits, lists and deletes files under one folder it cannot leave. The program

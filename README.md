@@ -246,8 +246,9 @@ Worth knowing:
 ### `CodingTools`
 
 `CodingTools` gives the model a code base: symbol-aware navigation and editing,
-diagnostics, file and directory access, shell execution and project memories,
-backed by [Serena](https://github.com/oraios/serena). It is keyless, so the only
+diagnostics, file and directory access, shell execution, project memories and
+read-only queries against other projects, backed by
+[Serena](https://github.com/oraios/serena). It is keyless, so the only
 prerequisite is the `uvx` executable on `PATH`.
 
 ```go
@@ -262,6 +263,7 @@ defer pack.Close()
 Worth knowing:
 
 - The server starts with no project. The model reaches a code base by calling `serena__activate_project`, and the symbolic tools fail until it does.
+- One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools and the shell are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
 - This pack writes files and runs commands. Serena inherits the authority of the program that started it — the whole filesystem, the environment and its credentials — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with a shell, and remember that anything the model reads out of a repository can steer what it does next.
 - The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig()`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
 - Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
@@ -270,8 +272,8 @@ Worth knowing:
 - The first symbolic call on a newly activated project is the slow one: Serena downloads that language's server if it is missing and indexes the project inside that call's budget.
 - `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
 - A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind.
-- This is a far wider pack than `WebTools`: 29 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
-- `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from, on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
+- This is a far wider pack than `WebTools`: 31 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
+- `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` mode added — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
 
 ### `ShellTools`
 
