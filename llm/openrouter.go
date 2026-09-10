@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	openrouterBaseURL        = "https://eu.openrouter.ai/api/v1"
+	openrouterBaseURL        = "https://openrouter.ai/api/v1"
 	openrouterChatEndpoint   = "/chat/completions"
 	openrouterModelsEndpoint = "/models"
 )
