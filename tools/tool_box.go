@@ -27,6 +27,14 @@ type toolFn struct {
 	handler Handler
 }
 
+// Interceptor decides whether a tool call may run. It is called by
+// [ToolBox.Execute] after the tool is found and before its [Handler] runs, with
+// the same context and the call the model requested. Returning nil lets the call
+// proceed; returning an error blocks it, and the handler never runs. The
+// arguments in call are the ones the handler would run with and must not be
+// modified.
+type Interceptor func(context.Context, llm.ToolCall) error
+
 // ToolBox is a registry that pairs [llm.Tool] definitions with the functions
 // that execute them, bridging a tool call requested by the model and your code:
 // register tools with [ToolBox.Add], expose their definitions to the model with
@@ -36,8 +44,9 @@ type toolFn struct {
 // other goroutines list or execute them, as happens when an MCP server
 // registers or drops its tools at runtime.
 type ToolBox struct {
-	mu    sync.RWMutex
-	tools map[string]toolFn
+	mu          sync.RWMutex
+	tools       map[string]toolFn
+	interceptor Interceptor
 }
 
 // NewToolBox returns an empty [ToolBox] ready for tool registration.
@@ -140,19 +149,45 @@ func (tb *ToolBox) Tools() []llm.Tool {
 	return tools
 }
 
+// SetInterceptor installs i as the gate [ToolBox.Execute] consults before it
+// runs any tool, replacing the one set before. A nil i clears it, leaving every
+// registered tool to run unguarded, which is the default.
+//
+// The interceptor applies to every tool in the box, however it was registered —
+// by a pack, by an MCP server at runtime, or by the caller — so it is the one
+// place to enforce a policy across all of them. The error i returns is wrapped
+// and returned by [ToolBox.Execute]; an agent loop that reports a failed call
+// back to the model reports a blocked one the same way, so the model is told the
+// call was refused and can choose what to do next.
+func (tb *ToolBox) SetInterceptor(i Interceptor) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	tb.interceptor = i
+}
+
 // Execute runs the handler for the requested tool call and wraps its result in
 // an [llm.ToolMessage] ready to append to the conversation. ctx is passed to the
 // handler for cancellation and deadlines. It returns [ErrToolNotFound] if no
-// tool matches call.Name, or a wrapped error if the handler itself fails. The
+// tool matches call.Name, a wrapped error if an [Interceptor] set by
+// [ToolBox.SetInterceptor] blocks the call, or a wrapped error if the handler
+// itself fails. The
 // returned message correlates by both ToolCallID and ToolName so it works with
 // either provider.
 func (tb *ToolBox) Execute(ctx context.Context, call llm.ToolCall) (*llm.ToolMessage, error) {
 	tb.mu.RLock()
 	fn, ok := tb.tools[call.Name]
+	interceptor := tb.interceptor
 	tb.mu.RUnlock()
 
 	if !ok {
 		return nil, ErrToolNotFound
+	}
+
+	if interceptor != nil {
+		if err := interceptor(ctx, call); err != nil {
+			return nil, fmt.Errorf("tool call %s blocked: %w", call.Name, err)
+		}
 	}
 
 	handler := fn.handler

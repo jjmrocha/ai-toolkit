@@ -7,6 +7,8 @@ import (
 	"github.com/jjmrocha/go-algo/fn"
 )
 
+const typeText = "text"
+
 func toAnthropicSystem(messages []Message) string {
 	var parts []string
 
@@ -29,7 +31,7 @@ func toAnthropicSystemBlocks(messages []Message) []anthropicSystemBlock {
 		return nil
 	}
 
-	return []anthropicSystemBlock{{Type: "text", Text: text, CacheControl: cacheEphemeral}}
+	return []anthropicSystemBlock{{Type: typeText, Text: text, CacheControl: cacheEphemeral}}
 }
 
 func toAnthropicMessages(messages []Message) []anthropicMessage {
@@ -49,7 +51,7 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 		switch m.Role() {
 		case UserRole:
 			msg := messageValue[UserMessage](m)
-			block := anthropicContentBlock{Type: "text", Text: msg.Content}
+			block := anthropicContentBlock{Type: typeText, Text: msg.Content}
 			appendBlocks(string(UserRole), []anthropicContentBlock{block})
 		case AssistantRole:
 			msg := messageValue[AssistantMessage](m)
@@ -61,7 +63,7 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 
 			var blocks []anthropicContentBlock
 			if msg.Content != "" {
-				block := anthropicContentBlock{Type: "text", Text: msg.Content}
+				block := anthropicContentBlock{Type: typeText, Text: msg.Content}
 				blocks = append(blocks, block)
 			}
 
@@ -146,7 +148,7 @@ func fromAnthropicToAssistantMessage(resp anthropicChatResponse) *AssistantMessa
 
 	for _, block := range resp.Content {
 		switch block.Type {
-		case "text":
+		case typeText:
 			result.Content += block.Text
 		case "tool_use":
 			toolCall := ToolCall{

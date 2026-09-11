@@ -35,6 +35,11 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+      # goconst is intentionally suppressed in tests: a repeated fixture literal
+      # reads better inline than behind a shared constant
+      - path: _test\.go
+        linters:
+          - goconst
 
 formatters:
   enable:

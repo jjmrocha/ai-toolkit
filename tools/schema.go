@@ -1,5 +1,12 @@
 package tools
 
+const (
+	keyType        = "type"
+	keyDescription = "description"
+	keyItems       = "items"
+	typeArray      = "array"
+)
+
 type field struct {
 	name     string
 	spec     map[string]any
@@ -31,8 +38,8 @@ func (sb *ObjectBuilder) String(name string, desc string, required bool) *Object
 	f := field{
 		name: name,
 		spec: map[string]any{
-			"type":        "string",
-			"description": desc,
+			keyType:        "string",
+			keyDescription: desc,
 		},
 		required: required,
 	}
@@ -46,8 +53,8 @@ func (sb *ObjectBuilder) Integer(name string, desc string, required bool) *Objec
 	f := field{
 		name: name,
 		spec: map[string]any{
-			"type":        "integer",
-			"description": desc,
+			keyType:        "integer",
+			keyDescription: desc,
 		},
 		required: required,
 	}
@@ -61,8 +68,8 @@ func (sb *ObjectBuilder) Number(name string, desc string, required bool) *Object
 	f := field{
 		name: name,
 		spec: map[string]any{
-			"type":        "number",
-			"description": desc,
+			keyType:        "number",
+			keyDescription: desc,
 		},
 		required: required,
 	}
@@ -76,8 +83,8 @@ func (sb *ObjectBuilder) Boolean(name string, desc string, required bool) *Objec
 	f := field{
 		name: name,
 		spec: map[string]any{
-			"type":        "boolean",
-			"description": desc,
+			keyType:        "boolean",
+			keyDescription: desc,
 		},
 		required: required,
 	}
@@ -91,7 +98,7 @@ func (sb *ObjectBuilder) Boolean(name string, desc string, required bool) *Objec
 // preserved.
 func (sb *ObjectBuilder) Object(name string, desc string, required bool, spec *ObjectBuilder) *ObjectBuilder {
 	s := spec.Build()
-	s["description"] = desc
+	s[keyDescription] = desc
 
 	f := field{
 		name:     name,
@@ -106,10 +113,10 @@ func (sb *ObjectBuilder) Object(name string, desc string, required bool, spec *O
 // ArrayOfStrings adds a field named name that is an array of strings.
 func (sb *ObjectBuilder) ArrayOfStrings(name string, desc string, required bool) *ObjectBuilder {
 	s := map[string]any{
-		"type":        "array",
-		"description": desc,
-		"items": map[string]any{
-			"type": "string",
+		keyType:        typeArray,
+		keyDescription: desc,
+		keyItems: map[string]any{
+			keyType: "string",
 		},
 	}
 	f := field{
@@ -125,10 +132,10 @@ func (sb *ObjectBuilder) ArrayOfStrings(name string, desc string, required bool)
 // ArrayOfIntegers adds a field named name that is an array of integers.
 func (sb *ObjectBuilder) ArrayOfIntegers(name string, desc string, required bool) *ObjectBuilder {
 	s := map[string]any{
-		"type":        "array",
-		"description": desc,
-		"items": map[string]any{
-			"type": "integer",
+		keyType:        typeArray,
+		keyDescription: desc,
+		keyItems: map[string]any{
+			keyType: "integer",
 		},
 	}
 	f := field{
@@ -144,10 +151,10 @@ func (sb *ObjectBuilder) ArrayOfIntegers(name string, desc string, required bool
 // ArrayOfNumbers adds a field named name that is an array of numbers.
 func (sb *ObjectBuilder) ArrayOfNumbers(name string, desc string, required bool) *ObjectBuilder {
 	s := map[string]any{
-		"type":        "array",
-		"description": desc,
-		"items": map[string]any{
-			"type": "number",
+		keyType:        typeArray,
+		keyDescription: desc,
+		keyItems: map[string]any{
+			keyType: "number",
 		},
 	}
 	f := field{
@@ -163,10 +170,10 @@ func (sb *ObjectBuilder) ArrayOfNumbers(name string, desc string, required bool)
 // ArrayOfBooleans adds a field named name that is an array of booleans.
 func (sb *ObjectBuilder) ArrayOfBooleans(name string, desc string, required bool) *ObjectBuilder {
 	s := map[string]any{
-		"type":        "array",
-		"description": desc,
-		"items": map[string]any{
-			"type": "boolean",
+		keyType:        typeArray,
+		keyDescription: desc,
+		keyItems: map[string]any{
+			keyType: "boolean",
 		},
 	}
 	f := field{
@@ -183,9 +190,9 @@ func (sb *ObjectBuilder) ArrayOfBooleans(name string, desc string, required bool
 // objects described by spec, its own [ObjectBuilder].
 func (sb *ObjectBuilder) ArrayOfObjects(name string, desc string, required bool, spec *ObjectBuilder) *ObjectBuilder {
 	s := map[string]any{
-		"type":        "array",
-		"description": desc,
-		"items":       spec.Build(),
+		keyType:        typeArray,
+		keyDescription: desc,
+		keyItems:       spec.Build(),
 	}
 	f := field{
 		name:     name,
@@ -218,7 +225,7 @@ func (sb *ObjectBuilder) Build() map[string]any {
 	}
 
 	schema := map[string]any{
-		"type":       "object",
+		keyType:      "object",
 		"properties": fields,
 	}
 

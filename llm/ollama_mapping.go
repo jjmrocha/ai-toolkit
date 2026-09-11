@@ -72,7 +72,7 @@ func toOllamaTools(tools []Tool) []ollamaTool {
 
 	return fn.Map(tools, func(t Tool) ollamaTool {
 		return ollamaTool{
-			Type: "function",
+			Type: typeFunction,
 			Function: ollamaToolFunction{
 				Name:        t.Name,
 				Description: t.Description,

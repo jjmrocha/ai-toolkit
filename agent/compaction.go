@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -28,8 +29,8 @@ func indexOfTheBeginningOfTurnToKeep(messages []llm.Message) int {
 	lastIndex := len(messages) - 1
 	var turnsFound int
 
-	for i := len(messages) - 1; i >= 0; i-- {
-		if _, ok := messages[i].(llm.UserMessage); ok {
+	for i, msg := range slices.Backward(messages) {
+		if _, ok := msg.(llm.UserMessage); ok {
 			lastIndex = i
 			turnsFound++
 

@@ -1,5 +1,7 @@
 package llm
 
+const typeFunction = "function"
+
 // Tool describes a function the model may call. It is sent to the provider as a
 // tool definition and does not execute anything itself.
 type Tool struct {

@@ -331,3 +331,109 @@ func TestToolBoxExecute(t *testing.T) {
 		assert.Equal(t, "v", got)
 	})
 }
+
+func TestToolBoxSetInterceptor(t *testing.T) {
+	t.Run("runs the handler when the interceptor allows the call", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		handlerRan := false
+		require.NoError(t, box.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) {
+			handlerRan = true
+			return "allowed", nil
+		}))
+		var seen llm.ToolCall
+		box.SetInterceptor(func(_ context.Context, call llm.ToolCall) error {
+			seen = call
+			return nil
+		})
+		expected := llm.ToolCall{ID: "call_1", Name: "echo", Arguments: map[string]any{"city": "Braga"}}
+		// when
+		result, err := box.Execute(t.Context(), expected)
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "allowed", result.Content)
+		assert.True(t, handlerRan)
+		assert.Equal(t, expected, seen)
+	})
+
+	t.Run("blocks the call when the interceptor returns an error", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		handlerRan := false
+		require.NoError(t, box.Add(llm.Tool{Name: "shell"}, func(context.Context, map[string]any) (string, error) {
+			handlerRan = true
+			return "ok", nil
+		}))
+		expectedErr := errors.New("blocked by policy")
+		box.SetInterceptor(func(context.Context, llm.ToolCall) error {
+			return expectedErr
+		})
+		// when
+		result, err := box.Execute(t.Context(), llm.ToolCall{Name: "shell"})
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, expectedErr)
+		assert.False(t, handlerRan)
+	})
+
+	t.Run("does not consult the interceptor for an unknown tool", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		intercepted := false
+		box.SetInterceptor(func(context.Context, llm.ToolCall) error {
+			intercepted = true
+			return nil
+		})
+		// when
+		result, err := box.Execute(t.Context(), llm.ToolCall{Name: "missing"})
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+		assert.False(t, intercepted)
+	})
+
+	t.Run("clears a previously set interceptor when given nil", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) {
+			return "cleared", nil
+		}))
+		box.SetInterceptor(func(context.Context, llm.ToolCall) error {
+			return errors.New("blocked by policy")
+		})
+		box.SetInterceptor(nil)
+		// when
+		result, err := box.Execute(t.Context(), llm.ToolCall{Name: "echo"})
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "cleared", result.Content)
+	})
+
+	t.Run("is safe to set while calls are executing", func(t *testing.T) {
+		// given: correctness here is enforced by the race detector
+		const goroutines = 50
+
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "stable"}, noopHandler))
+
+		var wg sync.WaitGroup
+		// when
+		for range goroutines {
+			wg.Go(func() {
+				box.SetInterceptor(func(context.Context, llm.ToolCall) error { return nil })
+			})
+			wg.Go(func() {
+				_, _ = box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
+			})
+		}
+
+		wg.Wait()
+		// then
+		box.SetInterceptor(nil)
+		result, err := box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
+		require.NoError(t, err)
+		assert.Equal(t, "stable", result.ToolName)
+	})
+}

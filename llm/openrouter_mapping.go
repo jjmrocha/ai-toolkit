@@ -41,7 +41,7 @@ func toORMessages(messages []Message) ([]orMessage, error) {
 
 				toolCall := orToolCall{
 					ID:   call.ID,
-					Type: "function",
+					Type: typeFunction,
 					Function: orToolCallFunction{
 						Name:      call.Name,
 						Arguments: string(args),
@@ -81,7 +81,7 @@ func toORTools(tools []Tool) []orTool {
 
 	return fn.Map(tools, func(t Tool) orTool {
 		return orTool{
-			Type: "function",
+			Type: typeFunction,
 			Function: orToolFunction{
 				Name:        t.Name,
 				Description: t.Description,
