@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 // Feedback receives an [Agent]'s lifecycle events as they happen, letting a
@@ -18,6 +19,12 @@ type Feedback interface {
 	// float64. The map is the one the tool is about to run with and must not be
 	// modified.
 	ToolCalled(toolName string, args map[string]any)
+	// ToolReturned fires just after the agent executes the named tool. Tool
+	// calls run one at a time, so it always pairs with the [Feedback.ToolCalled]
+	// immediately before it. result is what the tool returned and is empty when
+	// err is non-nil; err is the failure the call produced, nil on success; and
+	// elapsed is how long the call took.
+	ToolReturned(toolName string, result string, err error, elapsed time.Duration)
 	// ContextCompacted fires when the conversation context is compacted to fit
 	// the model's window (see Config.CompactionThresholdPercent).
 	ContextCompacted()
@@ -66,6 +73,17 @@ func (s *writerFeedback) ToolCalled(toolName string, args map[string]any) {
 	_, _ = fmt.Fprintln(s.stdout, "Tool called:", toolName, args)
 }
 
+func (s *writerFeedback) ToolReturned(toolName string, result string, err error,
+	elapsed time.Duration,
+) {
+	if err != nil {
+		_, _ = fmt.Fprintln(s.stdout, "Tool failed:", toolName, err, elapsed)
+		return
+	}
+
+	_, _ = fmt.Fprintln(s.stdout, "Tool returned:", toolName, result, elapsed)
+}
+
 func (s *writerFeedback) ContextCompacted() {
 	_, _ = fmt.Fprintln(s.stdout, "Context was compacted")
 }
@@ -93,6 +111,9 @@ func (s *writerFeedback) SessionClosed() {
 type nullFeedback struct{}
 
 func (nullFeedback) ToolCalled(_ string, _ map[string]any) {
+}
+
+func (nullFeedback) ToolReturned(_ string, _ string, _ error, _ time.Duration) {
 }
 
 func (nullFeedback) ContextCompacted() {

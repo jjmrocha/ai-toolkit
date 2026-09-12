@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/skills"
@@ -104,16 +105,29 @@ func systemContent(t *testing.T, messages []llm.Message) string {
 	return system.Content
 }
 
+type toolReturn struct {
+	tool    string
+	result  string
+	err     error
+	elapsed time.Duration
+}
+
 type recordingFeedback struct {
 	events   []string
 	tools    []string
 	toolArgs []map[string]any
+	returns  []toolReturn
 }
 
 func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
 	f.tools = append(f.tools, toolName)
 	f.toolArgs = append(f.toolArgs, args)
 	f.events = append(f.events, "ToolCalled")
+}
+
+func (f *recordingFeedback) ToolReturned(toolName string, result string, err error, elapsed time.Duration) {
+	f.returns = append(f.returns, toolReturn{tool: toolName, result: result, err: err, elapsed: elapsed})
+	f.events = append(f.events, "ToolReturned")
 }
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
 func (f *recordingFeedback) ContextCompactionFailed() {
@@ -491,6 +505,85 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, 1, result.Metadata.Iterations)
 		assert.Equal(t, []string{"echo"}, fb.tools)
 		assert.Equal(t, []map[string]any{{"text": "hi"}}, fb.toolArgs)
+	})
+
+	t.Run("fires ToolReturned with the tool's result after the call", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo", Arguments: map[string]any{"text": "hi"}}}},
+				{Content: "done", Stats: llm.Stats{TotalTokens: 20}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) {
+			return "ok", nil
+		}))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		require.Len(t, fb.returns, 1)
+		assert.Equal(t, "echo", fb.returns[0].tool)
+		assert.Equal(t, "ok", fb.returns[0].result)
+		assert.NoError(t, fb.returns[0].err)
+		assert.Positive(t, fb.returns[0].elapsed)
+	})
+
+	t.Run("fires ToolReturned with the error and no result when the tool fails", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "boom"}}},
+				{Content: "done", Stats: llm.Stats{TotalTokens: 20}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "boom"}, func(context.Context, map[string]any) (string, error) {
+			return "", errors.New("nope")
+		}))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		require.Len(t, fb.returns, 1)
+		assert.Equal(t, "boom", fb.returns[0].tool)
+		assert.Empty(t, fb.returns[0].result)
+		assert.ErrorContains(t, fb.returns[0].err, "nope")
+	})
+
+	t.Run("pairs every ToolCalled with a ToolReturned, in order", func(t *testing.T) {
+		// given: two calls in one round
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{
+					{ID: "c1", Name: "echo"},
+					{ID: "c2", Name: "echo"},
+				}},
+				{Content: "done", Stats: llm.Stats{TotalTokens: 20}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) {
+			return "ok", nil
+		}))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{"SessionStarted", "ToolCalled", "ToolReturned", "ToolCalled", "ToolReturned"}, fb.events)
 	})
 
 	t.Run("returns ErrMaxIterations when the iteration cap is reached", func(t *testing.T) {

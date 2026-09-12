@@ -204,8 +204,11 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 
 			t0 := time.Now()
 			result, err := a.toolBox.Execute(ctx, call)
-			toolDuration += time.Since(t0)
+			elapsed := time.Since(t0)
+			toolDuration += elapsed
 			callCount++
+
+			a.fb.ToolReturned(call.Name, toolResult(result), err, elapsed)
 
 			if err != nil {
 				a.messages = append(a.messages, llm.ToolMessage{
@@ -221,6 +224,17 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 
 		iteration++
 	}
+}
+
+// toolResult is the content of a successful call's message, and empty for a
+// call that failed, so [Feedback.ToolReturned] never reports both a result and
+// an error.
+func toolResult(msg *llm.ToolMessage) string {
+	if msg == nil {
+		return ""
+	}
+
+	return msg.Content
 }
 
 func (a *Agent) compactIfNeeded(ctx context.Context, lastTotalTokens int) {
