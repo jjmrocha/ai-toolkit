@@ -31,10 +31,11 @@ type session struct {
 	handshake map[string]any
 }
 
-func newSession(ctx context.Context, command string, args []string, onDisconnect func()) (*session, error) {
+func newSession(ctx context.Context, cfg ClientConfig, onDisconnect func()) (*session, error) {
 	t, err := helper.NewProcess(helper.ProcessConfig{
-		Path:       command,
-		Args:       args,
+		Path:       cfg.Command,
+		Args:       cfg.Args,
+		Env:        helper.InheritedEnv(cfg.InheritEnv),
 		AllowInput: true,
 		OnExit: func(error) {
 			if onDisconnect != nil {

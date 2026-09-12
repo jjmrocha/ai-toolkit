@@ -18,6 +18,11 @@ type RunConfig struct {
 	// Dir is the working directory the process runs in. An empty Dir runs it in
 	// the calling process's working directory.
 	Dir string
+	// Env is the command's environment, each entry in KEY=VALUE form. A nil Env
+	// hands the command the calling process's own environment, credentials
+	// included; [InheritedEnv] builds a filtered one. An empty but non-nil Env
+	// runs the command with no environment at all.
+	Env []string
 	// MaxOutputBytes is how much output [Run] collects before it stops the
 	// command, counting each line and the newline that followed it. The line
 	// that passes the limit is kept, so [RunResult.Output] may run over it by
@@ -56,6 +61,7 @@ func Run(ctx context.Context, cfg RunConfig) (RunResult, error) {
 		Path:          cfg.Path,
 		Args:          cfg.Args,
 		Dir:           cfg.Dir,
+		Env:           cfg.Env,
 		OnExit:        func(err error) { exited <- err },
 		IncludeStderr: true,
 	}

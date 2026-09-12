@@ -171,9 +171,8 @@ func (tb *ToolBox) SetInterceptor(i Interceptor) {
 // handler for cancellation and deadlines. It returns [ErrToolNotFound] if no
 // tool matches call.Name, a wrapped error if an [Interceptor] set by
 // [ToolBox.SetInterceptor] blocks the call, or a wrapped error if the handler
-// itself fails. The
-// returned message correlates by both ToolCallID and ToolName so it works with
-// either provider.
+// itself fails. The returned message correlates by both ToolCallID and ToolName
+// so it works with either provider.
 func (tb *ToolBox) Execute(ctx context.Context, call llm.ToolCall) (*llm.ToolMessage, error) {
 	tb.mu.RLock()
 	fn, ok := tb.tools[call.Name]

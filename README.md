@@ -139,6 +139,7 @@ Worth knowing:
 - A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed.
 - `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server.
 - `ToolCallTimeout` bounds one call to this server's tools, defaulting to two minutes. It is a ceiling inside the caller's own context, so a server that goes quiet fails that single call and leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn.
+- The server gets a filtered environment, not yours: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_DIR`, `SSL_CERT_FILE`, the proxy variables in both cases, and every `LC_` variable. Name anything else a particular server needs in `InheritEnv` and it is copied from the calling process — the config names variables, it never holds their values. A name you did not set is skipped rather than passed on empty.
 - `Command` and `Args` are run without a shell, but they are still trusted input: supply them from operator configuration, never from an untrusted source.
 
 ### `Manager`

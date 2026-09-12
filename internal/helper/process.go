@@ -48,6 +48,11 @@ type ProcessConfig struct {
 	// Dir is the working directory the process runs in. An empty Dir runs it in
 	// the calling process's working directory.
 	Dir string
+	// Env is the process's environment, each entry in KEY=VALUE form. A nil Env
+	// hands the process the calling process's own environment, credentials
+	// included; [InheritedEnv] builds a filtered one. An empty but non-nil Env
+	// runs the process with no environment at all.
+	Env []string
 	// IncludeStderr merges the process's stderr into [Process.Output], in the
 	// order the process wrote it. When false, Output carries stdout alone and
 	// stderr is discarded.
@@ -79,6 +84,7 @@ type Process struct {
 func NewProcess(cfg ProcessConfig) (*Process, error) {
 	cmd := exec.Command(cfg.Path, cfg.Args...) //nolint:gosec // command and args are operator-provided configuration
 	cmd.Dir = cfg.Dir
+	cmd.Env = cfg.Env
 
 	var stdin io.WriteCloser
 

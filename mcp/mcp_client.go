@@ -52,7 +52,7 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 
 	c := &Client{config: cfg}
 
-	s, err := newSession(ctx, cfg.Command, cfg.Args, c.unregisterTools)
+	s, err := newSession(ctx, cfg, c.unregisterTools)
 	if err != nil {
 		return nil, err
 	}
