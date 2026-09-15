@@ -15,7 +15,7 @@ type Manager struct {
 	toolBox *tools.ToolBox
 	configs map[string]ClientConfig
 	clients map[string]*Client
-	mu      sync.RWMutex
+	mu      sync.Mutex
 }
 
 // NewManager returns an empty [Manager] that registers each MCP's tools into tb.
