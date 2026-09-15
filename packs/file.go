@@ -33,7 +33,14 @@ const (
 	maxFileReadBytes = 1024 * 1024
 )
 
-var fileToolNames = []string{readToolName, writeToolName, editToolName, listToolName, deleteToolName, workdirToolName}
+var fileToolNames = []string{
+	readToolName,
+	writeToolName,
+	editToolName,
+	listToolName,
+	deleteToolName,
+	workdirToolName,
+}
 
 type filePack struct {
 	toolBox *tools.ToolBox
@@ -80,18 +87,22 @@ func (p *filePack) Close() error {
 // appears exactly once, so an edit never lands somewhere the model did not mean.
 // "file_delete" will not empty a folder, so nothing recursive happens behind a
 // single call.
-func FileTools(m *tools.ToolBox, root string) (ToolPack, error) {
-	path, err := filepath.Abs(root)
+func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
+	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening root: %w", err)
 	}
 
-	opened, err := os.OpenRoot(path)
+	opened, err := os.OpenRoot(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening root: %w", err)
 	}
 
-	pack := &filePack{toolBox: m, root: opened, path: path}
+	pack := filePack{
+		toolBox: m,
+		root:    opened,
+		path:    absPath,
+	}
 
 	readTool := llm.Tool{
 		Name: readToolName,
@@ -166,15 +177,15 @@ func FileTools(m *tools.ToolBox, root string) (ToolPack, error) {
 	}
 	_ = m.Add(workdirTool, pack.workdir)
 
-	return pack, nil
+	return &pack, nil
 }
 
 func (p *filePack) workdir(_ context.Context, _ map[string]any) (string, error) {
 	return p.path, nil
 }
 
-func (p *filePack) fullPath(path string) string {
-	return filepath.Join(p.path, path)
+func (p *filePack) fullPath(entry string) string {
+	return filepath.Join(p.path, entry)
 }
 
 func (p *filePack) readFile(_ context.Context, args map[string]any) (string, error) {
