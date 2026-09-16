@@ -27,7 +27,9 @@ func NewManager(tb *tools.ToolBox) *Manager {
 	}
 }
 
-// Close stops every running MCP and clears the registry.
+// Close stops every running MCP and removes its tools from the
+// [tools.ToolBox]. Registrations are kept, so the same [Manager] can bring a
+// server back up with [Manager.Start].
 func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

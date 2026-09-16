@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"math"
 	"sync"
 	"testing"
 
@@ -8,35 +9,46 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSeqNumNext(t *testing.T) {
+func TestTokenNext(t *testing.T) {
 	t.Run("starts at one", func(t *testing.T) {
 		// given
-		s := newSeqNum()
+		s := newToken()
 		// when
 		result := s.next()
 		// then
-		expected := 1
+		expected := "ait-1"
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("increments on each call", func(t *testing.T) {
 		// given
-		s := newSeqNum()
+		s := newToken()
 		s.next()
 		s.next()
 		// when
 		result := s.next()
 		// then
-		expected := 3
+		expected := "ait-3"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("wraps back to one instead of overflowing", func(t *testing.T) {
+		// given
+		s := newToken()
+		s.val.Store(math.MaxInt64)
+		// when
+		result := s.next()
+		// then
+		expected := "ait-1"
 		assert.Equal(t, expected, result)
 	})
 }
 
-func TestSeqNumConcurrentAccess(t *testing.T) {
-	// given: ids collide silently, so uniqueness is the property that matters
+func TestTokenConcurrentAccess(t *testing.T) {
+	// given: tokens correlate progress notifications, so uniqueness is the property that matters
 	const goroutines = 100
-	s := newSeqNum()
-	results := make(chan int, goroutines)
+	s := newToken()
+	results := make(chan string, goroutines)
 
 	var wg sync.WaitGroup
 	// when
@@ -49,7 +61,7 @@ func TestSeqNumConcurrentAccess(t *testing.T) {
 	wg.Wait()
 	close(results)
 	// then
-	seen := sets.New[int]()
+	seen := sets.New[string]()
 	for value := range results {
 		seen.Add(value)
 	}

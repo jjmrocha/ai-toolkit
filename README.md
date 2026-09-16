@@ -110,7 +110,10 @@ Worth knowing:
 ## `mcp`
 
 Connects a stdio-based [MCP](https://modelcontextprotocol.io) server to a
-`tools.ToolBox`, so the tools it exposes become callable like any other tool.
+`tools.ToolBox`, so the tools it exposes become callable like any other tool. The
+protocol is spoken by the official
+[Go SDK](https://github.com/modelcontextprotocol/go-sdk); this package owns the
+process, the namespacing, and the mapping onto `ToolBox`.
 
 ```go
 toolBox := tools.NewToolBox()
@@ -135,10 +138,12 @@ reply, err := model.Chat(ctx, messages, toolBox.Tools()) // MCP tools included
 Worth knowing:
 
 - Tools are namespaced `"<Name>__<tool>"`, e.g. `playwright__browser_navigate`. A namespaced name the providers would reject is rewritten rather than dropped; the server is still called by the name it published.
-- Requests are matched to responses by id, so several may be in flight at once. One blocked on a silent server returns when its context is cancelled or its deadline expires.
-- A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed.
-- `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server.
-- `ToolCallTimeout` bounds one call to this server's tools, defaulting to two minutes. It is a ceiling inside the caller's own context, so a server that goes quiet fails that single call and leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn.
+- `NewClient` rejects a config without a `Name` (`ErrNameRequired`) or without a `Command` (`ErrCommandRequired`) before launching anything.
+- A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed. A server that declares no capabilities at all is asked anyway.
+- A server that announces `notifications/tools/list_changed` has its tools registered again automatically: the list is fetched afresh under its own thirty-second timeout and the `ToolBox` entries are replaced. A refresh that fails changes nothing — the tools already registered stay exactly as they were. Calling `RegisterTools` again does the same by hand, so a caller that knows the list has moved need not tear the client down.
+- `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server. `Connected` reports whether the process is still up. A `Client` is safe for concurrent use.
+- `ToolCallTimeout` bounds one call to this server's tools, defaulting to sixty seconds. It is an idle timeout rather than a total budget: every progress notification the server sends restarts the clock, so a tool that reports progress runs as long as it keeps reporting, while one that goes quiet fails that single call. The timeout sits inside the caller's own context, so a failed call leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn.
+- Content the model cannot read as text is summarised rather than dropped. An image, audio clip, resource link, or binary embedded resource becomes a short descriptor such as `[image: image/png, 48213 bytes]`; text content and text-bearing resources pass through unchanged, and a result carrying only structured content is rendered as its JSON.
 - The server gets a filtered environment, not yours: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_DIR`, `SSL_CERT_FILE`, the proxy variables in both cases, and every `LC_` variable. Name anything else a particular server needs in `InheritEnv` and it is copied from the calling process — the config names variables, it never holds their values. A name you did not set is skipped rather than passed on empty.
 - `Command` and `Args` are run without a shell, but they are still trusted input: supply them from operator configuration, never from an untrusted source.
 
@@ -169,9 +174,12 @@ manager.Stop("playwright") // tools removed, config kept for a later Start
 
 `Register` records a launch configuration without starting it. `Start` and `Stop`
 bring a server up and down by name, keeping the configuration for a later
-restart; a server whose process has died is replaced on the next `Start`.
-`Status` reports which are running and `Close` stops everything. Safe for
-concurrent use.
+restart; a server whose process has died is replaced on the next `Start`, and
+starting one that is already running is a no-op. Either call returns
+`ErrMCPNotRegistered` for a name that was never registered. `Status` reports
+which are running and `Close` stops everything it started, keeping the
+registrations so the same `Manager` can bring them back up. Safe for concurrent
+use.
 
 ## `skills`
 

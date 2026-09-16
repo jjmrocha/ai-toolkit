@@ -1,56 +1,83 @@
 package mcp
 
 import (
+	"context"
+	"errors"
 	"sync"
-
-	"github.com/jjmrocha/go-algo/future"
+	"time"
 )
+
+var ErrRequestTimeout = errors.New("request timeout")
+
+type resettableTimeout struct {
+	mu      sync.Mutex
+	cancel  context.CancelCauseFunc
+	timer   *time.Timer
+	timeout time.Duration
+}
 
 type pendingRequest struct {
 	mu       sync.Mutex
-	requests map[int]*future.Future[map[string]any]
+	requests map[string]*resettableTimeout
 }
 
 func newPendingRequest() *pendingRequest {
 	return &pendingRequest{
-		requests: make(map[int]*future.Future[map[string]any]),
+		requests: make(map[string]*resettableTimeout),
 	}
 }
 
-func (p *pendingRequest) newRequest(id int) *future.Future[map[string]any] {
+func (p *pendingRequest) newResettableTimeout(parent context.Context, token string, d time.Duration) context.Context {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	f := future.New[map[string]any]()
-	p.requests[id] = f
-	return f
-}
+	ctx, cancel := context.WithCancelCause(parent)
 
-func (p *pendingRequest) resolve(id int, result map[string]any) {
-	p.settle(id, result, nil)
-}
-
-func (p *pendingRequest) reject(id int, err error) {
-	p.settle(id, nil, err)
-}
-
-func (p *pendingRequest) settle(id int, result map[string]any, err error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if f, ok := p.requests[id]; ok {
-		f.Resolve(result, err)
-		delete(p.requests, id)
+	r := resettableTimeout{
+		cancel:  cancel,
+		timeout: d,
 	}
+	p.requests[token] = &r
+
+	r.timer = time.AfterFunc(d, func() {
+		cancel(ErrRequestTimeout)
+	})
+
+	return ctx
 }
 
-func (p *pendingRequest) failAll(err error) {
+func (p *pendingRequest) reset(token string) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	r, ok := p.requests[token]
+	p.mu.Unlock()
 
-	for _, f := range p.requests {
-		f.Resolve(nil, err)
+	if !ok {
+		return
 	}
 
-	clear(p.requests)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.timer.Stop() {
+		return
+	}
+
+	r.timer.Reset(r.timeout)
+}
+
+func (p *pendingRequest) stop(token string) {
+	p.mu.Lock()
+	r, ok := p.requests[token]
+	delete(p.requests, token)
+	p.mu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.timer.Stop()
+	r.cancel(context.Canceled)
 }

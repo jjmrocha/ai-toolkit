@@ -21,10 +21,11 @@ type ClientConfig struct {
 	// particular server needs. A name the calling process does not set is
 	// skipped rather than passed on empty.
 	InheritEnv []string
-	// ToolCallTimeout bounds a single call to one of this server's tools,
-	// measured from the moment the call is sent. It is a ceiling within the
-	// caller's own context, so a server that goes quiet fails that one call and
-	// leaves the caller's deadline intact. Zero or less selects a default of two
-	// minutes.
+	// ToolCallTimeout bounds a single call to one of this server's tools. It is
+	// an idle timeout rather than a total budget: every progress notification the
+	// server sends restarts the clock, so a tool that reports progress runs as
+	// long as it keeps reporting, while one that goes quiet fails that one call.
+	// It applies within the caller's own context, so a failed call leaves the
+	// caller's deadline intact. Zero or less selects a default of sixty seconds.
 	ToolCallTimeout time.Duration
 }

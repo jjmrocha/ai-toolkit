@@ -4,43 +4,45 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/jjmrocha/ai-toolkit/internal/helper"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
 const (
-	defaultToolCallTimeout = 2 * time.Minute
+	defaultToolCallTimeout = 60 * time.Second
 	listToolsTimeout       = 30 * time.Second
-	maxToolPages           = 100
 	toolNameHashLength     = 6
 )
 
 // Client registers the tools exposed by a single MCP server into a
 // [tools.ToolBox] and owns the lifetime of that server's process. Create one
-// with [NewClient] and always pair it with a deferred [Client.Close].
+// with [NewClient] and always pair it with a deferred [Client.Close]. Once
+// [Client.RegisterTools] has bound the client to a ToolBox, a server that
+// announces a change to its tool list has those tools registered again
+// automatically. It is safe for concurrent use.
 type Client struct {
-	config  ClientConfig
-	session *session
+	config ClientConfig
 
-	mu      sync.Mutex
-	toolBox *tools.ToolBox
-	tools   []string
+	session    *sdkClient
+	tokenMaker *token
+	requests   *pendingRequest
+
+	mu        sync.Mutex
+	connected bool
+	toolBox   *tools.ToolBox
+	tools     []string
 }
 
 // NewClient launches the MCP server described by cfg and completes the protocol
 // handshake. ctx bounds the startup handshake only. It returns
 // [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete, or an error if
-// the server fails to start, the handshake fails, or the server speaks an
-// unsupported protocol version. The server runs until [Client.Close] is called.
-// Call [Client.RegisterTools] to bind the client to a [tools.ToolBox].
+// the server fails to start or the handshake fails. The server runs until
+// [Client.Close] is called. Call [Client.RegisterTools] to bind the client to a
+// [tools.ToolBox].
 func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameRequired
@@ -50,9 +52,20 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		return nil, ErrCommandRequired
 	}
 
-	c := &Client{config: cfg}
+	c := &Client{
+		config:     cfg,
+		connected:  true,
+		tokenMaker: newToken(),
+		requests:   newPendingRequest(),
+	}
 
-	s, err := newSession(ctx, cfg, c.unregisterTools)
+	cb := callBacks{
+		onProgress:    c.onProgress,
+		onToolsChange: c.onToolsChange,
+		onDisconnect:  c.onDisconnect,
+	}
+
+	s, err := newSDKClient(ctx, cfg, cb)
 	if err != nil {
 		return nil, err
 	}
@@ -62,66 +75,87 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
+func (c *Client) onDisconnect(_ error) {
+	c.disconnected()
+}
+
+func (c *Client) disconnected() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.removeTools()
+	c.connected = false
+}
+
+func (c *Client) onToolsChange() {
+	c.mu.Lock()
+	tb := c.toolBox
+	c.mu.Unlock()
+
+	if tb == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), listToolsTimeout)
+	defer cancel()
+
+	_ = c.RegisterTools(ctx, tb)
+}
+
+func (c *Client) onProgress(token string) {
+	c.requests.reset(token)
+}
+
 // Connected reports whether the server's child process is still running. It
 // returns false once the process has exited, whether it was closed, died on its
 // own, or was stopped because its output could no longer be read.
 func (c *Client) Connected() bool {
-	return c.session.connected()
-}
-
-// Close shuts the server process down and removes this client's tools from the
-// [tools.ToolBox]. A call or a registration still waiting on the server is
-// aborted rather than waited out. It is safe to call more than once.
-func (c *Client) Close() error {
-	c.session.close()
-
-	c.unregisterTools()
-
-	return nil
-}
-
-func (c *Client) unregisterTools() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for _, tool := range c.tools {
-		c.toolBox.Remove(tool)
-	}
+	return c.connected
+}
 
-	c.tools = nil
+// Close shuts the server process down and removes this client's tools from the
+// [tools.ToolBox]. A call still waiting on the server is aborted rather than
+// waited out. It is safe to call more than once.
+func (c *Client) Close() error {
+	c.session.close()
+
+	c.disconnected()
+
+	return nil
 }
 
 // RegisterTools queries the server for its tools and registers each one in tb,
 // namespaced as "<ClientConfig.Name>__<tool>" and backed by a handler that
 // forwards the call to the server. A namespaced name the providers would reject
 // is rewritten rather than dropped; the server is still called by the name it
-// published. ctx bounds every page of the tools/list request. Tools registered
-// here are removed again by [Client.Close]. Only a successful registration
-// latches: it returns [ErrAlreadyRegistered] on a later call, while a failed one
-// leaves the client free to try again.
+// published. ctx bounds the tools/list request. Tools registered here are
+// removed again by [Client.Close].
+//
+// Calling it again replaces the tools the previous call registered, which is how
+// the client refreshes itself when the server announces a change to its tool
+// list.
 //
 // A server whose handshake declared no tools capability is never asked for a
 // tool list: nothing is registered and the call succeeds, leaving the server
-// running for whatever else it offers. Because nothing was registered, that
-// call does not latch, so a later one is free to try again rather than
-// returning [ErrAlreadyRegistered]. A server that declares none at all is asked
-// anyway.
+// running for whatever else it offers. A server that declares no capabilities at
+// all is asked anyway.
 func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.toolBox != nil {
-		return ErrAlreadyRegistered
-	}
-
 	if !c.session.supportsTools() {
 		return nil
 	}
 
-	specs, err := c.listTools(ctx)
+	specs, err := c.session.listTools(ctx)
 	if err != nil {
 		return err
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.removeTools()
 
 	registered := make([]string, 0, len(specs))
 
@@ -149,6 +183,14 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 	return nil
 }
 
+func (c *Client) removeTools() {
+	for _, tool := range c.tools {
+		c.toolBox.Remove(tool)
+	}
+
+	c.tools = nil
+}
+
 func (c *Client) toolName(tool string, taken []string) string {
 	original := c.config.Name + "__" + tool
 	name := tools.SanitizeToolName(original)
@@ -169,114 +211,29 @@ func hashToolName(original string) string {
 	return hex.EncodeToString(sum[:])[:toolNameHashLength]
 }
 
-func (c *Client) listTools(ctx context.Context) ([]toolSpec, error) {
-	ctx, cancel := helper.WithTimeout(ctx, listToolsTimeout)
-	defer cancel()
-
-	var specs []toolSpec
-	var params map[string]any
-
-	for range maxToolPages {
-		result, err := c.session.Request(ctx, "tools/list", params)
-		if err != nil {
-			return nil, err
-		}
-
-		specs = append(specs, parseToolSpecs(result)...)
-
-		cursor, _ := result["nextCursor"].(string)
-		if cursor == "" {
-			return specs, nil
-		}
-
-		params = map[string]any{"cursor": cursor}
-	}
-
-	return nil, fmt.Errorf("%w: stopped after %d pages", ErrTooManyToolPages, maxToolPages)
-}
-
-func parseToolSpecs(result map[string]any) []toolSpec {
-	tools, _ := result["tools"].([]any)
-
-	specs := make([]toolSpec, 0, len(tools))
-	for _, tool := range tools {
-		toolDef, ok := tool.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		name, _ := toolDef["name"].(string)
-		if name == "" {
-			continue
-		}
-
-		description, _ := toolDef["description"].(string)
-		schema, _ := toolDef["inputSchema"].(map[string]any)
-
-		spec := toolSpec{name: name, description: description, schema: schema}
-		specs = append(specs, spec)
-	}
-
-	return specs
-}
-
 func (c *Client) makeHandler(name string) tools.Handler {
-	return func(ctx context.Context, args map[string]any) (string, error) {
+	return func(parent context.Context, args map[string]any) (string, error) {
 		toolTimeout := defaultToolCallTimeout
 
 		if c.config.ToolCallTimeout > 0 {
 			toolTimeout = c.config.ToolCallTimeout
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, toolTimeout)
-		defer cancel()
+		token := c.tokenMaker.next()
+		ctx := c.requests.newResettableTimeout(parent, token, toolTimeout)
+		defer func() {
+			c.requests.stop(token)
+		}()
 
-		result, err := c.session.Request(ctx, "tools/call", map[string]any{
-			"name":      name,
-			"arguments": args,
-		})
+		if args == nil {
+			args = map[string]any{}
+		}
 
+		result, err := c.session.execute(ctx, token, name, args)
 		if err != nil {
 			return "", err
 		}
 
-		text, failed := parseToolResult(result)
-		if failed {
-			return "", fmt.Errorf("tool %s reported an error: %s", name, text)
-		}
-
-		return text, nil
+		return result, nil
 	}
-}
-
-func parseToolResult(result map[string]any) (string, bool) {
-	failed, _ := result["isError"].(bool)
-	content, _ := result["content"].([]any)
-
-	parts := make([]string, 0, len(content))
-	for _, item := range content {
-		part, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		if part["type"] != "text" {
-			continue
-		}
-
-		if t, ok := part["text"].(string); ok {
-			parts = append(parts, t)
-		}
-	}
-
-	if len(parts) > 0 {
-		return strings.Join(parts, "\n"), failed
-	}
-
-	encoded, err := json.Marshal(result)
-	if err != nil {
-		return "", failed
-	}
-
-	return string(encoded), failed
 }

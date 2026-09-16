@@ -5,8 +5,9 @@
 // configuration of several servers and starts and stops them by name against a
 // shared ToolBox.
 //
-// A Client drives exactly one server over its stdin/stdout. Requests are matched
-// to responses by id, so several may be in flight at a time. A request blocked
-// on a silent server returns when its context is cancelled or its deadline
-// expires; a response arriving after that is discarded.
+// A Client drives exactly one server over its stdin/stdout, so several calls may
+// be in flight at a time. A call that outlives [ClientConfig.ToolCallTimeout]
+// without the server reporting progress fails on its own and leaves the caller's
+// deadline intact. A server that announces a change to its tool list has those
+// tools registered again without the caller asking.
 package mcp
