@@ -8,7 +8,7 @@ are more mature, better-supported libraries out there, and you should probably
 reach for one of those first. But if it happens to fit your needs as-is, feel
 free to use it.
 
-Requires **Go 1.26.5+**. Supported providers: **OpenRouter**, **Ollama**, and
+Requires **Go 1.27.1+**. Supported providers: **OpenRouter**, **Ollama**, and
 **Anthropic**.
 
 ```bash

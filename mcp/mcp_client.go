@@ -10,6 +10,7 @@ import (
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
+	"github.com/jjmrocha/go-algo/token"
 )
 
 const (
@@ -27,9 +28,8 @@ const (
 type Client struct {
 	config ClientConfig
 
-	session    *sdkClient
-	tokenMaker *token
-	requests   *pendingRequest
+	session  *sdkClient
+	requests *pendingRequest
 
 	mu        sync.Mutex
 	connected bool
@@ -53,10 +53,9 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	}
 
 	c := &Client{
-		config:     cfg,
-		connected:  true,
-		tokenMaker: newToken(),
-		requests:   newPendingRequest(),
+		config:    cfg,
+		connected: true,
+		requests:  newPendingRequest(),
 	}
 
 	cb := callBacks{
@@ -219,17 +218,17 @@ func (c *Client) makeHandler(name string) tools.Handler {
 			toolTimeout = c.config.ToolCallTimeout
 		}
 
-		token := c.tokenMaker.next()
-		ctx := c.requests.newResettableTimeout(parent, token, toolTimeout)
+		requestToken := token.New()
+		ctx := c.requests.newResettableTimeout(parent, requestToken, toolTimeout)
 		defer func() {
-			c.requests.stop(token)
+			c.requests.stop(requestToken)
 		}()
 
 		if args == nil {
 			args = map[string]any{}
 		}
 
-		result, err := c.session.execute(ctx, token, name, args)
+		result, err := c.session.execute(ctx, requestToken, name, args)
 		if err != nil {
 			return "", err
 		}
