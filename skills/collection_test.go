@@ -189,7 +189,7 @@ func TestCollectionCatalog(t *testing.T) {
 		// when
 		result := collection.Catalog()
 		// then
-		expected := "<available_skills>\n" +
+		expected := "<available-skills>\n" +
 			"  <skill>\n" +
 			"    <name>alpha</name>\n" +
 			"    <description>first</description>\n" +
@@ -198,7 +198,7 @@ func TestCollectionCatalog(t *testing.T) {
 			"    <name>beta</name>\n" +
 			"    <description>second</description>\n" +
 			"  </skill>\n" +
-			"</available_skills>"
+			"</available-skills>"
 		assert.Equal(t, expected, result)
 	})
 }

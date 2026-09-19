@@ -155,7 +155,7 @@ func (c *Collection) Catalog() string {
 	}
 
 	lines := []string{
-		"<available_skills>",
+		"<available-skills>",
 	}
 
 	for _, name := range slices.Sorted(maps.Keys(c.skills)) {
@@ -168,7 +168,7 @@ func (c *Collection) Catalog() string {
 		)
 	}
 
-	lines = append(lines, "</available_skills>")
+	lines = append(lines, "</available-skills>")
 
 	return strings.Join(lines, "\n")
 }

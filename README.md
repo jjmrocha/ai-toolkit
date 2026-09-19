@@ -209,11 +209,11 @@ Read the merged PRs since the last tag, then ...
 
 Worth knowing:
 
-- Only names and descriptions reach the model up front, as an `<available_skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
+- Only names and descriptions reach the model up front, as an `<available-skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
 - Three tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, `skill_load_file` returns one of those files, and `skill_execute_file` runs one of them.
 - **`skill_load`, `skill_load_file` and `skill_execute_file` are reserved tool names.** A tool already registered under any of them is replaced while the session lasts, and removed when it ends.
 - `AddClaudeSkill` adds a skill by name from the user's Claude skills folder, `~/.claude/skills`, and is `Add` in every other respect. The name has to be a single folder in there — anything that would step outside it, `../other` included, is rejected with `ErrInvalidSkillName`, and a name that is not there gets `Add`'s own `ErrSkillFolderNotFound`.
-- An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the three tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available_skills>` block, and `Skills` lists the names added so far, sorted.
+- An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the three tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available-skills>` block, and `Skills` lists the names added so far, sorted.
 - File access is confined to the skill folder with `os.OpenRoot`, so a symlink pointing outside it is neither listed nor readable, and the model is never told the folder's real path.
 - `skill_execute_file` runs the file directly, from the skill's folder, with the arguments the model supplies and no shell. The file needs its own execute bit and shebang; the package never changes file modes, and it infers no interpreter from the extension. A file the skill does not ship cannot be run.
 - A non-zero exit is a result, not a failure: the tool returns the process's combined output and its exit status, and reports an error only when the process could not run at all.
