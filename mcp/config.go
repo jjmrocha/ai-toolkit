@@ -12,6 +12,12 @@ type ClientConfig struct {
 	Command string
 	// Args are the arguments passed to Command.
 	Args []string
+	// ExcludedTools names tools this server publishes that are not to be
+	// registered, by the name the server publishes them under rather than the
+	// namespaced one. The filter applies every time the tool list is read, so a
+	// tool named here stays unregistered when the server announces a change to
+	// its list. A name the server never publishes is ignored.
+	ExcludedTools []string
 	// InheritEnv names environment variables copied from the calling process
 	// into the server's environment, on top of the ones every server receives:
 	// HOME, LOGNAME, PATH, SHELL, TERM, USER, TMPDIR, LANG, TZ, SSL_CERT_DIR,

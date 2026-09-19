@@ -116,7 +116,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				strconv.Itoa(defaultReadLines), false).
 			Build(),
 	}
-	_ = m.Add(readTool, pack.readFile)
+	err = m.Add(readTool, pack.readFile)
+	if err != nil {
+		return nil, err
+	}
 
 	writeTool := llm.Tool{
 		Name: writeToolName,
@@ -128,7 +131,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			String(contentArg, "The full content of the file", true).
 			Build(),
 	}
-	_ = m.Add(writeTool, pack.writeFile)
+	err = m.Add(writeTool, pack.writeFile)
+	if err != nil {
+		return nil, err
+	}
 
 	editTool := llm.Tool{
 		Name: editToolName,
@@ -142,7 +148,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			String(newStringArg, "The text to put in its place", true).
 			Build(),
 	}
-	_ = m.Add(editTool, pack.editFile)
+	err = m.Add(editTool, pack.editFile)
+	if err != nil {
+		return nil, err
+	}
 
 	listTool := llm.Tool{
 		Name: listToolName,
@@ -154,7 +163,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				"defaulting to that folder itself", false).
 			Build(),
 	}
-	_ = m.Add(listTool, pack.listDir)
+	err = m.Add(listTool, pack.listDir)
+	if err != nil {
+		return nil, err
+	}
 
 	deleteTool := llm.Tool{
 		Name: deleteToolName,
@@ -166,7 +178,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				"confined to", true).
 			Build(),
 	}
-	_ = m.Add(deleteTool, pack.deleteFile)
+	err = m.Add(deleteTool, pack.deleteFile)
+	if err != nil {
+		return nil, err
+	}
 
 	workdirTool := llm.Tool{
 		Name: workdirToolName,
@@ -175,7 +190,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			"outside this folder.",
 		Schema: tools.NewObjectBuilder().Build(),
 	}
-	_ = m.Add(workdirTool, pack.workdir)
+	err = m.Add(workdirTool, pack.workdir)
+	if err != nil {
+		return nil, err
+	}
 
 	return &pack, nil
 }

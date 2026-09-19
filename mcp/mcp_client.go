@@ -130,8 +130,9 @@ func (c *Client) Close() error {
 // namespaced as "<ClientConfig.Name>__<tool>" and backed by a handler that
 // forwards the call to the server. A namespaced name the providers would reject
 // is rewritten rather than dropped; the server is still called by the name it
-// published. ctx bounds the tools/list request. Tools registered here are
-// removed again by [Client.Close].
+// published. A tool named in [ClientConfig.ExcludedTools] is skipped. ctx bounds
+// the tools/list request. Tools registered here are removed again by
+// [Client.Close].
 //
 // Calling it again replaces the tools the previous call registered, which is how
 // the client refreshes itself when the server announces a change to its tool
@@ -159,6 +160,10 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 	registered := make([]string, 0, len(specs))
 
 	for _, spec := range specs {
+		if c.excluded(spec.name) {
+			continue
+		}
+
 		tool := llm.Tool{
 			Name:        c.toolName(spec.name, registered),
 			Description: spec.description,
@@ -188,6 +193,10 @@ func (c *Client) removeTools() {
 	}
 
 	c.tools = nil
+}
+
+func (c *Client) excluded(tool string) bool {
+	return slices.Contains(c.config.ExcludedTools, tool)
 }
 
 func (c *Client) toolName(tool string, taken []string) string {

@@ -37,7 +37,8 @@ func (p *shellPack) Close() error {
 // ShellTools registers a single tool, "shell_run", that runs a command line
 // with /bin/sh in m. It needs nothing beyond the shell, and the returned
 // [ToolPack] removes the tool again. Nothing is launched, so its Close only
-// unregisters.
+// unregisters. It fails, registering nothing, with the error [tools.ToolBox.Add]
+// returns when m rejects the registration.
 //
 // The command runs with the authority of the program that registered the tool:
 // its whole filesystem, its environment and the credentials in it. Register it
@@ -47,7 +48,7 @@ func (p *shellPack) Close() error {
 // two by default. A command that outlasts its timeout is stopped, and the model
 // is told so rather than handed an error. Output is capped at 1 MiB, after
 // which the command is stopped and the result is marked truncated.
-func ShellTools(m *tools.ToolBox) ToolPack {
+func ShellTools(m *tools.ToolBox) (ToolPack, error) {
 	tool := llm.Tool{
 		Name: shellToolName,
 		Description: "Run a command line with /bin/sh and return its combined output and exit status. " +
@@ -62,9 +63,12 @@ func ShellTools(m *tools.ToolBox) ToolPack {
 				strconv.FormatInt(defaultShellTimeout.Milliseconds(), 10), false).
 			Build(),
 	}
-	_ = m.Add(tool, runShellCommand)
+	err := m.Add(tool, runShellCommand)
+	if err != nil {
+		return nil, err
+	}
 
-	return &shellPack{toolBox: m}
+	return &shellPack{toolBox: m}, nil
 }
 
 func runShellCommand(ctx context.Context, args map[string]any) (string, error) {

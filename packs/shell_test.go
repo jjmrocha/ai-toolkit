@@ -15,7 +15,9 @@ func runShellTool(t *testing.T, args map[string]any) (string, error) {
 	t.Helper()
 
 	toolBox := tools.NewToolBox()
-	pack := ShellTools(toolBox)
+
+	pack, err := ShellTools(toolBox)
+	require.NoError(t, err)
 
 	defer func() { _ = pack.Close() }()
 
@@ -34,7 +36,8 @@ func TestShellTools(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		// when
-		pack := ShellTools(toolBox)
+		pack, err := ShellTools(toolBox)
+		require.NoError(t, err)
 
 		defer func() { _ = pack.Close() }()
 		// then
@@ -45,9 +48,10 @@ func TestShellTools(t *testing.T) {
 	t.Run("removes the tool on close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack := ShellTools(toolBox)
+		pack, err := ShellTools(toolBox)
+		require.NoError(t, err)
 		// when
-		err := pack.Close()
+		err = pack.Close()
 		// then
 		require.NoError(t, err)
 		assert.Empty(t, toolBox.Tools())
@@ -56,10 +60,11 @@ func TestShellTools(t *testing.T) {
 	t.Run("closes more than once without failing", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack := ShellTools(toolBox)
+		pack, err := ShellTools(toolBox)
+		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		err := pack.Close()
+		err = pack.Close()
 		// then
 		require.NoError(t, err)
 	})

@@ -142,6 +142,7 @@ Worth knowing:
 - A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed. A server that declares no capabilities at all is asked anyway.
 - A server that announces `notifications/tools/list_changed` has its tools registered again automatically: the list is fetched afresh under its own thirty-second timeout and the `ToolBox` entries are replaced. A refresh that fails changes nothing — the tools already registered stay exactly as they were. Calling `RegisterTools` again does the same by hand, so a caller that knows the list has moved need not tear the client down.
 - `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server. `Connected` reports whether the process is still up. A `Client` is safe for concurrent use.
+- `ExcludedTools` names tools the server publishes that you do not want registered, by the name the server publishes them under rather than the namespaced one. The filter applies every time the list is read, so a tool named here stays unregistered when the server announces a change to its list, and a name the server never publishes is ignored. It is how you drop one capability from a server you otherwise want — `packs.CodingTools` uses it to leave Serena's shell out.
 - `ToolCallTimeout` bounds one call to this server's tools, defaulting to sixty seconds. It is an idle timeout rather than a total budget: every progress notification the server sends restarts the clock, so a tool that reports progress runs as long as it keeps reporting, while one that goes quiet fails that single call. The timeout sits inside the caller's own context, so a failed call leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn.
 - Content the model cannot read as text is summarised rather than dropped. An image, audio clip, resource link, or binary embedded resource becomes a short descriptor such as `[image: image/png, 48213 bytes]`; text content and text-bearing resources pass through unchanged, and a result carrying only structured content is rendered as its JSON.
 - The server gets a filtered environment, not yours: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_DIR`, `SSL_CERT_FILE`, the proxy variables in both cases, and every `LC_` variable. Name anything else a particular server needs in `InheritEnv` and it is copied from the calling process — the config names variables, it never holds their values. A name you did not set is skipped rather than passed on empty.
@@ -256,10 +257,11 @@ Worth knowing:
 ### `CodingTools`
 
 `CodingTools` gives the model a code base: symbol-aware navigation and editing,
-diagnostics, file and directory access, shell execution, project memories and
-read-only queries against other projects, backed by
-[Serena](https://github.com/oraios/serena). It is keyless, so the only
-prerequisite is the `uvx` executable on `PATH`.
+diagnostics, file and directory access, project memories and read-only queries
+against other projects, backed by
+[Serena](https://github.com/oraios/serena), plus `shell_run` for building and
+running what it wrote. It is keyless, so the only prerequisite is the `uvx`
+executable on `PATH`.
 
 ```go
 pack, err := packs.CodingTools(ctx, toolBox)
@@ -273,26 +275,29 @@ defer pack.Close()
 Worth knowing:
 
 - The server starts with no project. The model reaches a code base by calling `serena__activate_project`, and the symbolic tools fail until it does.
-- One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools and the shell are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
-- This pack writes files and runs commands. Serena inherits the authority of the program that started it — the whole filesystem, the environment and its credentials — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with a shell, and remember that anything the model reads out of a repository can steer what it does next.
+- The shell is `shell_run`, not Serena's `execute_shell_command`, which is left out through `ExcludedTools`. The model still gets a shell — it gets the one with a timeout it can set, a 1 MiB output ceiling and a `/bin/sh` that reads no startup file, instead of two shells with different rules. `ShellTools` on the same `ToolBox` is therefore redundant, and closing either pack takes `shell_run` from both. To give Serena its own shell back, take `packs.SerenaMCPConfig()`, clear its `ExcludedTools`, and go through `mcp.NewClient` directly.
+- One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
+- This pack writes files and runs commands, both with the authority of the program that started it — the whole filesystem, the environment and its credentials — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with a shell, and remember that anything the model reads out of a repository can steer what it does next.
 - The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig()`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
 - Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
-- The tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes, so it moves with Serena's own development rather than being fixed here.
+- Serena's tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes minus the exclusions, so it moves with Serena's own development rather than being fixed here. `shell_run` is not prefixed: it is this repository's tool, the same one `ShellTools` registers.
 - The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
 - The first symbolic call on a newly activated project is the slow one: Serena downloads that language's server if it is missing and indexes the project inside that call's budget.
-- `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
-- A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind.
+- `ToolPack.Close` stops the server process and removes both its tools and `shell_run` from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
+- A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind — `shell_run` goes in only once Serena's tools are registered. A server that later dies on its own drops its own tools; `shell_run` stays until you close the pack.
 - This is a far wider pack than `WebTools`: 31 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
-- `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` mode added — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
+- `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` mode added and `execute_shell_command` in `ExcludedTools` — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
 
 ### `ShellTools`
 
 `ShellTools` gives the model one tool, `shell_run`, that runs a command line
-with `/bin/sh`. Nothing is launched to serve it, so it takes no context and
-cannot fail:
+with `/bin/sh`. Nothing is launched to serve it, so it takes no context:
 
 ```go
-pack := packs.ShellTools(toolBox)
+pack, err := packs.ShellTools(toolBox)
+if err != nil {
+	log.Fatal(err)
+}
 
 defer pack.Close()
 ```
@@ -307,8 +312,10 @@ Worth knowing:
 - The command gets no stdin, so one that reads input sees end of input at once instead of waiting.
 - The shell runs with the authority of the program that registered the tool: the whole filesystem, the environment and its credentials. Register it only for a model and a conversation you would trust with a shell.
 - `/bin/sh` is fixed, and no startup file is read. `PATH` is the one the program itself inherited, so a directory added only in an interactive shell's `.zshrc` or `.bashrc` is not on it.
+- `ShellTools` fails, registering nothing, when the `ToolBox` rejects the registration — it passes `ToolBox.Add`'s error through rather than swallowing it.
 - `ToolPack.Close` only removes the tool from the `ToolBox`. There is no process to leak, so a dropped `ToolPack` costs nothing beyond the tool staying registered.
 - The tool carries roughly 700 bytes of description and schema, which every request pays for while it is registered.
+- `CodingTools` registers the same tool, so an agent loading that pack has `shell_run` already and does not need this one. Loading both is redundant rather than an error — `Add` replaces by name — but closing either pack removes `shell_run` for both.
 
 ### `FileTools`
 

@@ -110,6 +110,53 @@ func TestClientToolName(t *testing.T) {
 	})
 }
 
+func TestClientExcluded(t *testing.T) {
+	t.Run("keeps a tool no config names", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{Name: "serena"}}
+		// when
+		result := c.excluded("find_symbol")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("drops a tool the config names", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			ExcludedTools: []string{"execute_shell_command"},
+		}}
+		// when
+		result := c.excluded("execute_shell_command")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("keeps a tool the config does not name", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			ExcludedTools: []string{"execute_shell_command"},
+		}}
+		// when
+		result := c.excluded("find_symbol")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("matches the name the server published, not the namespaced one", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			ExcludedTools: []string{"serena__execute_shell_command"},
+		}}
+		// when
+		result := c.excluded("execute_shell_command")
+		// then
+		assert.False(t, result)
+	})
+}
+
 func TestHashToolName(t *testing.T) {
 	t.Run("is stable for the same input", func(t *testing.T) {
 		// given
