@@ -54,7 +54,7 @@ type RunResult struct {
 // an error when the command cannot be started, when ctx ends first, or when
 // waiting on it fails for any other reason. Unless [RunConfig.MaxOutputBytes]
 // says otherwise, Run keeps everything the command writes.
-func Run(ctx context.Context, cfg RunConfig) (RunResult, error) {
+func Run(ctx context.Context, cfg RunConfig) (*RunResult, error) {
 	exited := make(chan error, 1)
 
 	proc := ProcessConfig{
@@ -68,26 +68,32 @@ func Run(ctx context.Context, cfg RunConfig) (RunResult, error) {
 
 	process, err := NewProcess(proc)
 	if err != nil {
-		return RunResult{}, err
+		return nil, err
 	}
 
 	defer process.Close()
 
 	output, truncated, err := collect(ctx, process, cfg.MaxOutputBytes)
 	if err != nil {
-		return RunResult{}, err
+		return nil, err
 	}
 
 	select {
 	case err := <-exited:
 		exitCode, err := exitStatus(err, cfg.Path)
 		if err != nil {
-			return RunResult{}, err
+			return nil, err
 		}
 
-		return RunResult{ExitCode: exitCode, Output: output, Truncated: truncated}, nil
+		result := RunResult{
+			ExitCode:  exitCode,
+			Output:    output,
+			Truncated: truncated,
+		}
+
+		return &result, nil
 	case <-ctx.Done():
-		return RunResult{}, ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 

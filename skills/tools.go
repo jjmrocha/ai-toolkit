@@ -198,7 +198,7 @@ func (s skill) checkFile(path string) error {
 		ErrFileNotFound, path, s.name, strings.Join(s.files, ", "))
 }
 
-func renderExecution(result helper.RunResult) string {
+func renderExecution(result *helper.RunResult) string {
 	open := "<output>"
 	if result.Truncated {
 		open = `<output truncated="true">`

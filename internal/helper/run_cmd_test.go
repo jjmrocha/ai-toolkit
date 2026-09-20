@@ -19,7 +19,7 @@ func TestRun(t *testing.T) {
 		result, err := Run(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
-		expected := RunResult{ExitCode: 0, Output: []string{"first", "second"}}
+		expected := &RunResult{ExitCode: 0, Output: []string{"first", "second"}}
 		assert.Equal(t, expected, result)
 	})
 
@@ -30,7 +30,7 @@ func TestRun(t *testing.T) {
 		result, err := Run(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
-		expected := RunResult{ExitCode: 3, Output: []string{"bad"}}
+		expected := &RunResult{ExitCode: 3, Output: []string{"bad"}}
 		assert.Equal(t, expected, result)
 	})
 
@@ -86,7 +86,7 @@ func TestRun(t *testing.T) {
 		result, err := Run(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
-		expected := RunResult{ExitCode: 0, Output: []string{"aaaa", "bbbb", "cccc"}}
+		expected := &RunResult{ExitCode: 0, Output: []string{"aaaa", "bbbb", "cccc"}}
 		assert.Equal(t, expected, result)
 	})
 
@@ -101,7 +101,7 @@ func TestRun(t *testing.T) {
 		result, err := Run(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
-		expected := RunResult{ExitCode: 0, Output: []string{"aaaa", "bbbb", "cccc"}, Truncated: true}
+		expected := &RunResult{ExitCode: 0, Output: []string{"aaaa", "bbbb", "cccc"}, Truncated: true}
 		assert.Equal(t, expected, result)
 	})
 

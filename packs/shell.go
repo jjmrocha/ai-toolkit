@@ -133,7 +133,7 @@ func renderShellTimeout(timeout time.Duration) string {
 		" ms, retry with a larger " + timeoutArg + " if the command needs longer"
 }
 
-func renderShellResult(result helper.RunResult) string {
+func renderShellResult(result *helper.RunResult) string {
 	open := "<output>"
 	if result.Truncated {
 		open = `<output truncated="true">`
