@@ -61,7 +61,10 @@ func TestFileTools(t *testing.T) {
 			names = append(names, tool.Name)
 		}
 
-		expected := []string{deleteToolName, editToolName, listToolName, readToolName, workdirToolName, writeToolName}
+		expected := []string{
+			deleteToolName, editToolName, listToolName, readToolName,
+			searchToolName, workdirToolName, writeToolName,
+		}
 		assert.Equal(t, expected, names)
 	})
 
@@ -497,6 +500,176 @@ func TestFileListTool(t *testing.T) {
 				require.Error(t, err)
 			})
 		}
+	})
+}
+
+func TestFileSearchTool(t *testing.T) {
+	t.Run("returns the matching lines with a path relative to the root", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes/q3.md": "alpha\nbeta\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		expected := "<search matches=\"1\" files=\"1\">\n" +
+			"<match path=\"notes/q3.md\" line=\"2\">beta</match>\n" +
+			"</search>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns an empty result when nothing matches", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "alpha\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		expected := "<search matches=\"0\" files=\"0\">\n</search>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("counts the files the matches came from", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"a.md": "beta\nbeta\n", "b.md": "beta\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "<search matches=\"3\" files=\"2\">")
+	})
+
+	t.Run("searches below the root by default", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"deep/down/low.md": "beta\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "path=\"deep/down/low.md\"")
+	})
+
+	t.Run("searches one folder when recursive is false", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"top.md": "beta\n", "deep/low.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", recursiveArg: false}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "path=\"top.md\"")
+		assert.NotContains(t, result, "deep/low.md")
+	})
+
+	t.Run("searches the folder named by path", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"in/hit.md": "beta\n", "out/miss.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", pathArg: "in"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "path=\"in/hit.md\"")
+		assert.NotContains(t, result, "miss.md")
+	})
+
+	t.Run("searches only the files the glob names", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n", "data.csv": "beta\n"})
+		args := map[string]any{patternArg: "beta", globArg: "*.md"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "path=\"notes.md\"")
+		assert.NotContains(t, result, "data.csv")
+	})
+
+	t.Run("marks a result cut short by limit", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\nbeta\nbeta\n"})
+		args := map[string]any{patternArg: "beta", limitArg: 2}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "<search matches=\"2\" files=\"1\" truncated=\"true\">")
+	})
+
+	t.Run("does not mark a result that fits the limit exactly", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\nbeta\n"})
+		args := map[string]any{patternArg: "beta", limitArg: 2}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.NotContains(t, result, "truncated")
+	})
+
+	t.Run("honours an inline case-insensitive flag", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "BETA\n"})
+		args := map[string]any{patternArg: "(?i)beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "<match path=\"notes.md\" line=\"1\">BETA</match>")
+	})
+
+	t.Run("rejects a pattern that does not compile", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
+		args := map[string]any{patternArg: "beta("}
+		// when
+		_, err := runFileTool(t, root, searchToolName, args)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidPattern)
+	})
+
+	t.Run("rejects a glob that does not compile", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", globArg: "["}
+		// when
+		_, err := runFileTool(t, root, searchToolName, args)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidPattern)
+	})
+
+	t.Run("rejects a limit below one", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", limitArg: 0}
+		// when
+		_, err := runFileTool(t, root, searchToolName, args)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidRange)
+	})
+
+	t.Run("refuses a path that leaves the root", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", pathArg: "../"}
+		// when
+		_, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "searching")
+	})
+
+	t.Run("returns an error when the folder does not exist", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", pathArg: "missing"}
+		// when
+		_, err := runFileTool(t, root, searchToolName, args)
+		// then
+		assert.ErrorIs(t, err, os.ErrNotExist)
 	})
 }
 

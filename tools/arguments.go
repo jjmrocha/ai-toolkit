@@ -18,6 +18,13 @@ func NewArguments(data map[string]any) *Arguments {
 	return &Arguments{data: data}
 }
 
+// Exists reports whether the field named key is present.
+func (a *Arguments) Exists(key string) bool {
+	_, ok := a.data[key]
+
+	return ok
+}
+
 // GetString returns the string field named key. It returns [ErrFieldNotFound]
 // if the field is missing and [ErrInvalidFieldType] if it is not a string.
 func (a *Arguments) GetString(key string) (string, error) {

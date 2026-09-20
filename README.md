@@ -104,7 +104,7 @@ Worth knowing:
 - A `ToolBox` is safe for concurrent use: tools can be added and removed while other goroutines list or execute them.
 - `SetInterceptor` installs a gate `Execute` consults after it finds the tool and before it runs the handler: return an error and the call is blocked, the handler never runs, and the error comes back wrapped. It covers every tool in the box however it was registered — by a pack, by an MCP server at runtime, or by your own `Add` — so it is the one place to ask for approval, keep an audit trail, or refuse a command outright. `SetInterceptor(nil)` clears it; unguarded is the default.
 - `ObjectBuilder` nests — pass one to `Object` or `ArrayOfObjects` to describe schemas of any depth.
-- `Arguments` accessors return `ErrFieldNotFound` or `ErrInvalidFieldType` instead of panicking, and take an `int` where JSON handed you a `float64`.
+- `Arguments` accessors return `ErrFieldNotFound` or `ErrInvalidFieldType` instead of panicking, and take an `int` where JSON handed you a `float64`. `Exists(key) bool` reports whether a field is there at all, whatever its type — which is how an optional argument gets a default, read only when the call set it, rather than asking for it and sorting `ErrFieldNotFound` out of the error that comes back.
 - `ValidToolName` and `SanitizeToolName` apply the providers' naming rules (64 characters; letters, digits, `_`, `-`) to names from outside sources.
 
 ## `mcp`
@@ -338,6 +338,7 @@ defer pack.Close()
 | `file_write` | Writes a file whole, creating the folders its path needs |
 | `file_edit` | Replaces one piece of text inside a file |
 | `file_list` | Lists one folder, sorted by name, with each entry's full path |
+| `file_search` | Finds the lines matching a regular expression across a folder's files |
 | `file_delete` | Removes a file, or a folder that is already empty |
 | `file_workdir` | Returns the root's absolute path, for naming a file to a tool outside the root |
 
@@ -348,11 +349,14 @@ Worth knowing:
 - `file_read` returns `<file lines="1-40 of 120">`, so the model can tell a page from a whole file and call again with a larger `offset`. It reads at most 2000 lines by default and stops at 1 MiB, whichever comes first.
 - Arguments are always relative to the root; an absolute path is refused, even one that points inside it. Two results hand out absolute paths anyway, for the model to pass on to a tool that is not confined here: `file_write` answers `wrote 8 bytes to notes.md - /Users/you/workspace/notes.md`, and `file_list` gives one element per entry — `<file name="q1.md" size="8" path="/Users/you/workspace/reports/q1.md"/>` and `<dir name="2026" path="/Users/you/workspace/reports/2026"/>`.
 - `file_edit` writes nothing unless its `old_string` appears exactly once — zero matches is `ErrNoMatch`, several is `ErrManyMatches`. An edit never lands somewhere the model did not mean, and the file is left untouched on either error.
+- `file_search` takes a Go regular expression in `pattern`, and optionally `path` (which folder), `glob` (which file names), `recursive` (default `true`) and `limit` (default 100 matches). It answers `<search matches="3" files="2">` wrapping one `<match path="notes/q3.md" line="12">…</match>` per line. Unlike `file_list`, the paths here are **relative** to the root — the form every other file tool takes, so a match goes straight back into `file_read`.
+- `file_search` matches `glob` against the file's name alone, never its path, so `*.md` finds one at any depth; `path` is what narrows the search to a subtree. A file holding a NUL byte in its first 8 KiB is passed over as binary, as are unreadable files and any file with a line over 1 MiB.
+- `file_search` marks a result it cut short with `truncated="true"`, and it means there is genuinely more: it collects one match past `limit`, so a search that ends exactly on the limit is reported as complete. A pattern or glob that does not compile is `ErrInvalidPattern`, and nothing is read; a `limit` below one is `ErrInvalidRange`.
 - `file_delete` will not empty a folder: a folder that still holds anything is kept, so nothing recursive happens behind one call. Deleting a tree means deleting its files first.
 - The root is not a secret. `file_workdir` reports it, `file_write` and `file_list` embed it, and error text quotes the failing path in full — which is what lets a file written here be named to `shell_run` or a `CodingTools` tool. Root the pack at a folder whose path is safe to disclose.
 - `file_workdir` takes no arguments and reports the root as an absolute path, resolved when the pack was built. A pack rooted at a relative path still reports an absolute one, and a later `chdir` does not change the answer.
-- `ToolPack.Close` removes the six tools and closes the root. There is no process to leak.
-- The six tools carry roughly 1.7 KB of descriptions and schemas, which every request pays for while they are registered.
+- `ToolPack.Close` removes the seven tools and closes the root. There is no process to leak.
+- The seven tools carry roughly 3.8 KB of descriptions and schemas, which every request pays for while they are registered. `file_search` is the largest single tool of the seven, at about 1.1 KB.
 
 ### `DateTools`
 

@@ -3,15 +3,16 @@ package packs
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/jjmrocha/ai-toolkit/internal/helper"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
@@ -21,6 +22,7 @@ const (
 	writeToolName    = "file_write"
 	editToolName     = "file_edit"
 	listToolName     = "file_list"
+	searchToolName   = "file_search"
 	deleteToolName   = "file_delete"
 	workdirToolName  = "file_workdir"
 	pathArg          = "path"
@@ -29,7 +31,11 @@ const (
 	newStringArg     = "new_string"
 	offsetArg        = "offset"
 	limitArg         = "limit"
+	patternArg       = "pattern"
+	globArg          = "glob"
+	recursiveArg     = "recursive"
 	defaultReadLines = 2000
+	maxSearchMatches = 100
 	maxFileReadBytes = 1024 * 1024
 )
 
@@ -38,6 +44,7 @@ var fileToolNames = []string{
 	writeToolName,
 	editToolName,
 	listToolName,
+	searchToolName,
 	deleteToolName,
 	workdirToolName,
 }
@@ -66,10 +73,11 @@ func (p *filePack) Close() error {
 // FileTools registers file access confined to root in m, for an agent that
 // produces files without being a coding agent: "file_read" reads a text file a
 // page at a time, "file_write" writes one whole, "file_edit" replaces one piece
-// of text inside one, "file_list" lists a folder, "file_delete" removes a file
+// of text inside one, "file_list" lists a folder, "file_search" finds the lines
+// matching an expression across a folder's files, "file_delete" removes a file
 // or a folder that is already empty, and "file_workdir" reports root's absolute
 // path, which is how the model names a file it made to a tool that works
-// outside root. The returned [ToolPack] removes the six tools again and
+// outside root. The returned [ToolPack] removes the seven tools again and
 // releases the root.
 //
 // It returns an error, and registers nothing, when root cannot be opened.
@@ -87,6 +95,11 @@ func (p *filePack) Close() error {
 // appears exactly once, so an edit never lands somewhere the model did not mean.
 // "file_delete" will not empty a folder, so nothing recursive happens behind a
 // single call.
+//
+// "file_search" reports paths relative to root, the form the other tools take,
+// so a match is read with "file_read" without translating anything. It passes
+// over a binary file in silence and returns at most 100 matches unless the call
+// asks for more, marking a result it cut short.
 func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -164,6 +177,30 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			Build(),
 	}
 	err = m.Add(listTool, pack.listDir)
+	if err != nil {
+		return nil, err
+	}
+
+	searchTool := llm.Tool{
+		Name: searchToolName,
+		Description: "Search the files of a folder for the lines matching a regular expression, and " +
+			"return each one with the file it came from and its line number. Use it to find which file " +
+			"says something when the folder is too large to read through. Binary files are passed over. " +
+			"The result says whether it was cut short, which is answered by narrowing the search or " +
+			"asking for a larger " + limitArg + ".",
+		Schema: tools.NewObjectBuilder().
+			String(patternArg, "Regular expression in Go syntax, matched against one line at a time. "+
+				"Prefix it with (?i) to ignore case", true).
+			String(pathArg, "Path to the folder to search, relative to the folder the tools are "+
+				"confined to, defaulting to that folder itself", false).
+			String(globArg, "Pattern the file name must match for the file to be searched, such as "+
+				"*.md. It is matched against the name alone, so it finds a file at any depth", false).
+			Boolean(recursiveArg, "Whether to search the folders below as well, true by default", false).
+			Integer(limitArg, "How many matches to return, defaulting to "+
+				strconv.Itoa(maxSearchMatches), false).
+			Build(),
+	}
+	err = m.Add(searchTool, pack.searchFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -306,13 +343,17 @@ func (p *filePack) editFile(_ context.Context, args map[string]any) (string, err
 }
 
 func (p *filePack) listDir(_ context.Context, args map[string]any) (string, error) {
-	path, err := tools.NewArguments(args).GetString(pathArg)
-	if err != nil {
-		if !errors.Is(err, tools.ErrFieldNotFound) {
+	arguments := tools.NewArguments(args)
+
+	path := "."
+
+	if arguments.Exists(pathArg) {
+		value, err := arguments.GetString(pathArg)
+		if err != nil {
 			return "", err
 		}
 
-		path = "."
+		path = value
 	}
 
 	entries, err := fs.ReadDir(p.root.FS(), path)
@@ -359,6 +400,110 @@ func renderDir(path string, lines []string) string {
 	return "<dir path=\"" + path + "\">\n" + listing + "</dir>"
 }
 
+func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string, error) {
+	arguments := tools.NewArguments(args)
+
+	expression, err := arguments.GetString(patternArg)
+	if err != nil {
+		return "", err
+	}
+
+	pattern, err := regexp.Compile(expression)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s: %w", ErrInvalidPattern, patternArg, err)
+	}
+
+	path := "."
+	if arguments.Exists(pathArg) {
+		path, err = arguments.GetString(pathArg)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	glob := ""
+	if arguments.Exists(globArg) {
+		glob, err = arguments.GetString(globArg)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if _, err = filepath.Match(glob, ""); err != nil {
+		return "", fmt.Errorf("%w: %s: %w", ErrInvalidPattern, globArg, err)
+	}
+
+	recursive := true
+	if arguments.Exists(recursiveArg) {
+		recursive, err = arguments.GetBool(recursiveArg)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	limit, err := lineArg(arguments, limitArg, maxSearchMatches)
+	if err != nil {
+		return "", err
+	}
+
+	if _, err = p.root.Stat(path); err != nil {
+		return "", fmt.Errorf("searching %q: %w", path, err)
+	}
+
+	result, err := helper.Search(ctx, helper.SearchConfig{
+		Dir:        p.fullPath(path),
+		Pattern:    pattern,
+		Glob:       glob,
+		Recursive:  recursive,
+		MaxMatches: limit,
+	})
+	if err != nil {
+		return "", fmt.Errorf("searching %q: %w", path, err)
+	}
+
+	return p.renderSearch(result), nil
+}
+
+func (p *filePack) renderSearch(result *helper.SearchResult) string {
+	var listing strings.Builder
+
+	files := 0
+	previous := ""
+	entry := ""
+
+	for _, match := range result.Matches {
+		if match.Path != previous {
+			previous = match.Path
+			entry = p.relativePath(match.Path)
+			files++
+		}
+
+		listing.WriteString(renderMatch(entry, match.Line, match.Text))
+		listing.WriteString("\n")
+	}
+
+	open := "<search matches=\"" + strconv.Itoa(len(result.Matches)) +
+		"\" files=\"" + strconv.Itoa(files) + "\""
+	if result.Truncated {
+		open += " truncated=\"true\""
+	}
+
+	return open + ">\n" + listing.String() + "</search>"
+}
+
+func (p *filePack) relativePath(path string) string {
+	entry, err := filepath.Rel(p.path, path)
+	if err != nil {
+		return path
+	}
+
+	return entry
+}
+
+func renderMatch(path string, line int, text string) string {
+	return "<match path=\"" + path + "\" line=\"" + strconv.Itoa(line) + "\">" + text + "</match>"
+}
+
 func (p *filePack) deleteFile(_ context.Context, args map[string]any) (string, error) {
 	path, err := tools.NewArguments(args).GetString(pathArg)
 	if err != nil {
@@ -373,12 +518,12 @@ func (p *filePack) deleteFile(_ context.Context, args map[string]any) (string, e
 }
 
 func lineArg(arguments *tools.Arguments, name string, fallback int) (int, error) {
+	if !arguments.Exists(name) {
+		return fallback, nil
+	}
+
 	value, err := arguments.GetInt(name)
 	if err != nil {
-		if errors.Is(err, tools.ErrFieldNotFound) {
-			return fallback, nil
-		}
-
 		return 0, err
 	}
 

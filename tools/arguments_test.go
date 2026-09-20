@@ -7,6 +7,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExists(t *testing.T) {
+	t.Run("reports a field that is present", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"city": "Lisbon"})
+		// when
+		result := args.Exists("city")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("reports a field that is missing", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"city": "Lisbon"})
+		// when
+		result := args.Exists("country")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("reports a field holding a nil value", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"city": nil})
+		// when
+		result := args.Exists("city")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("reports a field of a type the accessors reject", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"city": 42})
+		// when
+		result := args.Exists("city")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("reports nothing present on empty arguments", func(t *testing.T) {
+		// given
+		args := NewArguments(nil)
+		// when
+		result := args.Exists("city")
+		// then
+		assert.False(t, result)
+	})
+}
+
 func TestGetString(t *testing.T) {
 	t.Run("returns the string value", func(t *testing.T) {
 		// given
