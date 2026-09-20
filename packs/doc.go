@@ -7,8 +7,9 @@
 // diagnostics, files, shell and read-only queries against other projects. Both
 // are served by an MCP server the pack launches and owns.
 //
-// [ShellTools] runs a command line with /bin/sh, and [FileTools] reads, writes,
-// edits, lists and deletes files under one folder it cannot leave. The program
-// serves both itself, so their ToolPack has no server to stop and only
-// unregisters.
+// [ShellTools] runs a command line with /bin/sh, [FileTools] reads, writes,
+// edits, lists and deletes files under one folder it cannot leave, and
+// [DateTools] tells the model the date, the time of day and the host's zone. The
+// program serves all three itself, so their ToolPack has no server to stop and
+// only unregisters.
 package packs

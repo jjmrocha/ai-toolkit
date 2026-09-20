@@ -354,6 +354,31 @@ Worth knowing:
 - `ToolPack.Close` removes the six tools and closes the root. There is no process to leak.
 - The six tools carry roughly 1.7 KB of descriptions and schemas, which every request pays for while they are registered.
 
+### `DateTools`
+
+`DateTools` tells the model when it is. A model has no clock, and the date it
+remembers is the one it was trained on, so anything it dates without asking is a
+guess:
+
+```go
+pack, err := packs.DateTools(toolBox)
+if err != nil {
+	log.Fatal(err)
+}
+
+defer pack.Close()
+```
+
+Worth knowing:
+
+- Three tools, none of which takes an argument. `current_date` returns `2026-09-20`, `current_time` returns `15:04:05.000` on a 24-hour clock, and `time_zone` returns `WEST (UTC+01:00)`.
+- `current_time` carries no date and no zone, and `current_date` no time. A model that needs a full timestamp calls all three; the split keeps the common case — what is today's date — a one-call answer that cannot be misread as a moment in time.
+- `time_zone` reports the host's zone from `time.Now().Zone()`: the abbreviation and the offset from UTC. A zone with no abbreviation gives the offset alone, `UTC+00:45`. The offset is the one in force now, so a zone that observes daylight saving reports the current side of it, not the standard one.
+- All three read the host clock in the host's own zone. There is no argument for a zone to convert to and no way to set the clock.
+- Register the pack wherever a date reaches the answer — a report header, a filing period, a valuation's as-of date. Without it a model fills those from training data and states the result as fact.
+- `ToolPack.Close` removes the three tools. Nothing is launched to serve them, so a dropped `ToolPack` costs nothing beyond the tools staying registered.
+- The three tools carry roughly 700 bytes of descriptions and schemas, which every request pays for while they are registered.
+
 ## `agent`
 
 Ties `llm` and `tools` into a conversation loop: send user input, run whatever
