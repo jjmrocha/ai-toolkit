@@ -259,9 +259,8 @@ Worth knowing:
 `CodingTools` gives the model a code base: symbol-aware navigation and editing,
 diagnostics, file and directory access, project memories and read-only queries
 against other projects, backed by
-[Serena](https://github.com/oraios/serena), plus `shell_run` for building and
-running what it wrote. It is keyless, so the only prerequisite is the `uvx`
-executable on `PATH`.
+[Serena](https://github.com/oraios/serena). It is keyless, so the only
+prerequisite is the `uvx` executable on `PATH`.
 
 ```go
 pack, err := packs.CodingTools(ctx, toolBox)
@@ -275,17 +274,17 @@ defer pack.Close()
 Worth knowing:
 
 - The server starts with no project. The model reaches a code base by calling `serena__activate_project`, and the symbolic tools fail until it does.
-- The shell is `shell_run`, not Serena's `execute_shell_command`, which is left out through `ExcludedTools`. The model still gets a shell — it gets the one with a timeout it can set, a 1 MiB output ceiling and a `/bin/sh` that reads no startup file, instead of two shells with different rules. `ShellTools` on the same `ToolBox` is therefore redundant, and closing either pack takes `shell_run` from both. To give Serena its own shell back, take `packs.SerenaMCPConfig()`, clear its `ExcludedTools`, and go through `mcp.NewClient` directly.
+- The pack carries no shell: Serena's `execute_shell_command` is left out through `ExcludedTools`, and nothing takes its place. A model that has to build or run what it wrote needs `ShellTools` on the same `ToolBox`, which registers `shell_run` under a pack of its own, closed separately. To give Serena its own shell back instead, take `packs.SerenaMCPConfig()`, clear its `ExcludedTools`, and go through `mcp.NewClient` directly.
 - One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
-- This pack writes files and runs commands, both with the authority of the program that started it — the whole filesystem, the environment and its credentials — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with a shell, and remember that anything the model reads out of a repository can steer what it does next.
+- This pack reads and writes files with the authority of the program that started it — the whole filesystem — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with that reach, and remember that anything the model reads out of a repository can steer what it does next.
 - The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig()`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
 - Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
-- Serena's tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes minus the exclusions, so it moves with Serena's own development rather than being fixed here. `shell_run` is not prefixed: it is this repository's tool, the same one `ShellTools` registers.
+- Serena's tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes minus the exclusions, so it moves with Serena's own development rather than being fixed here.
 - The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
 - The first symbolic call on a newly activated project is the slow one: Serena downloads that language's server if it is missing and indexes the project inside that call's budget.
-- `ToolPack.Close` stops the server process and removes both its tools and `shell_run` from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
-- A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind — `shell_run` goes in only once Serena's tools are registered. A server that later dies on its own drops its own tools; `shell_run` stays until you close the pack.
-- This is a far wider pack than `WebTools`: 31 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
+- `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
+- A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind. A server that later dies on its own drops its own tools.
+- This is a far wider pack than `WebTools`: 30 tools carrying roughly 30 KB of descriptions and schemas, twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
 - `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` mode added and `execute_shell_command` in `ExcludedTools` — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
 
 ### `ShellTools`
@@ -312,10 +311,10 @@ Worth knowing:
 - The command gets no stdin, so one that reads input sees end of input at once instead of waiting.
 - The shell runs with the authority of the program that registered the tool: the whole filesystem, the environment and its credentials. Register it only for a model and a conversation you would trust with a shell.
 - `/bin/sh` is fixed, and no startup file is read. `PATH` is the one the program itself inherited, so a directory added only in an interactive shell's `.zshrc` or `.bashrc` is not on it.
+- `CodingTools` carries no shell, so an agent that has to build or run what it wrote loads this pack alongside it. The two are closed separately.
 - `ShellTools` fails, registering nothing, when the `ToolBox` rejects the registration — it passes `ToolBox.Add`'s error through rather than swallowing it.
 - `ToolPack.Close` only removes the tool from the `ToolBox`. There is no process to leak, so a dropped `ToolPack` costs nothing beyond the tool staying registered.
 - The tool carries roughly 700 bytes of description and schema, which every request pays for while it is registered.
-- `CodingTools` registers the same tool, so an agent loading that pack has `shell_run` already and does not need this one. Loading both is redundant rather than an error — `Add` replaces by name — but closing either pack removes `shell_run` for both.
 
 ### `FileTools`
 
@@ -356,7 +355,7 @@ Worth knowing:
 - The root is not a secret. `file_workdir` reports it, `file_write` and `file_list` embed it, and error text quotes the failing path in full — which is what lets a file written here be named to `shell_run` or a `CodingTools` tool. Root the pack at a folder whose path is safe to disclose.
 - `file_workdir` takes no arguments and reports the root as an absolute path, resolved when the pack was built. A pack rooted at a relative path still reports an absolute one, and a later `chdir` does not change the answer.
 - `ToolPack.Close` removes the seven tools and closes the root. There is no process to leak.
-- The seven tools carry roughly 3.8 KB of descriptions and schemas, which every request pays for while they are registered. `file_search` is the largest single tool of the seven, at about 1.1 KB.
+- The seven tools carry roughly 4.1 KB of descriptions and schemas, which every request pays for while they are registered. `file_search` is the largest single tool of the seven, at about 1.1 KB.
 
 ### `DateTools`
 

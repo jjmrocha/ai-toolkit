@@ -2,21 +2,11 @@ package packs
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
-
-type codingPack struct {
-	shell  ToolPack
-	serena ToolPack
-}
-
-func (p *codingPack) Close() error {
-	return errors.Join(p.shell.Close(), p.serena.Close())
-}
 
 // SerenaMCPConfig returns the [mcp.ClientConfig] that [CodingTools] starts
 // Serena from, in Serena's desktop-app context with its query-projects mode
@@ -45,12 +35,10 @@ func SerenaMCPConfig() mcp.ClientConfig {
 // needs the uvx executable on PATH and no API key. The tools are registered
 // under a "serena__" prefix, and the returned [ToolPack] removes them again.
 //
-// It also registers "shell_run", on the terms [ShellTools] gives it, in place
-// of Serena's own shell tool, which is left unregistered. A code base is
-// therefore navigated, edited and built from one pack, with the timeout and
-// output ceiling "shell_run" applies rather than Serena's. Registering
-// [ShellTools] on m as well is redundant, and closing either pack then takes
-// "shell_run" from both.
+// The pack gives the model no shell: Serena's own shell tool is left
+// unregistered, and nothing takes its place. A model that has to build or run
+// what it wrote needs [ShellTools] on m as well, which brings "shell_run" under
+// a pack of its own.
 //
 // The server starts with no project, so the model works on a code base only
 // after calling "serena__activate_project". Serena's own manual, which explains
@@ -65,29 +53,8 @@ func SerenaMCPConfig() mcp.ClientConfig {
 // alongside the pack; the file and search tools do not.
 //
 // A registration that fails stops the server before returning, leaving nothing
-// behind: "shell_run" is registered only once Serena's tools are in m. A server
-// that later dies on its own removes its own tools from m, leaving "shell_run"
-// registered until the pack is closed.
+// behind. A server that later dies on its own removes its own tools from m.
 func CodingTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	serena, err := serenaTools(ctx, m)
-	if err != nil {
-		return nil, err
-	}
-
-	shell, err := ShellTools(m)
-	if err != nil {
-		_ = serena.Close()
-
-		return nil, err
-	}
-
-	return &codingPack{
-		shell:  shell,
-		serena: serena,
-	}, nil
-}
-
-func serenaTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
 	client, err := mcp.NewClient(ctx, SerenaMCPConfig())
 	if err != nil {
 		return nil, err
@@ -96,6 +63,7 @@ func serenaTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
 	err = client.RegisterTools(ctx, m)
 	if err != nil {
 		_ = client.Close()
+
 		return nil, err
 	}
 

@@ -4,12 +4,13 @@
 //
 // [WebTools] is the web pack: search, page fetching and site crawling.
 // [CodingTools] is the coding pack: symbol-aware navigation and editing,
-// diagnostics, files, shell and read-only queries against other projects. Both
-// are served by an MCP server the pack launches and owns.
+// diagnostics, files and read-only queries against other projects. Both are
+// served by an MCP server the pack launches and owns.
 //
-// [ShellTools] runs a command line with /bin/sh, [FileTools] reads, writes,
-// edits, lists, searches and deletes files under one folder it cannot leave, and
-// [DateTools] tells the model the date, the time of day and the host's zone. The
-// program serves all three itself, so their ToolPack has no server to stop and
-// only unregisters.
+// [ShellTools] runs a command line with /bin/sh, which the coding pack leaves
+// out, so an agent that builds or runs what it wrote loads both. [FileTools]
+// reads, writes, edits, lists, searches and deletes files under one folder it
+// cannot leave, and [DateTools] tells the model the date, the time of day and
+// the host's zone. The program serves all three itself, so their ToolPack has
+// no server to stop and only unregisters.
 package packs
