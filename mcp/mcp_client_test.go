@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/stretchr/testify/assert"
@@ -175,5 +177,46 @@ func TestHashToolName(t *testing.T) {
 		result := hashToolName("playwright__browser_click")
 		// then
 		assert.NotEqual(t, first, result)
+	})
+}
+
+func TestClientConnected(t *testing.T) {
+	t.Run("reports false and removes the tools once the server exits", func(t *testing.T) {
+		// given
+		server := startTestMCPServer(t, "search")
+		ctx := context.Background()
+		toolBox := tools.NewToolBox()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		require.NoError(t, client.RegisterTools(ctx, toolBox))
+		require.Equal(t, []string{"playwright__search"}, registeredToolNames(toolBox))
+		// when
+		require.NoError(t, server.session.Close())
+		// then
+		assert.Eventually(t, func() bool {
+			return !client.Connected() && len(toolBox.Tools()) == 0
+		}, time.Second, 10*time.Millisecond)
+	})
+}
+
+func TestClientRegisterTools(t *testing.T) {
+	t.Run("follows the server's tool list when it changes", func(t *testing.T) {
+		// given
+		server := startTestMCPServer(t, "search", "fetch")
+		ctx := context.Background()
+		toolBox := tools.NewToolBox()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		require.NoError(t, client.RegisterTools(ctx, toolBox))
+		expected := []string{"playwright__fetch", "playwright__search"}
+		require.Equal(t, expected, registeredToolNames(toolBox))
+		// when
+		server.server.RemoveTools("fetch")
+		// then
+		assert.Eventually(t, func() bool {
+			return slices.Equal([]string{"playwright__search"}, registeredToolNames(toolBox))
+		}, time.Second, 10*time.Millisecond)
 	})
 }

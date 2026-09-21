@@ -2,12 +2,9 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 )
-
-var ErrRequestTimeout = errors.New("request timeout")
 
 type resettableTimeout struct {
 	mu      sync.Mutex

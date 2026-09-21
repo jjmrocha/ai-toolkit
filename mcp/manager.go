@@ -36,7 +36,6 @@ func (m *Manager) Close() {
 
 	for name, client := range m.clients {
 		delete(m.clients, name)
-		delete(m.configs, name)
 		_ = client.Close()
 	}
 }

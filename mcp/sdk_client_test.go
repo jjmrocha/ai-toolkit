@@ -1,10 +1,15 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
+	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/tools"
+	"github.com/jjmrocha/go-algo/fn"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestContentText(t *testing.T) {
@@ -234,4 +239,59 @@ func TestErrorText(t *testing.T) {
 			})
 		}
 	})
+}
+
+type testMCPServer struct {
+	server  *sdk.Server
+	session *sdk.ServerSession
+}
+
+func startTestMCPServer(t *testing.T, toolNames ...string) *testMCPServer {
+	t.Helper()
+
+	impl := sdk.Implementation{Name: "test-server", Version: "1.0.0"}
+	server := sdk.NewServer(&impl, nil)
+
+	for _, name := range toolNames {
+		server.AddTool(testTool(name), testToolHandler)
+	}
+
+	testServer := testMCPServer{server: server}
+
+	original := newTransport
+	newTransport = func(ClientConfig) sdk.Transport {
+		clientSide, serverSide := sdk.NewInMemoryTransports()
+
+		session, err := server.Connect(context.Background(), serverSide, nil)
+		require.NoError(t, err)
+
+		testServer.session = session
+
+		return clientSide
+	}
+
+	t.Cleanup(func() { newTransport = original })
+
+	return &testServer
+}
+
+func testTool(name string) *sdk.Tool {
+	tool := sdk.Tool{
+		Name:        name,
+		Description: name + " tool",
+		InputSchema: map[string]any{"type": "object"},
+	}
+
+	return &tool
+}
+
+func testToolHandler(_ context.Context, _ *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
+	content := sdk.TextContent{Text: "ok"}
+	result := sdk.CallToolResult{Content: []sdk.Content{&content}}
+
+	return &result, nil
+}
+
+func registeredToolNames(toolBox *tools.ToolBox) []string {
+	return fn.Map(toolBox.Tools(), func(t llm.Tool) string { return t.Name })
 }

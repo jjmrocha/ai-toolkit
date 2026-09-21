@@ -106,4 +106,21 @@ func TestManagerClose(t *testing.T) {
 		expected := []Status{{Name: "playwright", Active: false}}
 		assert.Equal(t, expected, m.Status())
 	})
+
+	t.Run("keeps the registration of a server it started", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, "search")
+		ctx := context.Background()
+		m := NewManager(tools.NewToolBox())
+		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, m.Start(ctx, "playwright"))
+		m.Close()
+		t.Cleanup(m.Close)
+		// when
+		err := m.Start(ctx, "playwright")
+		// then
+		require.NoError(t, err)
+		expected := []Status{{Name: "playwright", Active: true}}
+		assert.Equal(t, expected, m.Status())
+	})
 }

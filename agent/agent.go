@@ -140,6 +140,15 @@ func (a *Agent) SetFeedback(fb Feedback) {
 // token usage and timing [Metadata]. A failing tool is reported to the model as
 // its error text so the model can recover rather than aborting the round.
 //
+// The tools offered to the model are read from the session's ToolBox once,
+// before the first model call, and stay fixed for the whole round, so the menu
+// never shifts under the model mid-round. A tool registered while the round is
+// running — by an MCP server announcing a change to its tool list, say, or by a
+// pack another tool mounted — is offered from the next Process call on. One
+// removed the same way stays on offer until then and fails with
+// [tools.ErrToolNotFound] if the model calls it, which reaches the model as
+// tool-error text like any other failure.
+//
 // On the first round it also queries the model's context window (see
 // [llm.LLM.ModelInfo]) to size the compaction threshold; the result is cached
 // for the agent's lifetime. Once a completed turn crosses
