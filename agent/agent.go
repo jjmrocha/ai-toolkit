@@ -208,6 +208,8 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			}, nil
 		}
 
+		a.fb.TokensUsed(response.Stats.TotalTokens)
+
 		for _, call := range response.ToolCalls {
 			a.fb.ToolCalled(call.Name, call.Arguments)
 

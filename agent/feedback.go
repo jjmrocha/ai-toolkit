@@ -36,6 +36,10 @@ type Feedback interface {
 	// fetched, leaving automatic compaction disabled. The fetch is retried
 	// every turn until it succeeds, so the event fires on each failure.
 	ModelInfoUnavailable()
+	// TokensUsed fires after each intermediate model response, one that carries
+	// tool calls, so callers can track token usage without waiting for the
+	// final answer. The final response's usage is in [Response.Metadata].
+	TokensUsed(totalTokens int)
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
 	// SessionStarted fires when [Agent.StartSession] begins a session.
@@ -96,6 +100,10 @@ func (s *writerFeedback) ModelInfoUnavailable() {
 	_, _ = fmt.Fprintln(s.stdout, "Model info unavailable; automatic context compaction is disabled")
 }
 
+func (s *writerFeedback) TokensUsed(totalTokens int) {
+	_, _ = fmt.Fprintln(s.stdout, "Tokens used:", totalTokens)
+}
+
 func (s *writerFeedback) SessionReset() {
 	_, _ = fmt.Fprintln(s.stdout, "Session reset")
 }
@@ -123,6 +131,9 @@ func (nullFeedback) ContextCompactionFailed() {
 }
 
 func (nullFeedback) ModelInfoUnavailable() {
+}
+
+func (nullFeedback) TokensUsed(_ int) {
 }
 
 func (nullFeedback) SessionReset() {

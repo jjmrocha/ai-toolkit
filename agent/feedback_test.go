@@ -15,6 +15,7 @@ func exerciseAllEvents(fb Feedback) {
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
 	fb.ModelInfoUnavailable()
+	fb.TokensUsed(5)
 	fb.SessionReset()
 	fb.SessionClosed()
 }
@@ -56,6 +57,13 @@ func TestNewWriterFeedback(t *testing.T) {
 			expected: "Model info unavailable; automatic context compaction is disabled\n",
 		},
 		{
+			name: "tokens used",
+			fire: func(fb Feedback) {
+				fb.TokensUsed(115)
+			},
+			expected: "Tokens used: 115\n",
+		},
+		{
 			name:     "session reset",
 			fire:     func(fb Feedback) { fb.SessionReset() },
 			expected: "Session reset\n",
@@ -93,6 +101,7 @@ func TestNewWriterFeedback(t *testing.T) {
 			"Context was compacted\n" +
 			"Context compaction failed\n" +
 			"Model info unavailable; automatic context compaction is disabled\n" +
+			"Tokens used: 5\n" +
 			"Session reset\n" +
 			"Session closed\n"
 		assert.Equal(t, expected, result)

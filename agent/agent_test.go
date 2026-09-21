@@ -117,6 +117,7 @@ type recordingFeedback struct {
 	tools    []string
 	toolArgs []map[string]any
 	returns  []toolReturn
+	stats    []int
 }
 
 func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
@@ -128,6 +129,10 @@ func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
 func (f *recordingFeedback) ToolReturned(toolName string, result string, err error, elapsed time.Duration) {
 	f.returns = append(f.returns, toolReturn{tool: toolName, result: result, err: err, elapsed: elapsed})
 	f.events = append(f.events, "ToolReturned")
+}
+func (f *recordingFeedback) TokensUsed(totalTokens int) {
+	f.stats = append(f.stats, totalTokens)
+	f.events = append(f.events, "TokensUsed")
 }
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
 func (f *recordingFeedback) ContextCompactionFailed() {
@@ -507,6 +512,29 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, []map[string]any{{"text": "hi"}}, fb.toolArgs)
 	})
 
+	t.Run("fires TokensUsed for each intermediate response, but not the final one", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}, Stats: llm.Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}},
+				{ToolCalls: []llm.ToolCall{{ID: "c2", Name: "echo"}}, Stats: llm.Stats{PromptTokens: 20, OutputTokens: 10, TotalTokens: 30}},
+				{Content: "done", Stats: llm.Stats{TotalTokens: 20}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []int{15, 30}, fb.stats)
+		assert.Equal(t, []string{"SessionStarted", "TokensUsed", "ToolCalled", "ToolReturned", "TokensUsed", "ToolCalled", "ToolReturned"}, fb.events)
+	})
+
 	t.Run("fires ToolReturned with the tool's result after the call", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
@@ -583,7 +611,7 @@ func TestProcess(t *testing.T) {
 		_, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, []string{"SessionStarted", "ToolCalled", "ToolReturned", "ToolCalled", "ToolReturned"}, fb.events)
+		assert.Equal(t, []string{"SessionStarted", "TokensUsed", "ToolCalled", "ToolReturned", "ToolCalled", "ToolReturned"}, fb.events)
 	})
 
 	t.Run("returns ErrMaxIterations when the iteration cap is reached", func(t *testing.T) {
