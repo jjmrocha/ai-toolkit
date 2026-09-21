@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,49 @@ func TestSearch(t *testing.T) {
 		}
 		assert.Equal(t, expected, result.Matches)
 		assert.False(t, result.Truncated)
+	})
+
+	t.Run("cuts a line longer than MaxTextBytes and marks the match truncated", func(t *testing.T) {
+		// given
+		dir := dirWith(t, map[string]string{"notes.md": "beta " + strings.Repeat("x", 100) + "\n"})
+		cfg := SearchConfig{Dir: dir, Pattern: regexp.MustCompile("beta"), MaxTextBytes: 10}
+		// when
+		result, err := Search(t.Context(), cfg)
+		// then
+		require.NoError(t, err)
+		expected := []SearchMatch{
+			{Path: filepath.Join(dir, "notes.md"), Line: 1, Text: "beta xxxxx", Truncated: true},
+		}
+		assert.Equal(t, expected, result.Matches)
+	})
+
+	t.Run("keeps whole lines when MaxTextBytes is zero", func(t *testing.T) {
+		// given
+		long := "beta " + strings.Repeat("x", 100)
+		dir := dirWith(t, map[string]string{"notes.md": long + "\n"})
+		cfg := SearchConfig{Dir: dir, Pattern: regexp.MustCompile("beta")}
+		// when
+		result, err := Search(t.Context(), cfg)
+		// then
+		require.NoError(t, err)
+		expected := []SearchMatch{
+			{Path: filepath.Join(dir, "notes.md"), Line: 1, Text: long},
+		}
+		assert.Equal(t, expected, result.Matches)
+	})
+
+	t.Run("cuts at a whole character", func(t *testing.T) {
+		// given
+		dir := dirWith(t, map[string]string{"notes.md": "beta \u00e9" + strings.Repeat("x", 20) + "\n"})
+		cfg := SearchConfig{Dir: dir, Pattern: regexp.MustCompile("beta"), MaxTextBytes: 6}
+		// when
+		result, err := Search(t.Context(), cfg)
+		// then
+		require.NoError(t, err)
+		require.Len(t, result.Matches, 1)
+		expected := "beta "
+		assert.Equal(t, expected, result.Matches[0].Text)
+		assert.True(t, utf8.ValidString(result.Matches[0].Text))
 	})
 
 	t.Run("returns no matches when nothing matches", func(t *testing.T) {

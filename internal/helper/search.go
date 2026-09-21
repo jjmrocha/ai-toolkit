@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"unicode/utf8"
 )
 
 const (
@@ -37,6 +38,12 @@ type SearchConfig struct {
 	// which is what bounds the work a broad pattern costs. A zero MaxMatches
 	// collects everything.
 	MaxMatches int
+	// MaxTextBytes is how much of a matching line [SearchMatch.Text] carries. A
+	// longer line is cut at the last whole character that fits, so a match never
+	// holds more than this however long the line was, and
+	// [SearchMatch.Truncated] says it was cut. A zero MaxTextBytes keeps whole
+	// lines.
+	MaxTextBytes int
 }
 
 // SearchMatch is one line that matched [SearchConfig.Pattern].
@@ -45,8 +52,12 @@ type SearchMatch struct {
 	Path string
 	// Line is the line's number in that file, counting from 1.
 	Line int
-	// Text is the line itself, with the newline removed.
+	// Text is the line itself, with the newline removed, cut to
+	// [SearchConfig.MaxTextBytes] when it ran over.
 	Text string
+	// Truncated reports whether the line was cut to
+	// [SearchConfig.MaxTextBytes], so Text holds only its start.
+	Truncated bool
 }
 
 // SearchResult is what [Search] collected before it stopped.
@@ -117,7 +128,7 @@ func Search(ctx context.Context, cfg SearchConfig) (*SearchResult, error) {
 			return nil
 		}
 
-		matches := searchFile(root, path, cfg.Pattern, limit-len(result.Matches))
+		matches := searchFile(root, path, cfg.Pattern, cfg.MaxTextBytes, limit-len(result.Matches))
 		result.Matches = append(result.Matches, matches...)
 
 		if limit > 0 && len(result.Matches) == limit {
@@ -138,6 +149,19 @@ func Search(ctx context.Context, cfg SearchConfig) (*SearchResult, error) {
 	return &result, nil
 }
 
+func elide(text string, maxText int) (string, bool) {
+	if maxText == 0 || len(text) <= maxText {
+		return text, false
+	}
+
+	cut := maxText
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+
+	return text[:cut], true
+}
+
 func matchesGlob(glob string, name string) bool {
 	if glob == "" {
 		return true
@@ -148,7 +172,7 @@ func matchesGlob(glob string, name string) bool {
 	return err == nil && matched
 }
 
-func searchFile(root *os.Root, name string, pattern *regexp.Regexp, budget int) []SearchMatch {
+func searchFile(root *os.Root, name string, pattern *regexp.Regexp, maxText int, budget int) []SearchMatch {
 	file, err := root.Open(name)
 	if err != nil {
 		return nil
@@ -179,10 +203,13 @@ func searchFile(root *os.Root, name string, pattern *regexp.Regexp, budget int) 
 			continue
 		}
 
+		text, truncated := elide(scanner.Text(), maxText)
+
 		match := SearchMatch{
-			Path: full,
-			Line: line,
-			Text: scanner.Text(),
+			Path:      full,
+			Line:      line,
+			Text:      text,
+			Truncated: truncated,
 		}
 		matches = append(matches, match)
 

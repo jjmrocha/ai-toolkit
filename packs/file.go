@@ -18,25 +18,26 @@ import (
 )
 
 const (
-	readToolName     = "file_read"
-	writeToolName    = "file_write"
-	editToolName     = "file_edit"
-	listToolName     = "file_list"
-	searchToolName   = "file_search"
-	deleteToolName   = "file_delete"
-	workdirToolName  = "file_workdir"
-	pathArg          = "path"
-	contentArg       = "content"
-	oldStringArg     = "old_string"
-	newStringArg     = "new_string"
-	offsetArg        = "offset"
-	limitArg         = "limit"
-	patternArg       = "pattern"
-	globArg          = "glob"
-	recursiveArg     = "recursive"
-	defaultReadLines = 2000
-	maxSearchMatches = 100
-	maxFileReadBytes = 1024 * 1024
+	readToolName      = "file_read"
+	writeToolName     = "file_write"
+	editToolName      = "file_edit"
+	listToolName      = "file_list"
+	searchToolName    = "file_search"
+	deleteToolName    = "file_delete"
+	workdirToolName   = "file_workdir"
+	pathArg           = "path"
+	contentArg        = "content"
+	oldStringArg      = "old_string"
+	newStringArg      = "new_string"
+	offsetArg         = "offset"
+	limitArg          = "limit"
+	patternArg        = "pattern"
+	globArg           = "glob"
+	recursiveArg      = "recursive"
+	defaultReadLines  = 2000
+	maxSearchMatches  = 100
+	maxMatchTextBytes = 500
+	maxFileReadBytes  = 1024 * 1024
 )
 
 var fileToolNames = []string{
@@ -451,11 +452,12 @@ func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string
 	}
 
 	result, err := helper.Search(ctx, helper.SearchConfig{
-		Dir:        p.fullPath(path),
-		Pattern:    pattern,
-		Glob:       glob,
-		Recursive:  recursive,
-		MaxMatches: limit,
+		Dir:          p.fullPath(path),
+		Pattern:      pattern,
+		Glob:         glob,
+		Recursive:    recursive,
+		MaxMatches:   limit,
+		MaxTextBytes: maxMatchTextBytes,
 	})
 	if err != nil {
 		return "", fmt.Errorf("searching %q: %w", path, err)
@@ -478,7 +480,7 @@ func (p *filePack) renderSearch(result *helper.SearchResult) string {
 			files++
 		}
 
-		listing.WriteString(renderMatch(entry, match.Line, match.Text))
+		listing.WriteString(renderMatch(entry, match))
 		listing.WriteString("\n")
 	}
 
@@ -500,8 +502,13 @@ func (p *filePack) relativePath(path string) string {
 	return entry
 }
 
-func renderMatch(path string, line int, text string) string {
-	return "<match path=\"" + path + "\" line=\"" + strconv.Itoa(line) + "\">" + text + "</match>"
+func renderMatch(path string, match helper.SearchMatch) string {
+	open := "<match path=\"" + path + "\" line=\"" + strconv.Itoa(match.Line) + "\""
+	if match.Truncated {
+		open += " truncated=\"true\""
+	}
+
+	return open + ">" + match.Text + "</match>"
 }
 
 func (p *filePack) deleteFile(_ context.Context, args map[string]any) (string, error) {

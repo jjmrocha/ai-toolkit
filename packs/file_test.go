@@ -518,6 +518,30 @@ func TestFileSearchTool(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
+	t.Run("marks a match cut short", func(t *testing.T) {
+		// given
+		long := "beta " + strings.Repeat("x", maxMatchTextBytes)
+		root := rootWith(t, map[string]string{"notes.md": long + "\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		expected := "<match path=\"notes.md\" line=\"1\" truncated=\"true\">" + long[:maxMatchTextBytes] + "</match>"
+		assert.Contains(t, result, expected)
+	})
+
+	t.Run("leaves a short match unmarked", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		assert.NotContains(t, result, "truncated")
+	})
+
 	t.Run("returns an empty result when nothing matches", func(t *testing.T) {
 		// given
 		root := rootWith(t, map[string]string{"notes.md": "alpha\n"})
