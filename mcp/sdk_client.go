@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/jjmrocha/ai-toolkit/internal/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/command"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,7 +33,7 @@ type callBacks struct {
 
 var newTransport = func(cfg ClientConfig) sdk.Transport {
 	cmd := exec.Command(cfg.Command, cfg.Args...) //nolint:gosec // command and args are operator-provided configuration
-	cmd.Env = helper.InheritedEnv(cfg.InheritEnv)
+	cmd.Env = command.InheritedEnv(cfg.InheritEnv)
 
 	return &sdk.CommandTransport{Command: cmd}
 }

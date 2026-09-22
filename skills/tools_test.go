@@ -468,6 +468,25 @@ func TestExecuteFileTool(t *testing.T) {
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
+	t.Run("reports a script stopped by the default timeout", func(t *testing.T) {
+		// given
+		original := executeTimeout
+		executeTimeout = 50 * time.Millisecond
+		t.Cleanup(func() { executeTimeout = original })
+		path := writeSkill(t, validSkill)
+		writeExecutable(t, path, "sleep.sh", "#!/bin/sh\nsleep 30\n")
+		collection := collectionWith(t, path)
+		// when
+		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
+			"skill_name": "git-release",
+			"path":       "sleep.sh",
+		})
+		// then
+		require.NoError(t, err)
+		expected := "timed out after 50 ms"
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("runs a skill added under a relative path", func(t *testing.T) {
 		// given
 		base := t.TempDir()

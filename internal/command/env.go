@@ -1,4 +1,4 @@
-package helper
+package command
 
 import (
 	"os"
@@ -32,8 +32,8 @@ var defaultEnvPrefixes = []string{"LC_"}
 
 // InheritedEnv builds a child process's environment from the calling process's,
 // copying only what a child is expected to need: the variables that locate the
-// user and the tools ([DefaultEnvNames]), the ones that keep TLS, proxies and
-// locale working, every LC_ variable, and the variables extra names. Everything
+// user and the tools, the ones that keep TLS, proxies and locale working, every
+// LC_ variable, and the variables extra names. Everything
 // else is left behind, so a child does not receive the credentials the calling
 // process holds in its environment.
 //

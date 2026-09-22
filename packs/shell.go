@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jjmrocha/ai-toolkit/internal/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/command"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
@@ -74,7 +74,7 @@ func ShellTools(m *tools.ToolBox) (ToolPack, error) {
 func runShellCommand(ctx context.Context, args map[string]any) (string, error) {
 	arguments := tools.NewArguments(args)
 
-	command, err := arguments.GetString(commandArg)
+	commandLine, err := arguments.GetString(commandArg)
 	if err != nil {
 		return "", err
 	}
@@ -92,9 +92,9 @@ func runShellCommand(ctx context.Context, args map[string]any) (string, error) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	result, err := helper.Run(runCtx, helper.RunConfig{
+	result, err := command.Run(runCtx, command.RunConfig{
 		Path:           shellPath,
-		Args:           []string{"-c", command},
+		Args:           []string{"-c", commandLine},
 		Dir:            dir,
 		MaxOutputBytes: maxShellOutputBytes,
 	})
@@ -103,7 +103,7 @@ func runShellCommand(ctx context.Context, args map[string]any) (string, error) {
 			return renderShellTimeout(timeout), nil
 		}
 
-		return "", fmt.Errorf("executing %q: %w", command, err)
+		return "", fmt.Errorf("executing %q: %w", commandLine, err)
 	}
 
 	return renderShellResult(result), nil
@@ -133,7 +133,7 @@ func renderShellTimeout(timeout time.Duration) string {
 		" ms, retry with a larger " + timeoutArg + " if the command needs longer"
 }
 
-func renderShellResult(result *helper.RunResult) string {
+func renderShellResult(result *command.RunResult) string {
 	open := "<output>"
 	if result.Truncated {
 		open = `<output truncated="true">`

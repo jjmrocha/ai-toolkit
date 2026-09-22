@@ -10,8 +10,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/jjmrocha/ai-toolkit/internal/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/command"
+	ictx "github.com/jjmrocha/ai-toolkit/internal/context"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
@@ -25,6 +27,8 @@ const (
 	argsArg             = "args"
 	maxOutputBytes      = 1024 * 1024
 )
+
+var executeTimeout = 2 * time.Minute
 
 // RegisterTools adds the collection's three tools — [loadToolName],
 // [loadFileToolName] and [executeFileToolName] — to tb, so the model can load a
@@ -168,13 +172,20 @@ func (c *Collection) executeSkillFile(ctx context.Context, args map[string]any) 
 		return "", err
 	}
 
-	result, err := helper.Run(ctx, helper.RunConfig{
+	runCtx, cancel := ictx.WithTimeout(ctx, executeTimeout)
+	defer cancel()
+
+	result, err := command.Run(runCtx, command.RunConfig{
 		Path:           filepath.Join(s.skillPath, scriptPath),
 		Args:           fileArgs,
 		Dir:            s.skillPath,
 		MaxOutputBytes: maxOutputBytes,
 	})
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			return renderExecuteTimeout(executeTimeout), nil
+		}
+
 		return "", fmt.Errorf("executing %q from skill %q: %w", scriptPath, name, hidePath(err))
 	}
 
@@ -198,7 +209,11 @@ func (s skill) checkFile(path string) error {
 		ErrFileNotFound, path, s.name, strings.Join(s.files, ", "))
 }
 
-func renderExecution(result *helper.RunResult) string {
+func renderExecuteTimeout(timeout time.Duration) string {
+	return "timed out after " + strconv.FormatInt(timeout.Milliseconds(), 10) + " ms"
+}
+
+func renderExecution(result *command.RunResult) string {
 	open := "<output>"
 	if result.Truncated {
 		open = `<output truncated="true">`

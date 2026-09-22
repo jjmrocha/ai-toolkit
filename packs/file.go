@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jjmrocha/ai-toolkit/internal/helper"
+	"github.com/jjmrocha/ai-toolkit/internal/search"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
@@ -451,7 +451,7 @@ func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string
 		return "", fmt.Errorf("searching %q: %w", path, err)
 	}
 
-	result, err := helper.Search(ctx, helper.SearchConfig{
+	result, err := search.Files(ctx, search.Config{
 		Dir:          p.fullPath(path),
 		Pattern:      pattern,
 		Glob:         glob,
@@ -466,7 +466,7 @@ func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string
 	return p.renderSearch(result), nil
 }
 
-func (p *filePack) renderSearch(result *helper.SearchResult) string {
+func (p *filePack) renderSearch(result *search.Result) string {
 	var listing strings.Builder
 
 	files := 0
@@ -502,7 +502,7 @@ func (p *filePack) relativePath(path string) string {
 	return entry
 }
 
-func renderMatch(path string, match helper.SearchMatch) string {
+func renderMatch(path string, match search.Match) string {
 	open := "<match path=\"" + path + "\" line=\"" + strconv.Itoa(match.Line) + "\""
 	if match.Truncated {
 		open += " truncated=\"true\""

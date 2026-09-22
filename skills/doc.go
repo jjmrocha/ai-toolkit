@@ -12,6 +12,9 @@
 // [loadFileToolName] returns one of those files, and [executeFileToolName] runs
 // one of them and returns its output.
 //
+// A script [executeFileToolName] runs is stopped after two minutes unless the
+// caller's context already carries a deadline, which is then kept.
+//
 // A skill folder is trusted input, the way an mcp server command is: whatever
 // [executeFileToolName] runs does so with the authority of the program that
 // started it, and inherits its environment, including any credentials held
