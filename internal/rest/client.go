@@ -1,4 +1,4 @@
-package llm
+package rest
 
 import (
 	"net/http"
@@ -15,7 +15,9 @@ const (
 	retryMaxWaitTime = 30 * time.Second
 )
 
-func newRestyClient(baseURL string) *resty.Client {
+// NewClient returns a client bound to baseURL, with a 60 second timeout and a
+// retry policy that backs off on 429 and 5xx responses, honoring Retry-After.
+func NewClient(baseURL string) *resty.Client {
 	return resty.New().
 		SetBaseURL(baseURL).
 		SetTimeout(defaultTimeout).

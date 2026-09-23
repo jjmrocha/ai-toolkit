@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jjmrocha/ai-toolkit/internal/rest"
 )
 
 const (
@@ -28,7 +29,7 @@ func newOpenRouter(cfg Config) (*openrouter, error) {
 		cfg.BaseURL = openrouterBaseURL
 	}
 
-	client := newRestyClient(cfg.BaseURL).
+	client := rest.NewClient(cfg.BaseURL).
 		SetAuthToken(cfg.APIKey)
 
 	return &openrouter{

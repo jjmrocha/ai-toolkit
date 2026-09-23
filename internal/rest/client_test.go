@@ -1,4 +1,4 @@
-package llm
+package rest
 
 import (
 	"testing"

@@ -8,7 +8,7 @@ are more mature, better-supported libraries out there, and you should probably
 reach for one of those first. But if it happens to fit your needs as-is, feel
 free to use it.
 
-Requires **Go 1.27.1+**. Supported providers: **OpenRouter**, **Ollama**, and
+Requires **Go 1.27.1+**. Supported chat providers: **OpenRouter**, **Ollama**, and
 **Anthropic**.
 
 ```bash
@@ -18,6 +18,7 @@ go get github.com/jjmrocha/ai-toolkit
 | Package | What it does | Builds on |
 | --- | --- | --- |
 | [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | — |
+| [`decision`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/decision) | Typed questions answered with probabilities, not text | — |
 | [`tools`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools) | Registers tools and dispatches the model's calls | `llm` |
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
 | [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
@@ -61,6 +62,57 @@ Worth knowing:
 - `Config.Effort` maps one knob, `EffortOff` through `EffortMax`, onto Anthropic's adaptive-thinking effort level and OpenRouter/Ollama's reasoning level. The values are relative rungs, not provider literals, so the same `Effort` reaches each backend as whatever that backend calls it.
 - `Config.Models` lists what `ChangeModel` may switch to mid-conversation; the active model is always included.
 - `ChangeModel` and `ChangeEffort` both validate before they mutate and return an error otherwise, so a rejected switch leaves the client on its current settings.
+
+## `decision`
+
+Asks a decision model typed questions about a state and gets typed answers back.
+No prose to parse: each answer carries the probabilities behind it. The provider
+is OpenRouter, which serves TypeSafe's Jev models.
+
+```go
+client, err := decision.New(decision.Config{
+	Provider: decision.ProviderOpenRouter,
+	APIKey:   os.Getenv("OPENROUTER_API_KEY"),
+	Model:    "typesafe/jev-1.13",
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+answers, err := client.Ask(context.Background(), decision.Request{
+	State: "My checkout page shows a blank screen after I click Pay.",
+	Questions: map[string]decision.Question{
+		"is_bug": decision.Noul{Instructions: "Is the customer reporting a defect?"},
+		"team": decision.Choice{
+			Instructions: "Which team should own this ticket?",
+			Options: map[string]string{
+				"payments": "Checkout, billing, or payment processing",
+				"frontend": "Rendering, layout, or browser compatibility",
+			},
+		},
+		"urgency": decision.Score{
+			Instructions: "How urgent is this ticket?",
+			Levels:       []string{"Next release", "This week", "Blocking revenue"},
+		},
+	},
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+team := answers.Answers["team"].(decision.ChoiceAnswer)
+fmt.Println(team.Choice, team.Confidence)
+```
+
+Worth knowing:
+
+- `Request.Questions` and `Response.Answers` share the identifiers you choose. They are never sent to the model.
+- Every question in a request is answered in parallel and in isolation: none of them sees another's answer.
+- `Answer` is a sealed interface — `NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer` — so switch on `Type()` before reading an answer's fields.
+- `NoulAnswer.Value` is the probability of yes, not a severity: `0.5` means undecided, not "medium".
+- `ScoreAnswer.Score` is a probability-weighted position across your levels, so it lands between them.
+- `Confidence` describes how concentrated the probabilities are. What to do below a threshold is yours to decide; the package never decides for you.
+- `Stats` reports the input tokens — the only ones providers bill — and how long the call took.
 
 ## `tools`
 

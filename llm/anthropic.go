@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jjmrocha/ai-toolkit/internal/rest"
 )
 
 const (
@@ -34,7 +35,7 @@ func newAnthropic(cfg Config) (*anthropic, error) {
 		cfg.MaxTokens = defaultMaxTokens
 	}
 
-	client := newRestyClient(cfg.BaseURL).
+	client := rest.NewClient(cfg.BaseURL).
 		SetHeader("x-api-key", cfg.APIKey).
 		SetHeader("anthropic-version", anthropicVersion)
 

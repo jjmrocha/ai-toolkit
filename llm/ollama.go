@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jjmrocha/ai-toolkit/internal/rest"
 )
 
 const (
@@ -26,7 +27,7 @@ func newOllama(cfg Config) (*ollama, error) {
 
 	return &ollama{
 		config: cfg,
-		client: newRestyClient(cfg.BaseURL),
+		client: rest.NewClient(cfg.BaseURL),
 	}, nil
 }
 
