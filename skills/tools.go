@@ -180,6 +180,7 @@ func (c *Collection) executeSkillFile(ctx context.Context, args map[string]any) 
 		Args:           fileArgs,
 		Dir:            s.skillPath,
 		MaxOutputBytes: maxOutputBytes,
+		Env:            command.InheritedEnv([]string{}),
 	})
 	if err != nil {
 		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
