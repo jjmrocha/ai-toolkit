@@ -22,3 +22,9 @@ var ErrManyMatches = errors.New("more than one match")
 // registers when the call's regular expression, or its file name pattern,
 // cannot be compiled.
 var ErrInvalidPattern = errors.New("invalid pattern")
+
+// ErrInvalidQuestion is returned by the decision tools [DecisionTools]
+// registers when "decision_choice" is given fewer than two options or the same
+// option twice, or "decision_score" fewer than two levels. The decision model is
+// not asked.
+var ErrInvalidQuestion = errors.New("invalid question")

@@ -23,7 +23,7 @@ go get github.com/jjmrocha/ai-toolkit
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
 | [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
-| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles, registered in one call | `mcp`, `tools` |
+| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles, registered in one call | `decision`, `mcp`, `tools` |
 
 The sections below are a tour. The full API reference lives on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
@@ -434,6 +434,47 @@ Worth knowing:
 - Register the pack wherever a date reaches the answer — a report header, a filing period, a valuation's as-of date. Without it a model fills those from training data and states the result as fact.
 - `ToolPack.Close` removes the three tools. Nothing is launched to serve them, so a dropped `ToolPack` costs nothing beyond the tools staying registered.
 - The three tools carry roughly 700 bytes of descriptions and schemas, which every request pays for while they are registered.
+
+### `DecisionTools`
+
+`DecisionTools` lets the model hand a judgement call to a `decision` model
+instead of making it itself, and get calibrated probabilities back. You build
+the client; the pack only registers the tools:
+
+```go
+client, err := decision.New(decision.Config{
+	Provider: decision.ProviderOpenRouter,
+	APIKey:   os.Getenv("OPENROUTER_API_KEY"),
+	Model:    "typesafe/jev-1.13",
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+pack, err := packs.DecisionTools(toolBox, client)
+if err != nil {
+	log.Fatal(err)
+}
+
+defer pack.Close()
+```
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `decision_yes_no` | `state`, `instructions`; optionally `true` and `false`, what each answer means | `{"yes_probability": 0.87}` |
+| `decision_choice` | `state`, `instructions`, `options` — each a `name` and an optional `description` | `{"choice": "payments", "probabilities": {"payments": 0.81, "frontend": 0.19}, "confidence": 0.62}` |
+| `decision_score` | `state`, `instructions`, `levels`, lowest to highest | `{"score": 1.4, "probabilities": [{"level": "Next release", "probability": 0.1}, …], "confidence": 0.3}` |
+
+Worth knowing:
+
+- One question per call. Several questions about the same state are several calls, each billed on its input tokens — the whole `state` included.
+- Everything the model puts in `state` is sent to OpenRouter. Register the pack only where that is acceptable.
+- The decision model sees the `state` and the question, nothing of the conversation, so the tool descriptions tell the model to make the state self-contained.
+- `yes_probability` is the probability of yes, so `0.5` means undecided. `score` is a probability-weighted position from `0` to the last level's index and can fall between levels. `confidence` is how concentrated the probabilities are, not how likely the answer is to be right.
+- A `decision_choice` with fewer than two options or the same option twice, and a `decision_score` with fewer than two levels, fail with `ErrInvalidQuestion` before anything is sent. The provider's own limits — at most 10 levels, 255 options — are left to it, and its error reaches the model like any other tool error.
+- There is no timeout or retry in the pack: the call runs under the caller's context, and the `decision` client already retries 429 and 5xx responses.
+- The caller owns the client. `ToolPack.Close` removes the three tools and nothing else.
+- The three tools carry roughly 2.4 KB of descriptions and schemas, which every request pays for while they are registered.
 
 ## `agent`
 
