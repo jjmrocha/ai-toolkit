@@ -202,3 +202,18 @@ func (tb *ToolBox) Execute(ctx context.Context, call llm.ToolCall) (*llm.ToolMes
 		Content:    result,
 	}, nil
 }
+
+// Tool returns the definition of the tool with the given name, or false if no
+// such tool is registered. The returned value is a shallow copy: its Schema is
+// the map the tool was registered with, so callers must not modify it.
+func (tb *ToolBox) Tool(name string) (llm.Tool, bool) {
+	tb.mu.RLock()
+	defer tb.mu.RUnlock()
+
+	fn, ok := tb.tools[name]
+	if !ok {
+		return llm.Tool{}, false
+	}
+
+	return fn.tool, true
+}

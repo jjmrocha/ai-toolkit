@@ -238,6 +238,97 @@ func TestToolBoxTools(t *testing.T) {
 	})
 }
 
+func TestToolBoxTool(t *testing.T) {
+	t.Run("returns the definition of a registered tool", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		expected := llm.Tool{
+			Name:        "get_weather",
+			Description: "reports the weather",
+			Schema:      map[string]any{"type": "object"},
+		}
+		require.NoError(t, box.Add(expected, noopHandler))
+		// when
+		result, found := box.Tool("get_weather")
+		// then
+		require.True(t, found)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns false for an unknown tool", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
+		// when
+		result, found := box.Tool("ghost")
+		// then
+		assert.False(t, found)
+		assert.Equal(t, llm.Tool{}, result)
+	})
+
+	t.Run("returns false for an empty box", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		// when
+		result, found := box.Tool("a")
+		// then
+		assert.False(t, found)
+		assert.Equal(t, llm.Tool{}, result)
+	})
+
+	t.Run("returns false for an empty name", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
+		// when
+		result, found := box.Tool("")
+		// then
+		assert.False(t, found)
+		assert.Equal(t, llm.Tool{}, result)
+	})
+
+	t.Run("returns the replacement after a name is re-registered", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "x", Description: "first"}, noopHandler))
+		require.NoError(t, box.Add(llm.Tool{Name: "x", Description: "second"}, noopHandler))
+		// when
+		result, found := box.Tool("x")
+		// then
+		require.True(t, found)
+		assert.Equal(t, "second", result.Description)
+	})
+
+	t.Run("returns false after the tool is removed", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
+		box.Remove("a")
+		// when
+		result, found := box.Tool("a")
+		// then
+		assert.False(t, found)
+		assert.Equal(t, llm.Tool{}, result)
+	})
+
+	t.Run("changing the returned value leaves the registered tool untouched", func(t *testing.T) {
+		// given
+		box := NewToolBox()
+		require.NoError(t, box.Add(llm.Tool{Name: "a", Description: "original"}, noopHandler))
+		copied, found := box.Tool("a")
+		require.True(t, found)
+		// when
+		copied.Name = "renamed"
+		copied.Description = "changed"
+		// then
+		require.Equal(t, llm.Tool{Name: "renamed", Description: "changed"}, copied)
+		result, found := box.Tool("a")
+		require.True(t, found)
+		expected := llm.Tool{Name: "a", Description: "original"}
+		assert.Equal(t, expected, result)
+	})
+}
+
 func TestToolBoxConcurrentAccess(t *testing.T) {
 	// given: correctness here is enforced by the race detector
 	const goroutines = 50
@@ -256,6 +347,7 @@ func TestToolBoxConcurrentAccess(t *testing.T) {
 		})
 		wg.Go(func() {
 			_ = box.Tools()
+			_, _ = box.Tool("stable")
 			_, _ = box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
 		})
 	}

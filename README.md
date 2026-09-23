@@ -153,6 +153,7 @@ for _, call := range reply.ToolCalls {
 Worth knowing:
 
 - `Tools` returns a name-sorted slice, so the tool section of the prompt stays byte-identical across requests — which is what prompt caching needs.
+- `Tool(name)` looks one definition up by name, returning `false` when nothing is registered under it — a cheaper check than scanning `Tools`. The value it hands back is a shallow copy, so its `Schema` map must be left alone.
 - A `ToolBox` is safe for concurrent use: tools can be added and removed while other goroutines list or execute them.
 - `SetInterceptor` installs a gate `Execute` consults after it finds the tool and before it runs the handler: return an error and the call is blocked, the handler never runs, and the error comes back wrapped. It covers every tool in the box however it was registered — by a pack, by an MCP server at runtime, or by your own `Add` — so it is the one place to ask for approval, keep an audit trail, or refuse a command outright. `SetInterceptor(nil)` clears it; unguarded is the default.
 - `ObjectBuilder` nests — pass one to `Object` or `ArrayOfObjects` to describe schemas of any depth.
