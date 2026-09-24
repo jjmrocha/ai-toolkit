@@ -1,4 +1,4 @@
-package decision
+package classify
 
 import (
 	"encoding/json"
@@ -38,7 +38,7 @@ func TestNewOpenRouter(t *testing.T) {
 	})
 }
 
-func TestOpenRouterAsk(t *testing.T) {
+func TestOpenRouterClassify(t *testing.T) {
 	t.Run("sends a POST request carrying auth, model, state and questions", func(t *testing.T) {
 		// given
 		var (
@@ -55,8 +55,8 @@ func TestOpenRouterAsk(t *testing.T) {
 			writeJSON(t, w, `{"model":"typesafe/jev-1.13-20260917","answers":{"is_urgent":{"type":"noul","noul":0.95}},"usage":{"input_tokens":296,"output_tokens":20,"cost":0.0000124}}`)
 		})
 		request := Request{
-			State:     "Help! My payouts have been failing for 3 days.",
-			Questions: map[string]Question{"is_urgent": Noul{Instructions: "Does this convey urgency?"}},
+			Input:     "Help! My payouts have been failing for 3 days.",
+			Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Does this convey urgency?"}},
 		}
 		expectedBody := map[string]any{
 			"model": "typesafe/jev-1.13",
@@ -69,7 +69,7 @@ func TestOpenRouterAsk(t *testing.T) {
 			},
 		}
 		// when
-		_, err := o.ask(t.Context(), request)
+		_, err := o.classify(t.Context(), request)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, http.MethodPost, gotMethod)
@@ -87,16 +87,16 @@ func TestOpenRouterAsk(t *testing.T) {
 			writeJSON(t, w, `{"model":"typesafe/jev-1.13-20260917","answers":{"is_urgent":{"type":"noul","noul":0.95}},"usage":{"input_tokens":296,"output_tokens":20,"cost":0.0000124}}`)
 		})
 		request := Request{
-			State:     "Help!",
-			Questions: map[string]Question{"is_urgent": Noul{Instructions: "Does this convey urgency?"}},
+			Input:     "Help!",
+			Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Does this convey urgency?"}},
 		}
 		expected := &Response{
 			Model:   "typesafe/jev-1.13-20260917",
-			Answers: map[string]Answer{"is_urgent": NoulAnswer{Value: 0.95}},
+			Answers: map[string]Answer{"is_urgent": YesNoAnswer{Value: 0.95}},
 			Stats:   Stats{InputTokens: 296},
 		}
 		// when
-		result, err := o.ask(t.Context(), request)
+		result, err := o.classify(t.Context(), request)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, expected, result)
@@ -108,9 +108,9 @@ func TestOpenRouterAsk(t *testing.T) {
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			writeJSON(t, w, `{"error":{"message":"instructions must not be empty"}}`)
 		})
-		request := Request{Questions: map[string]Question{"q": Noul{}}}
+		request := Request{Questions: map[string]Question{"q": YesNo{}}}
 		// when
-		result, err := o.ask(t.Context(), request)
+		result, err := o.classify(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		require.Error(t, err)
@@ -122,9 +122,9 @@ func TestOpenRouterAsk(t *testing.T) {
 		o := newTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(t, w, `{"error":{"message":"model is overloaded"}}`)
 		})
-		request := Request{Questions: map[string]Question{"q": Noul{Instructions: "Is it?"}}}
+		request := Request{Questions: map[string]Question{"q": YesNo{Instructions: "Is it?"}}}
 		// when
-		result, err := o.ask(t.Context(), request)
+		result, err := o.classify(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		require.Error(t, err)
@@ -136,9 +136,9 @@ func TestOpenRouterAsk(t *testing.T) {
 		o := newTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(t, w, `{"model":"typesafe/jev-1.13","answers":{},"usage":{}}`)
 		})
-		request := Request{Questions: map[string]Question{"is_urgent": Noul{Instructions: "Urgent?"}}}
+		request := Request{Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Urgent?"}}}
 		// when
-		result, err := o.ask(t.Context(), request)
+		result, err := o.classify(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrMissingAnswer)

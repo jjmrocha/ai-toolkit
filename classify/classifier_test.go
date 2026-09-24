@@ -1,4 +1,4 @@
-package decision
+package classify
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 )
 
 type fakeProvider struct {
-	askFunc          func(context.Context, Request) (*Response, error)
+	classifyFunc     func(context.Context, Request) (*Response, error)
 	currentModelFunc func() string
 }
 
-func (f fakeProvider) ask(ctx context.Context, req Request) (*Response, error) {
-	return f.askFunc(ctx, req)
+func (f fakeProvider) classify(ctx context.Context, req Request) (*Response, error) {
+	return f.classifyFunc(ctx, req)
 }
 
 func (f fakeProvider) currentModel() string {
@@ -61,7 +61,7 @@ func TestNew(t *testing.T) {
 		})
 	}
 
-	t.Run("valid openrouter config returns a configured Decision", func(t *testing.T) {
+	t.Run("valid openrouter config returns a configured Classifier", func(t *testing.T) {
 		// given
 		cfg := Config{Provider: ProviderOpenRouter, Model: "typesafe/jev-1.13", APIKey: "sk-test"}
 		// when
@@ -72,23 +72,23 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestDecisionAsk(t *testing.T) {
+func TestClassifierClassify(t *testing.T) {
 	t.Run("delegates to the provider and returns its result", func(t *testing.T) {
 		// given
 		expected := &Response{Model: "typesafe/jev-1.13-20260917"}
 		var gotRequest Request
-		d := &Decision{provider: fakeProvider{
-			askFunc: func(_ context.Context, req Request) (*Response, error) {
+		c := &Classifier{provider: fakeProvider{
+			classifyFunc: func(_ context.Context, req Request) (*Response, error) {
 				gotRequest = req
 				return expected, nil
 			},
 		}}
 		request := Request{
-			State:     "Payouts have been failing for 3 days",
-			Questions: map[string]Question{"is_urgent": Noul{Instructions: "Does this convey urgency?"}},
+			Input:     "Payouts have been failing for 3 days",
+			Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Does this convey urgency?"}},
 		}
 		// when
-		result, err := d.Ask(t.Context(), request)
+		result, err := c.Classify(t.Context(), request)
 		// then
 		require.NoError(t, err)
 		assert.Same(t, expected, result)
@@ -97,15 +97,15 @@ func TestDecisionAsk(t *testing.T) {
 
 	t.Run("times the provider call", func(t *testing.T) {
 		// given
-		d := &Decision{provider: fakeProvider{
-			askFunc: func(context.Context, Request) (*Response, error) {
+		c := &Classifier{provider: fakeProvider{
+			classifyFunc: func(context.Context, Request) (*Response, error) {
 				time.Sleep(time.Millisecond)
 				return &Response{Stats: Stats{InputTokens: 296}}, nil
 			},
 		}}
-		request := Request{Questions: map[string]Question{"q": Noul{Instructions: "Is it?"}}}
+		request := Request{Questions: map[string]Question{"q": YesNo{Instructions: "Is it?"}}}
 		// when
-		result, err := d.Ask(t.Context(), request)
+		result, err := c.Classify(t.Context(), request)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, 296, result.Stats.InputTokens)
@@ -114,13 +114,13 @@ func TestDecisionAsk(t *testing.T) {
 
 	t.Run("rejects a request without questions", func(t *testing.T) {
 		// given
-		d := &Decision{provider: fakeProvider{
-			askFunc: func(context.Context, Request) (*Response, error) {
+		c := &Classifier{provider: fakeProvider{
+			classifyFunc: func(context.Context, Request) (*Response, error) {
 				return nil, errors.New("provider must not be called")
 			},
 		}}
 		// when
-		result, err := d.Ask(t.Context(), Request{State: "anything"})
+		result, err := c.Classify(t.Context(), Request{Input: "anything"})
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrNoQuestions)
@@ -129,28 +129,28 @@ func TestDecisionAsk(t *testing.T) {
 	t.Run("propagates the provider error", func(t *testing.T) {
 		// given
 		expectedErr := errors.New("boom")
-		d := &Decision{provider: fakeProvider{
-			askFunc: func(context.Context, Request) (*Response, error) {
+		c := &Classifier{provider: fakeProvider{
+			classifyFunc: func(context.Context, Request) (*Response, error) {
 				return nil, expectedErr
 			},
 		}}
-		request := Request{Questions: map[string]Question{"q": Noul{Instructions: "Is it?"}}}
+		request := Request{Questions: map[string]Question{"q": YesNo{Instructions: "Is it?"}}}
 		// when
-		result, err := d.Ask(t.Context(), request)
+		result, err := c.Classify(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, expectedErr)
 	})
 }
 
-func TestDecisionCurrentModel(t *testing.T) {
+func TestClassifierCurrentModel(t *testing.T) {
 	t.Run("delegates to the provider", func(t *testing.T) {
 		// given
-		d := &Decision{provider: fakeProvider{
+		c := &Classifier{provider: fakeProvider{
 			currentModelFunc: func() string { return "typesafe/jev-1.13" },
 		}}
 		// when
-		result := d.CurrentModel()
+		result := c.CurrentModel()
 		// then
 		assert.Equal(t, "typesafe/jev-1.13", result)
 	})

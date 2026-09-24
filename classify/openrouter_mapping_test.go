@@ -1,4 +1,4 @@
-package decision
+package classify
 
 import (
 	"testing"
@@ -8,10 +8,10 @@ import (
 )
 
 func TestToORQuestions(t *testing.T) {
-	t.Run("maps a noul with both criteria", func(t *testing.T) {
+	t.Run("maps a yes/no question with both criteria", func(t *testing.T) {
 		// given
 		questions := map[string]Question{
-			"is_urgent": Noul{
+			"is_urgent": YesNo{
 				Instructions: "Does this convey urgency?",
 				True:         "Explicitly time-sensitive",
 				False:        "No urgency expressed",
@@ -30,18 +30,18 @@ func TestToORQuestions(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("omits the criteria of a noul that describes neither answer", func(t *testing.T) {
+	t.Run("omits the criteria of a yes/no question that describes neither answer", func(t *testing.T) {
 		// given
-		questions := map[string]Question{"is_urgent": Noul{Instructions: "Does this convey urgency?"}}
+		questions := map[string]Question{"is_urgent": YesNo{Instructions: "Does this convey urgency?"}}
 		// when
 		result := toORQuestions(questions)
 		// then
 		assert.Nil(t, result["is_urgent"].Criteria)
 	})
 
-	t.Run("keeps the described side of a half-described noul", func(t *testing.T) {
+	t.Run("keeps the described side of a half-described yes/no question", func(t *testing.T) {
 		// given
-		questions := map[string]Question{"is_urgent": Noul{Instructions: "Urgent?", True: "Time-sensitive"}}
+		questions := map[string]Question{"is_urgent": YesNo{Instructions: "Urgent?", True: "Time-sensitive"}}
 		expected := map[string]string{"true": "Time-sensitive"}
 		// when
 		result := toORQuestions(questions)
@@ -94,7 +94,7 @@ func TestToORQuestions(t *testing.T) {
 
 	t.Run("accepts questions passed as pointers", func(t *testing.T) {
 		// given
-		questions := map[string]Question{"is_urgent": &Noul{Instructions: "Urgent?"}}
+		questions := map[string]Question{"is_urgent": &YesNo{Instructions: "Urgent?"}}
 		// when
 		result := toORQuestions(questions)
 		// then
@@ -104,7 +104,7 @@ func TestToORQuestions(t *testing.T) {
 
 func TestFromORToResponse(t *testing.T) {
 	questions := map[string]Question{
-		"is_bug":  Noul{Instructions: "Is this a defect?"},
+		"is_bug":  YesNo{Instructions: "Is this a defect?"},
 		"team":    Choice{Instructions: "Which team?", Options: map[string]string{"payments": "", "frontend": ""}},
 		"urgency": Score{Instructions: "How urgent?", Levels: []string{"Later", "This week", "Now"}},
 	}
@@ -134,9 +134,9 @@ func TestFromORToResponse(t *testing.T) {
 		expected := &Response{
 			Model: "typesafe/jev-1.13-20260917",
 			Answers: map[string]Answer{
-				"is_bug": NoulAnswer{Value: 0.96},
+				"is_bug": YesNoAnswer{Value: 0.96},
 				"team": ChoiceAnswer{
-					Choice:        "payments",
+					Selected:      "payments",
 					Probabilities: map[string]float64{"payments": 0.78, "frontend": 0.22},
 					Confidence:    0.67,
 				},

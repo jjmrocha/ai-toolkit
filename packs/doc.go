@@ -14,7 +14,7 @@
 // the host's zone. The program serves all three itself, so their ToolPack has
 // no server to stop and only unregisters.
 //
-// [DecisionTools] hands one judgement call at a time to a decision model the
-// caller supplies, and returns calibrated probabilities instead of prose. Its
-// ToolPack only unregisters too: the client stays the caller's.
+// [ClassifyTools] hands one judgement call at a time to a classification model
+// the caller supplies, and returns calibrated probabilities instead of prose.
+// Its ToolPack only unregisters too: the client stays the caller's.
 package packs

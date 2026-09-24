@@ -1,12 +1,12 @@
-package decision
+package classify
 
 // QuestionType identifies the kind of a [Question] and of the [Answer] it
 // produces.
 type QuestionType string
 
 const (
-	// NoulType marks a [Noul] question and a [NoulAnswer].
-	NoulType QuestionType = "noul"
+	// YesNoType marks a [YesNo] question and a [YesNoAnswer].
+	YesNoType QuestionType = "yes_no"
 	// ChoiceType marks a [Choice] question and a [ChoiceAnswer].
 	ChoiceType QuestionType = "choice"
 	// ScoreType marks a [Score] question and a [ScoreAnswer].
@@ -21,9 +21,9 @@ type Question interface {
 	isQuestion()
 }
 
-// Noul is a yes/no question. Its [NoulAnswer] reports the probability that the
-// answer is yes.
-type Noul struct {
+// YesNo is a yes/no question. Its [YesNoAnswer] reports the probability that
+// the answer is yes.
+type YesNo struct {
 	// Instructions is the yes/no question to evaluate.
 	Instructions string
 	// True describes what a yes means. Optional.
@@ -32,12 +32,12 @@ type Noul struct {
 	False string
 }
 
-// Type returns [NoulType].
-func (Noul) Type() QuestionType {
-	return NoulType
+// Type returns [YesNoType].
+func (YesNo) Type() QuestionType {
+	return YesNoType
 }
 
-func (Noul) isQuestion() {}
+func (YesNo) isQuestion() {}
 
 // Choice asks the model to select one of a set of options. Its [ChoiceAnswer]
 // reports the selected option and a probability for each one.
@@ -56,7 +56,7 @@ func (Choice) Type() QuestionType {
 
 func (Choice) isQuestion() {}
 
-// Score asks the model to rate the state against ordered levels. Its
+// Score asks the model to rate the input against ordered levels. Its
 // [ScoreAnswer] reports a probability-weighted position across them.
 type Score struct {
 	// Instructions is what the model should rate.
@@ -72,12 +72,12 @@ func (Score) Type() QuestionType {
 
 func (Score) isQuestion() {}
 
-// Request is a state to evaluate and the questions to ask about it. The
+// Request is an input to evaluate and the questions to ask about it. The
 // questions are evaluated in parallel and in isolation: none of them sees
 // another's answer.
 type Request struct {
-	// State is the content to evaluate.
-	State string
+	// Input is the content to evaluate.
+	Input string
 	// Questions maps an identifier the caller chooses to the question to ask.
 	// The identifiers key [Response.Answers]; they are not sent to the model.
 	Questions map[string]Question

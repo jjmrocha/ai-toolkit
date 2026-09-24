@@ -1,4 +1,4 @@
-package decision
+package classify
 
 import (
 	"fmt"
@@ -42,6 +42,12 @@ type orDecisionError struct {
 	Message string `json:"message"`
 }
 
+var orQuestionTypes = map[QuestionType]string{
+	YesNoType:  "noul",
+	ChoiceType: "choice",
+	ScoreType:  "score",
+}
+
 func questionValue[T Question](q Question) T {
 	if v, ok := q.(T); ok {
 		return v
@@ -55,24 +61,24 @@ func toORQuestions(questions map[string]Question) map[string]orQuestion {
 
 	for id, q := range questions {
 		switch q.Type() {
-		case NoulType:
-			question := questionValue[Noul](q)
+		case YesNoType:
+			question := questionValue[YesNo](q)
 			converted[id] = orQuestion{
-				Type:         string(NoulType),
+				Type:         orQuestionTypes[YesNoType],
 				Instructions: question.Instructions,
-				Criteria:     toORNoulCriteria(question),
+				Criteria:     toORYesNoCriteria(question),
 			}
 		case ChoiceType:
 			question := questionValue[Choice](q)
 			converted[id] = orQuestion{
-				Type:         string(ChoiceType),
+				Type:         orQuestionTypes[ChoiceType],
 				Instructions: question.Instructions,
 				Criteria:     toORChoiceCriteria(question),
 			}
 		case ScoreType:
 			question := questionValue[Score](q)
 			converted[id] = orQuestion{
-				Type:         string(ScoreType),
+				Type:         orQuestionTypes[ScoreType],
 				Instructions: question.Instructions,
 				Criteria:     question.Levels,
 			}
@@ -82,7 +88,7 @@ func toORQuestions(questions map[string]Question) map[string]orQuestion {
 	return converted
 }
 
-func toORNoulCriteria(question Noul) any {
+func toORYesNoCriteria(question YesNo) any {
 	criteria := make(map[string]string, 2)
 
 	if question.True != "" {
@@ -124,16 +130,16 @@ func fromORToResponse(resp orDecisionResponse, questions map[string]Question) (*
 			return nil, fmt.Errorf("openrouter: %w for question %q", ErrMissingAnswer, id)
 		}
 
-		if apiAnswer.Type != string(q.Type()) {
+		if apiAnswer.Type != orQuestionTypes[q.Type()] {
 			return nil, fmt.Errorf("openrouter: question %q of type %q answered with type %q", id, q.Type(), apiAnswer.Type)
 		}
 
 		switch q.Type() {
-		case NoulType:
-			answers[id] = NoulAnswer{Value: apiAnswer.Noul}
+		case YesNoType:
+			answers[id] = YesNoAnswer{Value: apiAnswer.Noul}
 		case ChoiceType:
 			answers[id] = ChoiceAnswer{
-				Choice:        apiAnswer.Choice,
+				Selected:      apiAnswer.Choice,
 				Probabilities: apiAnswer.Probabilities,
 				Confidence:    apiAnswer.Confidence,
 			}

@@ -1,4 +1,4 @@
-package decision
+package classify
 
 import "time"
 
@@ -10,23 +10,23 @@ type Answer interface {
 	isAnswer()
 }
 
-// NoulAnswer is the answer to a [Noul] question.
-type NoulAnswer struct {
+// YesNoAnswer is the answer to a [YesNo] question.
+type YesNoAnswer struct {
 	// Value is the probability that the answer is yes, from 0 (no) to 1 (yes).
 	Value float64
 }
 
-// Type returns [NoulType].
-func (NoulAnswer) Type() QuestionType {
-	return NoulType
+// Type returns [YesNoType].
+func (YesNoAnswer) Type() QuestionType {
+	return YesNoType
 }
 
-func (NoulAnswer) isAnswer() {}
+func (YesNoAnswer) isAnswer() {}
 
 // ChoiceAnswer is the answer to a [Choice] question.
 type ChoiceAnswer struct {
-	// Choice is the option with the highest probability.
-	Choice string
+	// Selected is the option with the highest probability.
+	Selected string
 	// Probabilities maps each option offered to its probability. The values sum
 	// to 1.
 	Probabilities map[string]float64
@@ -80,7 +80,7 @@ type Stats struct {
 	// InputTokens is the number of tokens in the request. Providers bill these
 	// and leave the answers free.
 	InputTokens int
-	// Duration is how long the request took, measured by [Decision.Ask] around
+	// Duration is how long the request took, measured by [Classifier.Classify] around
 	// the call to the provider.
 	Duration time.Duration
 }

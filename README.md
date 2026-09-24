@@ -18,12 +18,12 @@ go get github.com/jjmrocha/ai-toolkit
 | Package | What it does | Builds on |
 | --- | --- | --- |
 | [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | — |
-| [`decision`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/decision) | Typed questions answered with probabilities, not text | — |
+| [`classify`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/classify) | Typed questions answered with probabilities, not text | — |
 | [`tools`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools) | Registers tools and dispatches the model's calls | `llm` |
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
 | [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
-| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles, registered in one call | `decision`, `mcp`, `tools` |
+| [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles, registered in one call | `classify`, `mcp`, `tools` |
 
 The sections below are a tour. The full API reference lives on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
@@ -63,15 +63,15 @@ Worth knowing:
 - `Config.Models` lists what `ChangeModel` may switch to mid-conversation; the active model is always included.
 - `ChangeModel` and `ChangeEffort` both validate before they mutate and return an error otherwise, so a rejected switch leaves the client on its current settings.
 
-## `decision`
+## `classify`
 
-Asks a decision model typed questions about a state and gets typed answers back.
+Asks a classification model typed questions about an input and gets typed answers back.
 No prose to parse: each answer carries the probabilities behind it. The provider
 is OpenRouter, which serves TypeSafe's Jev models.
 
 ```go
-client, err := decision.New(decision.Config{
-	Provider: decision.ProviderOpenRouter,
+client, err := classify.New(classify.Config{
+	Provider: classify.ProviderOpenRouter,
 	APIKey:   os.Getenv("OPENROUTER_API_KEY"),
 	Model:    "typesafe/jev-1.13",
 })
@@ -79,18 +79,18 @@ if err != nil {
 	log.Fatal(err)
 }
 
-answers, err := client.Ask(context.Background(), decision.Request{
-	State: "My checkout page shows a blank screen after I click Pay.",
-	Questions: map[string]decision.Question{
-		"is_bug": decision.Noul{Instructions: "Is the customer reporting a defect?"},
-		"team": decision.Choice{
+answers, err := client.Classify(context.Background(), classify.Request{
+	Input: "My checkout page shows a blank screen after I click Pay.",
+	Questions: map[string]classify.Question{
+		"is_bug": classify.YesNo{Instructions: "Is the customer reporting a defect?"},
+		"team": classify.Choice{
 			Instructions: "Which team should own this ticket?",
 			Options: map[string]string{
 				"payments": "Checkout, billing, or payment processing",
 				"frontend": "Rendering, layout, or browser compatibility",
 			},
 		},
-		"urgency": decision.Score{
+		"urgency": classify.Score{
 			Instructions: "How urgent is this ticket?",
 			Levels:       []string{"Next release", "This week", "Blocking revenue"},
 		},
@@ -100,16 +100,16 @@ if err != nil {
 	log.Fatal(err)
 }
 
-team := answers.Answers["team"].(decision.ChoiceAnswer)
-fmt.Println(team.Choice, team.Confidence)
+team := answers.Answers["team"].(classify.ChoiceAnswer)
+fmt.Println(team.Selected, team.Confidence)
 ```
 
 Worth knowing:
 
 - `Request.Questions` and `Response.Answers` share the identifiers you choose. They are never sent to the model.
 - Every question in a request is answered in parallel and in isolation: none of them sees another's answer.
-- `Answer` is a sealed interface — `NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer` — so switch on `Type()` before reading an answer's fields.
-- `NoulAnswer.Value` is the probability of yes, not a severity: `0.5` means undecided, not "medium".
+- `Answer` is a sealed interface — `YesNoAnswer`, `ChoiceAnswer`, `ScoreAnswer` — so switch on `Type()` before reading an answer's fields.
+- `YesNoAnswer.Value` is the probability of yes, not a severity: `0.5` means undecided, not "medium".
 - `ScoreAnswer.Score` is a probability-weighted position across your levels, so it lands between them.
 - `Confidence` describes how concentrated the probabilities are. What to do below a threshold is yours to decide; the package never decides for you.
 - `Stats` reports the input tokens — the only ones providers bill — and how long the call took.
@@ -435,15 +435,15 @@ Worth knowing:
 - `ToolPack.Close` removes the three tools. Nothing is launched to serve them, so a dropped `ToolPack` costs nothing beyond the tools staying registered.
 - The three tools carry roughly 700 bytes of descriptions and schemas, which every request pays for while they are registered.
 
-### `DecisionTools`
+### `ClassifyTools`
 
-`DecisionTools` lets the model hand a judgement call to a `decision` model
+`ClassifyTools` lets the model hand a judgement call to a `classify` model
 instead of making it itself, and get calibrated probabilities back. You build
 the client; the pack only registers the tools:
 
 ```go
-client, err := decision.New(decision.Config{
-	Provider: decision.ProviderOpenRouter,
+client, err := classify.New(classify.Config{
+	Provider: classify.ProviderOpenRouter,
 	APIKey:   os.Getenv("OPENROUTER_API_KEY"),
 	Model:    "typesafe/jev-1.13",
 })
@@ -451,7 +451,7 @@ if err != nil {
 	log.Fatal(err)
 }
 
-pack, err := packs.DecisionTools(toolBox, client)
+pack, err := packs.ClassifyTools(toolBox, client)
 if err != nil {
 	log.Fatal(err)
 }
@@ -461,18 +461,18 @@ defer pack.Close()
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `decision_yes_no` | `state`, `instructions`; optionally `true` and `false`, what each answer means | `{"yes_probability": 0.87}` |
-| `decision_choice` | `state`, `instructions`, `options` — each a `name` and an optional `description` | `{"choice": "payments", "probabilities": {"payments": 0.81, "frontend": 0.19}, "confidence": 0.62}` |
-| `decision_score` | `state`, `instructions`, `levels`, lowest to highest | `{"score": 1.4, "probabilities": [{"level": "Next release", "probability": 0.1}, …], "confidence": 0.3}` |
+| `classify_yes_no` | `input`, `instructions`; optionally `true` and `false`, what each answer means | `{"yes_probability": 0.87}` |
+| `classify_choice` | `input`, `instructions`, `options` — each a `name` and an optional `description` | `{"selected": "payments", "probabilities": {"payments": 0.81, "frontend": 0.19}, "confidence": 0.62}` |
+| `classify_score` | `input`, `instructions`, `levels`, lowest to highest | `{"score": 1.4, "probabilities": [{"level": "Next release", "probability": 0.1}, …], "confidence": 0.3}` |
 
 Worth knowing:
 
-- One question per call. Several questions about the same state are several calls, each billed on its input tokens — the whole `state` included.
-- Everything the model puts in `state` is sent to OpenRouter. Register the pack only where that is acceptable.
-- The decision model sees the `state` and the question, nothing of the conversation, so the tool descriptions tell the model to make the state self-contained.
+- One question per call. Several questions about the same input are several calls, each billed on its input tokens — the whole `input` included.
+- Everything the model puts in `input` is sent to OpenRouter. Register the pack only where that is acceptable.
+- The classification model sees the `input` and the question, nothing of the conversation, so the tool descriptions tell the model to make the input self-contained.
 - `yes_probability` is the probability of yes, so `0.5` means undecided. `score` is a probability-weighted position from `0` to the last level's index and can fall between levels. `confidence` is how concentrated the probabilities are, not how likely the answer is to be right.
-- A `decision_choice` with fewer than two options or the same option twice, and a `decision_score` with fewer than two levels, fail with `ErrInvalidQuestion` before anything is sent. The provider's own limits — at most 10 levels, 255 options — are left to it, and its error reaches the model like any other tool error.
-- There is no timeout or retry in the pack: the call runs under the caller's context, and the `decision` client already retries 429 and 5xx responses.
+- A `classify_choice` with fewer than two options or the same option twice, and a `classify_score` with fewer than two levels, fail with `ErrInvalidQuestion` before anything is sent. The provider's own limits — at most 10 levels, 255 options — are left to it, and its error reaches the model like any other tool error.
+- There is no timeout or retry in the pack: the call runs under the caller's context, and the `classify` client already retries 429 and 5xx responses.
 - The caller owns the client. `ToolPack.Close` removes the three tools and nothing else.
 - The three tools carry roughly 2.4 KB of descriptions and schemas, which every request pays for while they are registered.
 
