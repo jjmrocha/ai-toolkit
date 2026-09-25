@@ -25,6 +25,11 @@ type Feedback interface {
 	// err is non-nil; err is the failure the call produced, nil on success; and
 	// elapsed is how long the call took.
 	ToolReturned(toolName string, result string, err error, elapsed time.Duration)
+	// InterimTextReceived fires when a model response that carries tool calls
+	// also carries text, before [Feedback.TokensUsed] for that response. It
+	// never fires for empty text, nor for the final answer, whose text is in
+	// [Response.Content].
+	InterimTextReceived(content string)
 	// ContextCompacted fires when the conversation context is compacted to fit
 	// the model's window (see Config.CompactionThresholdPercent).
 	ContextCompacted()
@@ -88,6 +93,10 @@ func (s *writerFeedback) ToolReturned(toolName string, result string, err error,
 	_, _ = fmt.Fprintln(s.stdout, "Tool returned:", toolName, result, elapsed)
 }
 
+func (s *writerFeedback) InterimTextReceived(content string) {
+	_, _ = fmt.Fprintln(s.stdout, "Interim text received:", content)
+}
+
 func (s *writerFeedback) ContextCompacted() {
 	_, _ = fmt.Fprintln(s.stdout, "Context was compacted")
 }
@@ -122,6 +131,9 @@ func (nullFeedback) ToolCalled(_ string, _ map[string]any) {
 }
 
 func (nullFeedback) ToolReturned(_ string, _ string, _ error, _ time.Duration) {
+}
+
+func (nullFeedback) InterimTextReceived(_ string) {
 }
 
 func (nullFeedback) ContextCompacted() {

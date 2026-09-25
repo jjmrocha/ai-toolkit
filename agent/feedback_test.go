@@ -12,6 +12,7 @@ import (
 func exerciseAllEvents(fb Feedback) {
 	fb.SessionStarted()
 	fb.ToolCalled("echo", nil)
+	fb.InterimTextReceived("checking")
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
 	fb.ModelInfoUnavailable()
@@ -40,6 +41,11 @@ func TestNewWriterFeedback(t *testing.T) {
 			name:     "tool called without arguments",
 			fire:     func(fb Feedback) { fb.ToolCalled("echo", nil) },
 			expected: "Tool called: echo\n",
+		},
+		{
+			name:     "interim text received",
+			fire:     func(fb Feedback) { fb.InterimTextReceived("Let me check the config") },
+			expected: "Interim text received: Let me check the config\n",
 		},
 		{
 			name:     "context compacted",
@@ -98,6 +104,7 @@ func TestNewWriterFeedback(t *testing.T) {
 		result := out.String()
 		expected := "New session started\n" +
 			"Tool called: echo\n" +
+			"Interim text received: checking\n" +
 			"Context was compacted\n" +
 			"Context compaction failed\n" +
 			"Model info unavailable; automatic context compaction is disabled\n" +

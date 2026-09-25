@@ -118,6 +118,7 @@ type recordingFeedback struct {
 	toolArgs []map[string]any
 	returns  []toolReturn
 	stats    []int
+	interim  []string
 }
 
 func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
@@ -129,6 +130,10 @@ func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
 func (f *recordingFeedback) ToolReturned(toolName string, result string, err error, elapsed time.Duration) {
 	f.returns = append(f.returns, toolReturn{tool: toolName, result: result, err: err, elapsed: elapsed})
 	f.events = append(f.events, "ToolReturned")
+}
+func (f *recordingFeedback) InterimTextReceived(content string) {
+	f.interim = append(f.interim, content)
+	f.events = append(f.events, "InterimTextReceived")
 }
 func (f *recordingFeedback) TokensUsed(totalTokens int) {
 	f.stats = append(f.stats, totalTokens)
@@ -533,6 +538,66 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []int{15, 30}, fb.stats)
 		assert.Equal(t, []string{"SessionStarted", "TokensUsed", "ToolCalled", "ToolReturned", "TokensUsed", "ToolCalled", "ToolReturned"}, fb.events)
+	})
+
+	t.Run("fires InterimTextReceived before TokensUsed for text sent with tool calls", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "Let me check", ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}},
+				{Content: "done"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Let me check"}, fb.interim)
+		assert.Equal(t, []string{"SessionStarted", "InterimTextReceived", "TokensUsed", "ToolCalled", "ToolReturned"}, fb.events)
+	})
+
+	t.Run("does not fire InterimTextReceived when tool calls come without text", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}},
+				{Content: "done"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, fb.interim)
+	})
+
+	t.Run("does not fire InterimTextReceived for the final answer", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "done"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		result, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "done", result.Content)
+		assert.Empty(t, fb.interim)
 	})
 
 	t.Run("fires ToolReturned with the tool's result after the call", func(t *testing.T) {
