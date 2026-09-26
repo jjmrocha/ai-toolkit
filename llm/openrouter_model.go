@@ -6,6 +6,7 @@ type orChatRequest struct {
 	Tools     []orTool     `json:"tools,omitempty"`
 	MaxTokens int          `json:"max_tokens,omitempty"`
 	Reasoning *orReasoning `json:"reasoning,omitempty"`
+	Stream    bool         `json:"stream"`
 }
 
 type orReasoning struct {
@@ -45,7 +46,6 @@ type orToolFunction struct {
 type orChatResponse struct {
 	Choices []orChoice `json:"choices"`
 	Usage   orUsage    `json:"usage"`
-	Error   *orError   `json:"error,omitempty"`
 }
 
 type orChoice struct {
@@ -64,9 +64,31 @@ type orUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
+type orStreamChunk struct {
+	Choices []orStreamChoice `json:"choices"`
+	Usage   *orUsage         `json:"usage"`
+	Error   *orError         `json:"error"`
+}
+
+type orStreamChoice struct {
+	Delta        orStreamDelta `json:"delta"`
+	FinishReason string        `json:"finish_reason"`
+}
+
+type orStreamDelta struct {
+	Content   string             `json:"content"`
+	ToolCalls []orStreamToolCall `json:"tool_calls"`
+}
+
+type orStreamToolCall struct {
+	Index    int                `json:"index"`
+	ID       string             `json:"id"`
+	Type     string             `json:"type"`
+	Function orToolCallFunction `json:"function"`
+}
+
 type orError struct {
 	Message string `json:"message"`
-	Code    int    `json:"code"`
 }
 
 type orModelsResponse struct {

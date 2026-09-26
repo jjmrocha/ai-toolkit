@@ -7,7 +7,10 @@ import (
 	"github.com/jjmrocha/go-algo/fn"
 )
 
-const typeText = "text"
+const (
+	typeText    = "text"
+	typeToolUse = "tool_use"
+)
 
 func toAnthropicSystem(messages []Message) string {
 	var parts []string
@@ -74,7 +77,7 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 				}
 
 				block := anthropicContentBlock{
-					Type:  "tool_use",
+					Type:  typeToolUse,
 					ID:    call.ID,
 					Name:  call.Name,
 					Input: input,
@@ -150,7 +153,7 @@ func fromAnthropicToAssistantMessage(resp anthropicChatResponse) *AssistantMessa
 		switch block.Type {
 		case typeText:
 			result.Content += block.Text
-		case "tool_use":
+		case typeToolUse:
 			toolCall := ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,

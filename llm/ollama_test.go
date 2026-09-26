@@ -31,7 +31,7 @@ func TestNewOllama(t *testing.T) {
 }
 
 func TestOllamaChat(t *testing.T) {
-	t.Run("posts to /api/chat with stream disabled and no auth by default", func(t *testing.T) {
+	t.Run("posts to /api/chat with stream enabled and no auth by default", func(t *testing.T) {
 		// given
 		var (
 			gotMethod string
@@ -55,7 +55,7 @@ func TestOllamaChat(t *testing.T) {
 		var sent ollamaChatRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
 		assert.Equal(t, "llama3.2", sent.Model)
-		assert.False(t, sent.Stream)
+		assert.True(t, sent.Stream)
 		assert.Len(t, sent.Messages, 1)
 	})
 
@@ -127,6 +127,83 @@ func TestOllamaChat(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Hello there", result.Content)
 		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
+	})
+
+	t.Run("joins streamed content and takes stats from the final chunk", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"Hello"},"done":false}
+{"message":{"role":"assistant","content":" there"},"done":false}
+{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":10,"eval_count":5}
+`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "Hello there", result.Content)
+		assert.Equal(t, "stop", result.StopReason)
+		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
+	})
+
+	t.Run("collects tool calls from every chunk", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Tokyo"}}}]},"done":false}
+{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_time","arguments":{"zone":"JST"}}}]},"done":false}
+{"message":{"role":"assistant","content":""},"done":true}
+`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "weather?"}}, nil)
+		// then
+		require.NoError(t, err)
+		expected := []ToolCall{
+			{Name: "get_weather", Arguments: map[string]any{"city": "Tokyo"}},
+			{Name: "get_time", Arguments: map[string]any{"zone": "JST"}},
+		}
+		assert.Equal(t, expected, result.ToolCalls)
+	})
+
+	t.Run("returns an error when a chunk mid-stream carries an error field", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"Hel"},"done":false}
+{"error":"model runner has unexpectedly stopped"}
+`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "model runner has unexpectedly stopped")
+	})
+
+	t.Run("returns an error when the stream ends before done", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"Hel"},"done":false}
+`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "stream ended before done")
+	})
+
+	t.Run("returns an error when a chunk is not valid JSON", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"Hel"},"done":false}
+not json
+`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "ollama: reading stream")
 	})
 
 	t.Run("parses tool calls with object arguments", func(t *testing.T) {

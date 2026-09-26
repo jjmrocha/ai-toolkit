@@ -9,18 +9,26 @@ import (
 )
 
 const (
-	defaultTimeout   = 60 * time.Second
+	headerTimeout    = 5 * time.Minute
 	retryCount       = 5
 	retryWaitTime    = 100 * time.Millisecond
 	retryMaxWaitTime = 30 * time.Second
 )
 
-// NewClient returns a client bound to baseURL, with a 60 second timeout and a
-// retry policy that backs off on 429 and 5xx responses, honoring Retry-After.
+// NewClient returns a client bound to baseURL, with a retry policy that backs
+// off on 429 and 5xx responses, honoring Retry-After.
+//
+// A request fails when its response headers take longer than 5 minutes to
+// arrive. Reading the body has no deadline of its own: a caller streaming the
+// body bounds it with [WithIdleTimeout], and any caller can bound the whole
+// request through its context.
 func NewClient(baseURL string) *resty.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = headerTimeout
+
 	return resty.New().
 		SetBaseURL(baseURL).
-		SetTimeout(defaultTimeout).
+		SetTransport(transport).
 		SetLogger(silentLogger{}).
 		SetDisableWarn(true).
 		SetRetryCount(retryCount).

@@ -53,7 +53,7 @@ func TestOpenRouterChat(t *testing.T) {
 			gotPath = r.URL.Path
 			gotAuth = r.Header.Get("Authorization")
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
 		})
 		messages := []Message{SystemMessage{Content: "Be brief"}, UserMessage{Content: "Hi"}}
 		tools := []Tool{{Name: "get_weather", Description: "Get the weather", Schema: map[string]any{"type": "object"}}}
@@ -68,6 +68,7 @@ func TestOpenRouterChat(t *testing.T) {
 		var sent orChatRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
 		assert.Equal(t, "openai/gpt-4o", sent.Model)
+		assert.True(t, sent.Stream)
 		assert.Len(t, sent.Messages, 2)
 		assert.Equal(t, "system", sent.Messages[0].Role)
 		require.Len(t, sent.Tools, 1)
@@ -79,7 +80,7 @@ func TestOpenRouterChat(t *testing.T) {
 		var gotBody []byte
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
 		})
 		// when
 		_, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -93,7 +94,7 @@ func TestOpenRouterChat(t *testing.T) {
 		var gotBody []byte
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
 		}))
 		t.Cleanup(server.Close)
 		o, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o", BaseURL: server.URL, MaxTokens: 256})
@@ -112,7 +113,7 @@ func TestOpenRouterChat(t *testing.T) {
 		var gotBody []byte
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
 		})
 		// when
 		_, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -126,7 +127,7 @@ func TestOpenRouterChat(t *testing.T) {
 		var gotBody []byte
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
 		}))
 		t.Cleanup(server.Close)
 		o, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o", BaseURL: server.URL, Effort: EffortMax})
@@ -142,13 +143,15 @@ func TestOpenRouterChat(t *testing.T) {
 		assert.Equal(t, "high", sent.Reasoning.Effort)
 	})
 
-	t.Run("returns the assistant content and usage stats", func(t *testing.T) {
+	t.Run("joins streamed content and takes usage and finish reason from the stream", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{
-				"choices":[{"message":{"content":"Hello there"}}],
-				"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}
-			}`)
+			writeSSE(t, w,
+				`{"choices":[{"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]}`,
+				`{"choices":[{"delta":{"content":" there"},"finish_reason":"stop"}]}`,
+				`{"choices":[{"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`,
+				`[DONE]`,
+			)
 		})
 		// when
 		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -156,27 +159,62 @@ func TestOpenRouterChat(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "Hello there", result.Content)
+		assert.Equal(t, "stop", result.StopReason)
 		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
 		assert.Empty(t, result.ToolCalls)
 	})
 
-	t.Run("parses tool calls from the response", func(t *testing.T) {
+	t.Run("assembles tool calls from fragments by index", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{
-				"choices":[{"message":{"content":"","tool_calls":[
-					{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Lisbon\"}"}}
-				]}}],
-				"usage":{}
-			}`)
+			writeSSE(t, w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":"}}]}}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"get_time","arguments":"{}"}}]}}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"Lisbon\"}"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+				`[DONE]`,
+			)
 		})
 		// when
 		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "weather?"}}, nil)
 		// then
 		require.NoError(t, err)
-		require.Len(t, result.ToolCalls, 1)
-		expected := ToolCall{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"city": "Lisbon"}}
-		assert.Equal(t, expected, result.ToolCalls[0])
+		expected := []ToolCall{
+			{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"city": "Lisbon"}},
+			{ID: "call_2", Name: "get_time", Arguments: map[string]any{}},
+		}
+		assert.Equal(t, expected, result.ToolCalls)
+		assert.Equal(t, "tool_calls", result.StopReason)
+	})
+
+	t.Run("returns an error when a tool call index skips ahead", func(t *testing.T) {
+		// given
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":3,"id":"call_1","function":{"name":"get_weather","arguments":"{}"}}]}}]}`,
+				`[DONE]`,
+			)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "weather?"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "tool call index")
+	})
+
+	t.Run("ignores keep-alive comments", func(t *testing.T) {
+		// given
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, ": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\n")
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "ok", result.Content)
 	})
 
 	t.Run("returns an error on a non-2xx status", func(t *testing.T) {
@@ -200,7 +238,7 @@ func TestOpenRouterChat(t *testing.T) {
 				w.WriteHeader(http.StatusTooManyRequests)
 				return
 			}
-			writeJSON(t, w, `{"choices":[{"message":{"content":"ok"}}],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
 		})
 		// when
 		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -211,34 +249,49 @@ func TestOpenRouterChat(t *testing.T) {
 		assert.Equal(t, int32(2), calls.Load())
 	})
 
-	t.Run("returns an error when a 2xx response carries an error body", func(t *testing.T) {
+	t.Run("returns an error when a chunk mid-stream carries an error", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{"error":{"message":"content filtered"}}`)
+			writeSSE(t, w,
+				`{"choices":[{"delta":{"content":"Hel"}}]}`,
+				`{"error":{"code":"server_error","message":"Provider disconnected"},"choices":[{"delta":{"content":""},"finish_reason":"error"}]}`,
+			)
 		})
 		// when
 		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
 		// then
 		assert.Nil(t, result)
-		assert.ErrorContains(t, err, "content filtered")
+		assert.ErrorContains(t, err, "Provider disconnected")
 	})
 
-	t.Run("returns an error when the response body is malformed", func(t *testing.T) {
+	t.Run("returns an error when a chunk is not valid JSON", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{"choices":`)
+			writeSSE(t, w, `{"choices":`, `[DONE]`)
 		})
 		// when
 		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
 		// then
 		assert.Nil(t, result)
-		assert.Error(t, err)
+		assert.ErrorContains(t, err, "openrouter: reading stream")
+	})
+
+	t.Run("returns an error when the stream ends before done", func(t *testing.T) {
+		// given
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"Hel"}}]}`)
+		})
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "stream ended before done")
 	})
 
 	t.Run("returns an error when the response contains no choices", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{"choices":[],"usage":{}}`)
+			writeSSE(t, w, `{"choices":[],"usage":{}}`, `[DONE]`)
 		})
 		// when
 		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -341,5 +394,15 @@ func writeJSON(t testing.TB, w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := io.WriteString(w, body); err != nil {
 		t.Fatalf("writing response body: %v", err)
+	}
+}
+
+func writeSSE(t testing.TB, w http.ResponseWriter, events ...string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "text/event-stream")
+	for _, event := range events {
+		if _, err := io.WriteString(w, "data: "+event+"\n\n"); err != nil {
+			t.Fatalf("writing response body: %v", err)
+		}
 	}
 }

@@ -71,7 +71,7 @@ func TestAnthropicChat(t *testing.T) {
 			gotAPIKey = r.Header.Get("x-api-key")
 			gotVersion = r.Header.Get("anthropic-version")
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"content":[{"type":"text","text":"ok"}],"usage":{}}`)
+			writeSSE(t, w, anthropicTextStream("ok")...)
 		})
 		messages := []Message{SystemMessage{Content: "Be brief"}, UserMessage{Content: "Hi"}}
 		tools := []Tool{{Name: "get_weather", Description: "Get the weather", Schema: map[string]any{"type": "object"}}}
@@ -87,6 +87,7 @@ func TestAnthropicChat(t *testing.T) {
 		var sent anthropicChatRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
 		assert.Equal(t, "claude-opus-4-8", sent.Model)
+		assert.True(t, sent.Stream)
 		assert.Equal(t, defaultMaxTokens, sent.MaxTokens)
 		require.Len(t, sent.System, 1)
 		assert.Equal(t, "Be brief", sent.System[0].Text)
@@ -103,7 +104,7 @@ func TestAnthropicChat(t *testing.T) {
 		var gotBody []byte
 		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
 			gotBody, _ = io.ReadAll(r.Body)
-			writeJSON(t, w, `{"content":[{"type":"text","text":"ok"}],"usage":{}}`)
+			writeSSE(t, w, anthropicTextStream("ok")...)
 		})
 		// when
 		_, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -112,13 +113,19 @@ func TestAnthropicChat(t *testing.T) {
 		assert.NotContains(t, string(gotBody), "tools")
 	})
 
-	t.Run("returns the assistant content and usage stats", func(t *testing.T) {
+	t.Run("joins streamed text and takes usage from the start and end of the message", func(t *testing.T) {
 		// given
 		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{
-				"content":[{"type":"text","text":"Hello there"}],
-				"usage":{"input_tokens":10,"output_tokens":5}
-			}`)
+			writeSSE(t, w,
+				`{"type":"message_start","message":{"content":[],"stop_reason":null,"usage":{"input_tokens":10,"cache_creation_input_tokens":3,"cache_read_input_tokens":2,"output_tokens":1}}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+				`{"type":"ping"}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" there"}}`,
+				`{"type":"content_block_stop","index":0}`,
+				`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}`,
+				`{"type":"message_stop"}`,
+			)
 		})
 		// when
 		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -126,25 +133,114 @@ func TestAnthropicChat(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "Hello there", result.Content)
-		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
+		assert.Equal(t, "end_turn", result.StopReason)
+		expected := Stats{PromptTokens: 15, OutputTokens: 5, TotalTokens: 20, CacheWriteTokens: 3, CacheReadTokens: 2}
+		assert.Equal(t, expected, result.Stats)
 		assert.Empty(t, result.ToolCalls)
 	})
 
-	t.Run("parses tool calls from the response", func(t *testing.T) {
+	t.Run("assembles tool use input from partial JSON", func(t *testing.T) {
 		// given
 		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{
-				"content":[{"type":"tool_use","id":"toolu_1","name":"get_weather","input":{"city":"Lisbon"}}],
-				"usage":{}
-			}`)
+			writeSSE(t, w,
+				`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"get_weather","input":{}}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"city\":"}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\"Lisbon\"}"}}`,
+				`{"type":"content_block_stop","index":0}`,
+				`{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_2","name":"get_time","input":{}}}`,
+				`{"type":"content_block_stop","index":1}`,
+				`{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}`,
+				`{"type":"message_stop"}`,
+			)
 		})
 		// when
 		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "weather?"}}, nil)
 		// then
 		require.NoError(t, err)
-		require.Len(t, result.ToolCalls, 1)
-		expected := ToolCall{ID: "toolu_1", Name: "get_weather", Arguments: map[string]any{"city": "Lisbon"}}
-		assert.Equal(t, expected, result.ToolCalls[0])
+		expected := []ToolCall{
+			{ID: "toolu_1", Name: "get_weather", Arguments: map[string]any{"city": "Lisbon"}},
+			{ID: "toolu_2", Name: "get_time", Arguments: map[string]any{}},
+		}
+		assert.Equal(t, expected, result.ToolCalls)
+	})
+
+	t.Run("keeps thinking blocks with their signature for the next turn", func(t *testing.T) {
+		// given
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w,
+				`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me "}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"think."}}`,
+				`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-123"}}`,
+				`{"type":"content_block_stop","index":0}`,
+				`{"type":"content_block_start","index":1,"content_block":{"type":"redacted_thinking","data":"opaque"}}`,
+				`{"type":"content_block_stop","index":1}`,
+				`{"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}`,
+				`{"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"Done"}}`,
+				`{"type":"content_block_stop","index":2}`,
+				`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}`,
+				`{"type":"message_stop"}`,
+			)
+		})
+		// when
+		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "Done", result.Content)
+		expected := []anthropicContentBlock{
+			{Type: "thinking", Thinking: "Let me think.", Signature: "sig-123"},
+			{Type: "redacted_thinking", Data: "opaque"},
+			{Type: "text", Text: "Done"},
+		}
+		assert.Equal(t, expected, result.raw)
+	})
+
+	t.Run("returns an error when a delta names a block that was not started", func(t *testing.T) {
+		// given
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w,
+				`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+				`{"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"Hello"}}`,
+				`{"type":"message_stop"}`,
+			)
+		})
+		// when
+		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "content block index")
+	})
+
+	t.Run("returns an error when the stream carries an error event", func(t *testing.T) {
+		// given
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w,
+				`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+				`{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+			)
+		})
+		// when
+		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "Overloaded")
+	})
+
+	t.Run("returns an error when the stream ends before message_stop", func(t *testing.T) {
+		// given
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w,
+				`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+				`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			)
+		})
+		// when
+		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "stream ended before done")
 	})
 
 	t.Run("returns an error on a non-2xx status", func(t *testing.T) {
@@ -168,7 +264,7 @@ func TestAnthropicChat(t *testing.T) {
 				w.WriteHeader(http.StatusTooManyRequests)
 				return
 			}
-			writeJSON(t, w, `{"content":[{"type":"text","text":"ok"}],"usage":{}}`)
+			writeSSE(t, w, anthropicTextStream("ok")...)
 		})
 		// when
 		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
@@ -179,16 +275,16 @@ func TestAnthropicChat(t *testing.T) {
 		assert.Equal(t, int32(2), calls.Load())
 	})
 
-	t.Run("returns an error when the response body is malformed", func(t *testing.T) {
+	t.Run("returns an error when an event is not valid JSON", func(t *testing.T) {
 		// given
 		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{"content":`)
+			writeSSE(t, w, `{"type":`)
 		})
 		// when
 		result, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
 		// then
 		assert.Nil(t, result)
-		assert.Error(t, err)
+		assert.ErrorContains(t, err, "anthropic: reading stream")
 	})
 }
 
@@ -279,4 +375,15 @@ func newTestAnthropic(t testing.TB, handler http.HandlerFunc) *anthropic {
 		t.Fatalf("newAnthropic: unexpected error: %v", err)
 	}
 	return a
+}
+
+func anthropicTextStream(text string) []string {
+	return []string{
+		`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"` + text + `"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}`,
+		`{"type":"message_stop"}`,
+	}
 }

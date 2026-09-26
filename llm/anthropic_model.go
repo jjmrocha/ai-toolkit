@@ -8,6 +8,7 @@ type anthropicChatRequest struct {
 	Tools        []anthropicTool        `json:"tools,omitempty"`
 	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
 	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+	Stream       bool                   `json:"stream"`
 }
 
 type anthropicSystemBlock struct {
@@ -57,6 +58,29 @@ type anthropicChatResponse struct {
 	Content    []anthropicContentBlock `json:"content"`
 	StopReason string                  `json:"stop_reason"`
 	Usage      anthropicUsage          `json:"usage"`
+}
+
+type anthropicStreamEvent struct {
+	Type         string                 `json:"type"`
+	Index        int                    `json:"index"`
+	Message      *anthropicChatResponse `json:"message"`
+	ContentBlock *anthropicContentBlock `json:"content_block"`
+	Delta        anthropicStreamDelta   `json:"delta"`
+	Usage        anthropicUsage         `json:"usage"`
+	Error        *anthropicStreamError  `json:"error"`
+}
+
+type anthropicStreamDelta struct {
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	PartialJSON string `json:"partial_json"`
+	Thinking    string `json:"thinking"`
+	Signature   string `json:"signature"`
+	StopReason  string `json:"stop_reason"`
+}
+
+type anthropicStreamError struct {
+	Message string `json:"message"`
 }
 
 type anthropicUsage struct {
