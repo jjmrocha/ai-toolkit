@@ -10,10 +10,10 @@ import (
 
 // SerenaMCPConfig returns the [mcp.ClientConfig] that [CodingTools] starts
 // Serena from, in Serena's desktop-app context with its query-projects mode
-// added and its shell tool left unregistered. Every call returns a fresh value
-// that shares nothing with the pack, so the returned config can be adjusted —
-// pinned to a revision, say, or given its shell back — and passed to
-// [mcp.NewClient] directly.
+// added and its shell, memory and onboarding tools left unregistered. Every
+// call returns a fresh value that shares nothing with the pack, so the returned
+// config can be adjusted — pinned to a revision, say, or given its shell back —
+// and passed to [mcp.NewClient] directly.
 func SerenaMCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
 		Name:    "serena",
@@ -24,16 +24,21 @@ func SerenaMCPConfig() mcp.ClientConfig {
 			"--context", "desktop-app",
 			"--add-mode", "query-projects",
 		},
-		ExcludedTools:   []string{"execute_shell_command"},
+		ExcludedTools: []string{
+			"execute_shell_command",
+			"write_memory", "read_memory", "list_memories",
+			"edit_memory", "delete_memory", "rename_memory",
+			"onboarding",
+		},
 		ToolCallTimeout: 360 * time.Second,
 	}
 }
 
 // CodingTools registers symbol-aware code navigation and editing, diagnostics,
-// file and directory access, project memories and read-only queries against
-// other projects in m, served by Serena (https://github.com/oraios/serena). It
-// needs the uvx executable on PATH and no API key. The tools are registered
-// under a "serena__" prefix, and the returned [ToolPack] removes them again.
+// file and directory access and read-only queries against other projects in
+// m, served by Serena (https://github.com/oraios/serena). It needs the uvx
+// executable on PATH and no API key. The tools are registered under a
+// "serena__" prefix, and the returned [ToolPack] removes them again.
 //
 // The pack gives the model no shell: Serena's own shell tool is left
 // unregistered, and nothing takes its place. A model that has to build or run

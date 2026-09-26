@@ -21,9 +21,14 @@ func TestSerenaMCPConfig(t *testing.T) {
 		assert.Equal(t, expected, result.Args)
 	})
 
-	t.Run("leaves Serena's shell tool out", func(t *testing.T) {
+	t.Run("leaves Serena's shell, memory and onboarding tools out", func(t *testing.T) {
 		// given
-		expected := []string{"execute_shell_command"}
+		expected := []string{
+			"execute_shell_command",
+			"write_memory", "read_memory", "list_memories",
+			"edit_memory", "delete_memory", "rename_memory",
+			"onboarding",
+		}
 		// when
 		result := SerenaMCPConfig()
 		// then
