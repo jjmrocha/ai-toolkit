@@ -9,10 +9,10 @@ import (
 )
 
 // SerenaMCPConfig returns the [mcp.ClientConfig] that [CodingTools] starts
-// Serena from, in Serena's desktop-app context with its query-projects mode
-// added and its shell, memory and onboarding tools left unregistered. Every
-// call returns a fresh value that shares nothing with the pack, so the returned
-// config can be adjusted — pinned to a revision, say, or given its shell back —
+// Serena from, in Serena's desktop-app context with its query-projects and
+// no-memories modes added and its shell, memory and onboarding tools left
+// unregistered. Every call returns a fresh value that shares nothing with the
+// pack, so the returned config can be adjusted — pinned to a revision, say, or given its shell back —
 // and passed to [mcp.NewClient] directly.
 func SerenaMCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
@@ -23,6 +23,7 @@ func SerenaMCPConfig() mcp.ClientConfig {
 			"serena", "start-mcp-server",
 			"--context", "desktop-app",
 			"--add-mode", "query-projects",
+			"--add-mode", "no-memories",
 		},
 		ExcludedTools: []string{
 			"execute_shell_command",
