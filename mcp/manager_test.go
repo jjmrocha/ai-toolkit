@@ -3,8 +3,10 @@ package mcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jjmrocha/ai-toolkit/tools"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +59,108 @@ func TestManagerStatus(t *testing.T) {
 		assert.Len(t, result, 2)
 		assert.Contains(t, result, Status{Name: "playwright", Active: false})
 		assert.Contains(t, result, Status{Name: "serena", Active: false})
+	})
+}
+
+func TestManagerInstructions(t *testing.T) {
+	t.Run("returns the instructions of the running MCPs, sorted by name", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "zeta")
+		startTestMCPServer(t, []string{"fetch"}, &sdk.ServerOptions{Instructions: "Use fetch to read a page."}, "alpha")
+		ctx := context.Background()
+		m := NewManager(tools.NewToolBox())
+		m.Register(ClientConfig{Name: "zeta", Command: "npx"})
+		m.Register(ClientConfig{Name: "alpha", Command: "npx"})
+		t.Cleanup(m.Close)
+		require.NoError(t, m.Start(ctx, "zeta"))
+		require.NoError(t, m.Start(ctx, "alpha"))
+		// when
+		result := m.Instructions()
+		// then
+		expected := []Instruction{
+			{Name: "alpha", Text: "Use fetch to read a page."},
+			{Name: "zeta", Text: "Use search to query the web."},
+		}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("leaves out an MCP that sent no instructions", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "playwright")
+		startTestMCPServer(t, []string{"fetch"}, nil, "quiet")
+		ctx := context.Background()
+		m := NewManager(tools.NewToolBox())
+		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
+		m.Register(ClientConfig{Name: "quiet", Command: "npx"})
+		t.Cleanup(m.Close)
+		require.NoError(t, m.Start(ctx, "playwright"))
+		require.NoError(t, m.Start(ctx, "quiet"))
+		// when
+		result := m.Instructions()
+		// then
+		expected := []Instruction{{Name: "playwright", Text: "Use search to query the web."}}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("leaves out an MCP that is not running", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
+		ctx := context.Background()
+		m := NewManager(tools.NewToolBox())
+		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
+		m.Register(ClientConfig{Name: "registered-only", Command: "npx"})
+		t.Cleanup(m.Close)
+		require.NoError(t, m.Start(ctx, "playwright"))
+		// when
+		result := m.Instructions()
+		// then
+		expected := []Instruction{{Name: "playwright", Text: "Use search to query the web."}}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("reaps a dead client and leaves it out", func(t *testing.T) {
+		// given
+		server := startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "playwright")
+		ctx := context.Background()
+		toolBox := tools.NewToolBox()
+		m := NewManager(toolBox)
+		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
+		t.Cleanup(m.Close)
+		require.NoError(t, m.Start(ctx, "playwright"))
+		require.NoError(t, server.session.Close())
+		assert.Eventually(t, func() bool {
+			return len(toolBox.Tools()) == 0
+		}, time.Second, 10*time.Millisecond)
+		// when
+		result := m.Instructions()
+		// then
+		assert.Nil(t, result)
+		expected := []Status{{Name: "playwright", Active: false}}
+		assert.Equal(t, expected, m.Status())
+	})
+
+	t.Run("nil when no running MCP sent instructions", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, nil)
+		ctx := context.Background()
+		m := NewManager(tools.NewToolBox())
+		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
+		t.Cleanup(m.Close)
+		require.NoError(t, m.Start(ctx, "playwright"))
+		// when
+		result := m.Instructions()
+		// then
+		assert.Nil(t, result)
+	})
+
+	t.Run("nil when nothing is running", func(t *testing.T) {
+		// given
+		m := NewManager(tools.NewToolBox())
+		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
+		// when
+		result := m.Instructions()
+		// then
+		assert.Nil(t, result)
 	})
 }
 

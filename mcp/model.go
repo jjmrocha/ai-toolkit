@@ -9,6 +9,17 @@ type Status struct {
 	Active bool
 }
 
+// Instruction pairs an MCP's registered name with the usage instructions it
+// sent as part of its initialize handshake, as returned by
+// [Client.Instructions] and [Manager.Instructions].
+type Instruction struct {
+	// Name is the MCP's registered name.
+	Name string
+	// Text is the instructions the server sent at handshake, empty when it
+	// sent none.
+	Text string
+}
+
 type toolSpec struct {
 	name        string
 	description string

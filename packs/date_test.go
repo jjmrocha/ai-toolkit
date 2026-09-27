@@ -5,11 +5,30 @@ import (
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/jjmrocha/go-algo/fn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDateToolsInstructions(t *testing.T) {
+	t.Run("returns the date doctrine, still after Close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := DateTools(toolBox)
+		require.NoError(t, err)
+		// when
+		result := pack.Instructions()
+		// then
+		expected := &mcp.Instruction{Name: "date", Text: dateInstruction}
+		assert.Equal(t, expected, result)
+		// when
+		require.NoError(t, pack.Close())
+		// then
+		assert.Equal(t, expected, pack.Instructions())
+	})
+}
 
 func fixedNow(t *testing.T, value time.Time) {
 	t.Helper()

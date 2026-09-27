@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/jjmrocha/ai-toolkit/tools"
@@ -75,6 +77,41 @@ func (m *Manager) Status() []Status {
 	}
 
 	return statuses
+}
+
+// Instructions returns the usage instructions of the running MCPs, paired
+// with their registered names and sorted by name. An MCP that sent none is
+// left out rather than returned empty, and one that is not running is left
+// out too, its dead client reaped as [Manager.Status] does. It returns nil
+// when no running MCP sent instructions.
+func (m *Manager) Instructions() []Instruction {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	instructions := make([]Instruction, 0, len(m.clients))
+
+	for name, client := range m.clients {
+		if !client.Connected() {
+			_ = client.Close()
+			delete(m.clients, name)
+
+			continue
+		}
+
+		if instruction := client.Instructions(); instruction != nil {
+			instructions = append(instructions, *instruction)
+		}
+	}
+
+	if len(instructions) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(instructions, func(a, b Instruction) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	return instructions
 }
 
 // Start launches the MCP registered under name and registers its tools in the

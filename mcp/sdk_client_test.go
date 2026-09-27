@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
@@ -244,9 +245,12 @@ func TestErrorText(t *testing.T) {
 type testMCPServer struct {
 	server  *sdk.Server
 	session *sdk.ServerSession
+	names   []string
 }
 
-func startTestMCPServer(t *testing.T, toolNames []string, options *sdk.ServerOptions) *testMCPServer {
+var testMCPServers []*testMCPServer
+
+func startTestMCPServer(t *testing.T, toolNames []string, options *sdk.ServerOptions, clientNames ...string) *testMCPServer {
 	t.Helper()
 
 	impl := sdk.Implementation{Name: "test-server", Version: "1.0.0"}
@@ -256,23 +260,36 @@ func startTestMCPServer(t *testing.T, toolNames []string, options *sdk.ServerOpt
 		server.AddTool(testTool(name), testToolHandler)
 	}
 
-	testServer := testMCPServer{server: server}
+	testServer := &testMCPServer{server: server, names: clientNames}
+	testMCPServers = append(testMCPServers, testServer)
 
-	original := newTransport
-	newTransport = func(ClientConfig) sdk.Transport {
-		clientSide, serverSide := sdk.NewInMemoryTransports()
+	if len(testMCPServers) == 1 {
+		original := newTransport
+		newTransport = func(cfg ClientConfig) sdk.Transport {
+			clientSide, serverSide := sdk.NewInMemoryTransports()
 
-		session, err := server.Connect(context.Background(), serverSide, nil)
-		require.NoError(t, err)
+			target := testMCPServers[len(testMCPServers)-1]
+			for _, started := range testMCPServers {
+				if slices.Contains(started.names, cfg.Name) {
+					target = started
+				}
+			}
 
-		testServer.session = session
+			session, err := target.server.Connect(context.Background(), serverSide, nil)
+			require.NoError(t, err)
 
-		return clientSide
+			target.session = session
+
+			return clientSide
+		}
+
+		t.Cleanup(func() {
+			testMCPServers = nil
+			newTransport = original
+		})
 	}
 
-	t.Cleanup(func() { newTransport = original })
-
-	return &testServer
+	return testServer
 }
 
 func testTool(name string) *sdk.Tool {

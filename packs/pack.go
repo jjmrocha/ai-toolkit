@@ -1,5 +1,7 @@
 package packs
 
+import "github.com/jjmrocha/ai-toolkit/mcp"
+
 // ToolPack owns the tools one call registered in a ToolBox, and whatever serves
 // them.
 type ToolPack interface {
@@ -8,4 +10,11 @@ type ToolPack interface {
 	// for the life of the program when it is dropped rather than closed, since
 	// nothing else owns it. It is safe to call more than once.
 	Close() error
+	// Instructions returns the pack's usage doctrine — text meant for the
+	// model using the tools, labeled by [mcp.Instruction.Name] and
+	// complementary to the tool descriptions in the tools list — or nil when
+	// the pack has none. A pack served by an MCP server returns what the
+	// server sent at handshake. The value is fixed for the pack's lifetime and
+	// survives [ToolPack.Close].
+	Instructions() *mcp.Instruction
 }

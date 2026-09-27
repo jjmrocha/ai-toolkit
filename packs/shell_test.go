@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,6 +68,24 @@ func TestShellTools(t *testing.T) {
 		err = pack.Close()
 		// then
 		require.NoError(t, err)
+	})
+}
+
+func TestShellToolsInstructions(t *testing.T) {
+	t.Run("returns the shell doctrine, still after Close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := ShellTools(toolBox)
+		require.NoError(t, err)
+		// when
+		result := pack.Instructions()
+		// then
+		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
+		assert.Equal(t, expected, result)
+		// when
+		require.NoError(t, pack.Close())
+		// then
+		assert.Equal(t, expected, pack.Instructions())
 	})
 }
 

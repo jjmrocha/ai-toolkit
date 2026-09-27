@@ -9,11 +9,31 @@ import (
 
 	"github.com/jjmrocha/ai-toolkit/classify"
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/jjmrocha/go-algo/fn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestClassifyToolsInstructions(t *testing.T) {
+	t.Run("returns the classify doctrine, still after Close", func(t *testing.T) {
+		// given
+		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		toolBox := tools.NewToolBox()
+		pack, err := ClassifyTools(toolBox, client)
+		require.NoError(t, err)
+		// when
+		result := pack.Instructions()
+		// then
+		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
+		assert.Equal(t, expected, result)
+		// when
+		require.NoError(t, pack.Close())
+		// then
+		assert.Equal(t, expected, pack.Instructions())
+	})
+}
 
 type classifyServer struct {
 	requests int

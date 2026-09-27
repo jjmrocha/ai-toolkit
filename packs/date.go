@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
@@ -25,6 +26,11 @@ var dateToolNames = []string{
 
 var now = time.Now
 
+const dateInstruction = "You have no clock of your own: the date and time you remember are the ones you " +
+	"were trained on. Call these tools rather than assuming when it is, wherever the answer you " +
+	"are writing carries a date, a time or a deadline — and call them again rather than reusing " +
+	"an earlier answer across a long session, because the day may have moved."
+
 type datePack struct {
 	toolBox *tools.ToolBox
 	once    sync.Once
@@ -38,6 +44,13 @@ func (p *datePack) Close() error {
 	})
 
 	return nil
+}
+
+func (p *datePack) Instructions() *mcp.Instruction {
+	return &mcp.Instruction{
+		Name: "date",
+		Text: dateInstruction,
+	}
 }
 
 // DateTools registers the three tools that tell the model when it is in m:

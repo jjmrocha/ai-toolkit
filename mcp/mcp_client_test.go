@@ -192,11 +192,11 @@ func TestClientInstructions(t *testing.T) {
 		// when
 		result := client.Instructions()
 		// then
-		expected := "Use search to query the web."
+		expected := &Instruction{Name: "playwright", Text: "Use search to query the web."}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("returns empty when the server sent none", func(t *testing.T) {
+	t.Run("nil when the server sent none", func(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, nil)
 		ctx := context.Background()
@@ -206,7 +206,7 @@ func TestClientInstructions(t *testing.T) {
 		// when
 		result := client.Instructions()
 		// then
-		assert.Empty(t, result)
+		assert.Nil(t, result)
 	})
 }
 

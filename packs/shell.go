@@ -10,6 +10,7 @@ import (
 
 	"github.com/jjmrocha/ai-toolkit/internal/command"
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
@@ -24,6 +25,11 @@ const (
 	maxShellOutputBytes = 1024 * 1024
 )
 
+const shellInstruction = "Reach for this pack for terminal work — building, testing, linting, git " +
+	"and package managers. Read and change files through the dedicated file tools rather than by " +
+	"printing or rewriting them with a command, and take each command from the user's instructions " +
+	"or the repository's own Makefile, README or CI configuration rather than inventing one."
+
 type shellPack struct {
 	toolBox *tools.ToolBox
 }
@@ -32,6 +38,13 @@ func (p *shellPack) Close() error {
 	p.toolBox.Remove(shellToolName)
 
 	return nil
+}
+
+func (p *shellPack) Instructions() *mcp.Instruction {
+	return &mcp.Instruction{
+		Name: "shell",
+		Text: shellInstruction,
+	}
 }
 
 // ShellTools registers a single tool, "shell_run", that runs a command line

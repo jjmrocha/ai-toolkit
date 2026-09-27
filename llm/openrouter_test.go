@@ -89,6 +89,26 @@ func TestOpenRouterChat(t *testing.T) {
 		assert.NotContains(t, string(gotBody), "tools")
 	})
 
+	t.Run("sends the content field of an empty tool result", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+		})
+		messages := []Message{
+			UserMessage{Content: "Read the file"},
+			AssistantMessage{ToolCalls: []ToolCall{{ID: "call_1", Name: "read_file"}}},
+			ToolMessage{ToolCallID: "call_1", ToolName: "read_file", Content: ""},
+		}
+		expected := `{"role":"tool","content":"","tool_call_id":"call_1"}`
+		// when
+		_, err := o.chat(t.Context(), messages, nil)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, string(gotBody), expected)
+	})
+
 	t.Run("includes max_tokens when configured", func(t *testing.T) {
 		// given
 		var gotBody []byte

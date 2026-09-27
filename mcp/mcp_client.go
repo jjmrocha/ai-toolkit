@@ -116,10 +116,19 @@ func (c *Client) Connected() bool {
 }
 
 // Instructions returns the usage instructions the server sent as part of its
-// initialize handshake, or an empty string if it sent none. The value is the one
-// captured at startup: it does not change for the lifetime of the [Client].
-func (c *Client) Instructions() string {
-	return c.session.instructions()
+// initialize handshake, paired with the name the client registered under, or
+// nil if the server sent none. The value is the one captured at startup: it
+// does not change for the lifetime of the [Client].
+func (c *Client) Instructions() *Instruction {
+	instructions := c.session.instructions()
+	if instructions == "" {
+		return nil
+	}
+
+	return &Instruction{
+		Name: c.config.Name,
+		Text: instructions,
+	}
 }
 
 // Close shuts the server process down and removes this client's tools from the

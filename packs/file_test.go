@@ -7,10 +7,29 @@ import (
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
+	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFileToolsInstructions(t *testing.T) {
+	t.Run("returns the file doctrine, still after Close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := FileTools(toolBox, t.TempDir())
+		require.NoError(t, err)
+		// when
+		result := pack.Instructions()
+		// then
+		expected := &mcp.Instruction{Name: "file", Text: fileInstruction}
+		assert.Equal(t, expected, result)
+		// when
+		require.NoError(t, pack.Close())
+		// then
+		assert.Equal(t, expected, pack.Instructions())
+	})
+}
 
 func rootWith(t *testing.T, files map[string]string) string {
 	t.Helper()
