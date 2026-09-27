@@ -21,6 +21,10 @@ func DonSeTchMCPConfig() mcp.ClientConfig {
 	}
 }
 
+type webTools struct {
+	mcp *mcp.Client
+}
+
 // WebTools registers web search, page fetching and site crawling in m, served
 // by DonSeTch (https://github.com/dondai44423/donsetch). It needs the donsetch
 // executable on PATH and no API key. The tools are registered as
@@ -42,5 +46,13 @@ func WebTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
 		return nil, err
 	}
 
-	return client, nil
+	return &webTools{mcp: client}, nil
+}
+
+func (w *webTools) Instructions(_ context.Context) (*mcp.Instruction, error) {
+	return w.mcp.Instructions(), nil
+}
+
+func (w *webTools) Close() error {
+	return w.mcp.Close()
 }

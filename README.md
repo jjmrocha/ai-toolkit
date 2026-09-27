@@ -196,7 +196,9 @@ Worth knowing:
 - A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed. A server that declares no capabilities at all is asked anyway.
 - A server that announces `notifications/tools/list_changed` has its tools registered again automatically: the list is fetched afresh under its own thirty-second timeout and the `ToolBox` entries are replaced. A refresh that fails changes nothing — the tools already registered stay exactly as they were. Calling `RegisterTools` again does the same by hand, so a caller that knows the list has moved need not tear the client down.
 - `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server. `Connected` reports whether the process is still up. A `Client` is safe for concurrent use.
+- `Name` returns the name the client registered under — the `ClientConfig.Name`, which also prefixes every tool it registers.
 - `Instructions` returns an `*Instruction` — the server's registered name paired with the usage instructions it sent as part of its initialize handshake, text meant for the model that tells it how to use this server's tools — or nil if the server sent none. The value is fixed for the client's lifetime. Feed it into the system prompt when a server carries guidance worth keeping.
+- `CallTool` calls one of the server's tools directly and returns its text result, on the same terms as a registered tool — `ToolCallTimeout`, progress resetting the clock, nil args sent as an empty object. It takes the name the server published, not the namespaced one, and reaches a tool whether or not `ExcludedTools` names it, so a program can read what a tool returns without offering that tool to the model.
 - `ExcludedTools` names tools the server publishes that you do not want registered, by the name the server publishes them under rather than the namespaced one. The filter applies every time the list is read, so a tool named here stays unregistered when the server announces a change to its list, and a name the server never publishes is ignored. It is how you drop one capability from a server you otherwise want — `packs.CodingTools` uses it to leave Serena's shell out.
 - `ToolCallTimeout` bounds one call to this server's tools, defaulting to sixty seconds. It is an idle timeout rather than a total budget: every progress notification the server sends restarts the clock, so a tool that reports progress runs as long as it keeps reporting, while one that goes quiet fails that single call. The timeout sits inside the caller's own context, so a failed call leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn. The abort reaches the handler as `context.Canceled`, the same as a cancellation from above: `ErrRequestTimeout` is recorded as the internal context's cancellation cause and is never returned, so a caller cannot currently tell a quiet server from a cancelled turn.
 - Content the model cannot read as text is summarised rather than dropped. An image, audio clip, resource link, or binary embedded resource becomes a short descriptor such as `[image: image/png, 48213 bytes]`; text content and text-bearing resources pass through unchanged, and a result carrying only structured content is rendered as its JSON.
@@ -300,13 +302,14 @@ if err != nil {
 defer pack.Close()
 ```
 
-`ToolPack.Instructions` returns an `*mcp.Instruction` — the pack's usage
+`ToolPack.Instructions(ctx)` returns an `*mcp.Instruction` — the pack's usage
 doctrine, labeled by its tool family and meant for the model's system prompt —
-or nil when the pack has none. It is fixed for the pack's lifetime and survives
-`Close`. A pack served by an MCP server returns what the server sent at
-handshake, so the doctrine of the packs below is the handshakes' doctrine; the
-self-served packs' doctrine is written here in `packs` and complements the tool
-descriptions the tools list already carries.
+or nil when the pack has none, plus an error. A pack served by an MCP server may
+ask that server for its doctrine under `ctx` and returns the error when the
+server fails to answer, so call it before `Close`; the doctrine of the
+MCP-served packs below is the servers' own. The self-served packs' doctrine is
+written here in `packs`, complements the tool descriptions the tools list
+already carries, and never fails.
 
 ### `WebTools`
 
@@ -322,7 +325,7 @@ Worth knowing:
 - The tool call ceiling is 15 minutes rather than the two-minute default. `web_crawl` accepts a `deadline_s` of up to 600 seconds and the other two a `deadline_ms` of up to 600000, so a shorter ceiling would kill a long call before the server could report its own deadline — and the server's error tells the model what to do next, where a client-side timeout does not.
 - The three tools carry roughly 15 KB of descriptions and schemas, which every request pays for while they are registered. Close the pack when a session has finished with the web.
 - `packs.DonSeTchMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from, a fresh value each call that shares nothing with the pack. Adjust the returned config freely — a variant built from it goes through `mcp.NewClient` and `RegisterTools`, not through `WebTools`.
-- `ToolPack.Instructions` returns whatever the DonSeTch server sent at handshake — commonly nil, since DonSeTch publishes its guidance through tool descriptions rather than handshake instructions.
+- `ToolPack.Instructions` returns whatever the DonSeTch server sent at handshake, with no error — commonly nil, since DonSeTch publishes its guidance through tool descriptions rather than handshake instructions.
 
 ### `CodingTools`
 
@@ -349,7 +352,7 @@ Worth knowing:
 - One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
 - This pack reads and writes files with the authority of the program that started it — the whole filesystem — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with that reach, and remember that anything the model reads out of a repository can steer what it does next.
 - The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig(project)`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
-- Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
+- Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is what `ToolPack.Instructions` returns: each call asks Serena for it through its `initial_instructions` tool. Put it in the system prompt and the model need not call `serena__initial_instructions` itself; the tool stays registered for a model that is not given it.
 - Serena's tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes minus the exclusions, so it moves with Serena's own development rather than being fixed here.
 - The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
 - The first symbolic call on a newly activated project is the slow one: Serena downloads that language's server if it is missing and indexes the project inside that call's budget.
@@ -357,7 +360,7 @@ Worth knowing:
 - A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind. A server that later dies on its own drops its own tools.
 - This is a far wider pack than `WebTools`: 23 tools carrying roughly 27 KB of descriptions and schemas, nearly twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
 - `packs.SerenaMCPConfig(project)` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` and `no-memories` modes added and `execute_shell_command`, the memory tools and `onboarding` in `ExcludedTools`, plus a `--project` argument when the project is non-empty — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
-- `ToolPack.Instructions` returns what the Serena server sent at handshake: an `*mcp.Instruction` pairing the name `serena` with Serena's usage instructions, or nil when that Serena version sent none. It is the server's own text, not this pack's.
+- `ToolPack.Instructions` returns an `*mcp.Instruction` pairing the name `serena` with Serena's manual, roughly 8 KB. Serena's handshake instructions are a single line telling the model to call `initial_instructions`, so the pack makes that call itself and returns what it answers. When the call fails — the server is gone, or `Close` has run — it falls back to the handshake line, or nil when that Serena version sent none, and never returns an error. It is Serena's own text, not this pack's.
 
 ### `ShellTools`
 
@@ -387,7 +390,7 @@ Worth knowing:
 - `ShellTools` fails, registering nothing, when the `ToolBox` rejects the registration — it passes `ToolBox.Add`'s error through rather than swallowing it.
 - `ToolPack.Close` only removes the tool from the `ToolBox`. There is no process to leak, so a dropped `ToolPack` costs nothing beyond the tool staying registered.
 - The tool carries roughly 700 bytes of description and schema, which every request pays for while it is registered.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `shell` whose text is the pack's doctrine: reach for it for terminal work, read and change files through the dedicated file tools, and take each command from the user's instructions or the repository's own configuration rather than inventing one.
+- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `shell` whose text is the pack's doctrine: reach for it for terminal work, read and change files with the tools meant for that rather than a command, and take each command from the user's instructions or the repository's own configuration rather than inventing one.
 
 ### `FileTools`
 
@@ -429,7 +432,7 @@ Worth knowing:
 - `file_workdir` takes no arguments and reports the root as an absolute path, resolved when the pack was built. A pack rooted at a relative path still reports an absolute one, and a later `chdir` does not change the answer.
 - `ToolPack.Close` removes the seven tools and closes the root. There is no process to leak.
 - The seven tools carry roughly 4.1 KB of descriptions and schemas, which every request pays for while they are registered. `file_search` is the largest single tool of the seven, at about 1.1 KB.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `file` whose text is the pack's doctrine: paths are relative to the confined folder, `file_search` before reading through, `file_edit` needs unambiguous surroundings, and never delete or discard work behind a single call.
+- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `file` whose text is the pack's doctrine: the tools reach only the confined folder, named by its absolute path, and paths are relative to it, `file_search` before reading through, `file_edit` needs unambiguous surroundings, and never delete or discard work behind a single call.
 
 ### `DateTools`
 

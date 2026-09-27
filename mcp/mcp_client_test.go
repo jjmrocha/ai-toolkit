@@ -175,6 +175,50 @@ func TestClientInstructions(t *testing.T) {
 	})
 }
 
+func TestClientName(t *testing.T) {
+	t.Run("returns the name the client registered under", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, nil)
+		ctx := context.Background()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		// when
+		result := client.Name()
+		// then
+		assert.Equal(t, "playwright", result)
+	})
+}
+
+func TestClientCallTool(t *testing.T) {
+	t.Run("returns the text the server's tool produced", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, nil)
+		ctx := context.Background()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		// when
+		result, err := client.CallTool(ctx, "search", nil)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "ok", result)
+	})
+
+	t.Run("fails for a tool the server does not have", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, nil)
+		ctx := context.Background()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		// when
+		_, err = client.CallTool(ctx, "fetch", nil)
+		// then
+		assert.Error(t, err)
+	})
+}
+
 func TestClientConnected(t *testing.T) {
 	t.Run("reports false and removes the tools once the server exits", func(t *testing.T) {
 		// given

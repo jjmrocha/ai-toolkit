@@ -33,13 +33,14 @@ var classifyToolNames = []string{
 	classifyScoreToolName,
 }
 
-const classifyInstruction = "Hand a judgement call to these tools instead of making it yourself when a " +
-	"labelled answer settles it — a yes or a no, a pick from named options, a rating on ordered " +
-	"levels. The classifier is calibrated: read a probability of 0.5 as undecided rather than a " +
-	"middle answer, and a confidence as how sure the model is, not how likely it is to be right. " +
-	"The classifier sees nothing of the conversation, so the input must carry everything the " +
-	"judgement needs, labelled and verbatim. The answer is advice, not a decision: weigh it " +
-	"against what you know, and say when you went against it."
+const classifyInstruction = `Hand a judgement call to these tools instead of
+making it yourself when a labelled answer settles it — a yes or a no, a pick
+from named options, a rating on ordered levels. The classifier is calibrated:
+read a probability of 0.5 as undecided rather than a middle answer, and a
+confidence as how sure the model is, not how likely it is to be right. The
+classifier sees nothing of the conversation, so the input must carry everything
+the judgement needs, labelled and verbatim. The answer is advice, not a
+decision: weigh it against what you know, and say when you went against it.`
 
 type classifyPack struct {
 	toolBox *tools.ToolBox
@@ -56,11 +57,11 @@ func (p *classifyPack) Close() error {
 	return nil
 }
 
-func (p *classifyPack) Instructions() *mcp.Instruction {
+func (p *classifyPack) Instructions(_ context.Context) (*mcp.Instruction, error) {
 	return &mcp.Instruction{
 		Name: "classify",
 		Text: classifyInstruction,
-	}
+	}, nil
 }
 
 type yesNoResult struct {

@@ -1,6 +1,7 @@
 package packs
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -25,8 +26,9 @@ func TestClassifyToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
+		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -39,8 +41,9 @@ func TestClassifyToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
+		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
 		assert.Equal(t, expected, result)
 	})

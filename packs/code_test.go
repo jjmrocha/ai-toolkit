@@ -3,11 +3,13 @@ package packs
 import (
 	"testing"
 
-	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/stretchr/testify/assert"
 )
 
-var _ ToolPack = (*mcp.Client)(nil)
+var (
+	_ ToolPack = (*codingTools)(nil)
+	_ ToolPack = (*webTools)(nil)
+)
 
 func TestSerenaMCPConfig(t *testing.T) {
 	t.Run("starts Serena with the query-projects and no-memories modes", func(t *testing.T) {

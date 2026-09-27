@@ -8,6 +8,8 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
+const serenaManualTool = "initial_instructions"
+
 // SerenaMCPConfig returns the [mcp.ClientConfig] that [CodingTools] starts
 // Serena from, in Serena's desktop-app context with its query-projects and
 // no-memories modes added and its shell, memory and onboarding tools left
@@ -42,6 +44,10 @@ func SerenaMCPConfig(project string) mcp.ClientConfig {
 	}
 }
 
+type codingTools struct {
+	mcp *mcp.Client
+}
+
 // CodingTools registers symbol-aware code navigation and editing, diagnostics,
 // file and directory access and read-only queries against other projects in
 // m, served by Serena (https://github.com/oraios/serena). It needs the uvx
@@ -57,8 +63,14 @@ func SerenaMCPConfig(project string) mcp.ClientConfig {
 // on that code base from the first symbolic call. An empty one leaves the
 // server with no project, so the model reaches a code base only after
 // calling "serena__activate_project", which still switches the active project
-// either way. Serena's own manual, which explains how its tools fit together,
-// is a tool call away as "serena__initial_instructions".
+// either way.
+//
+// The pack's [ToolPack.Instructions] returns Serena's own manual, which
+// explains how its tools fit together: each call asks Serena for it through
+// its "initial_instructions" tool, so a model given that text does not have to
+// call "serena__initial_instructions" itself. Serena's handshake instructions
+// are only a line telling the model to make that call; Instructions falls back
+// to them when the server fails to answer, and never returns an error.
 //
 // One project is active at a time, and activating another shuts the previous
 // one's language servers down. To read a second code base without switching,
@@ -70,7 +82,9 @@ func SerenaMCPConfig(project string) mcp.ClientConfig {
 // A registration that fails stops the server before returning, leaving nothing
 // behind. A server that later dies on its own removes its own tools from m.
 func CodingTools(ctx context.Context, m *tools.ToolBox, project string) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, SerenaMCPConfig(project))
+	cfg := SerenaMCPConfig(project)
+
+	client, err := mcp.NewClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -82,5 +96,21 @@ func CodingTools(ctx context.Context, m *tools.ToolBox, project string) (ToolPac
 		return nil, err
 	}
 
-	return client, nil
+	return &codingTools{mcp: client}, nil
+}
+
+func (c *codingTools) Instructions(ctx context.Context) (*mcp.Instruction, error) {
+	manual, err := c.mcp.CallTool(ctx, serenaManualTool, nil)
+	if err != nil {
+		return c.mcp.Instructions(), nil
+	}
+
+	return &mcp.Instruction{
+		Name: c.mcp.Name(),
+		Text: manual,
+	}, nil
+}
+
+func (c *codingTools) Close() error {
+	return c.mcp.Close()
 }

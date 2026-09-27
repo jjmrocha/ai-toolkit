@@ -51,12 +51,13 @@ var fileToolNames = []string{
 	workdirToolName,
 }
 
-const fileInstruction = "These tools reach only the folder they are confined to; name every file relative " +
-	"to that folder and never absolute. Find which file says something with file_search rather " +
-	"than reading the folder through, and when a search ends exactly on its limit it reported " +
-	"the whole answer. file_edit changes one chosen place: include enough of the surroundings " +
-	"to make the target text unambiguous. Never delete work you did not make, and never discard " +
-	"a whole folder's content behind a single call."
+const fileInstruction = `These tools reach only the folder %s and nothing
+outside it; name every file relative to that folder and never absolute. Find
+which file says something with file_search rather than reading the folder
+through, and when a search ends exactly on its limit it reported the whole
+answer. file_edit changes one chosen place: include enough of the surroundings
+to make the target text unambiguous. Never delete work you did not make, and
+never discard a whole folder's content behind a single call.`
 
 type filePack struct {
 	toolBox *tools.ToolBox
@@ -65,11 +66,11 @@ type filePack struct {
 	once    sync.Once
 }
 
-func (p *filePack) Instructions() *mcp.Instruction {
+func (p *filePack) Instructions(_ context.Context) (*mcp.Instruction, error) {
 	return &mcp.Instruction{
 		Name: "file",
-		Text: fileInstruction,
-	}
+		Text: fmt.Sprintf(fileInstruction, p.path),
+	}, nil
 }
 
 func (p *filePack) Close() error {

@@ -74,6 +74,12 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
+// Name returns the name the client registered under, which is also the prefix
+// used for the tools it registers in a [tools.ToolBox].
+func (c *Client) Name() string {
+	return c.config.Name
+}
+
 func (c *Client) onDisconnect(_ error) {
 	c.disconnected()
 }
@@ -201,6 +207,16 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 	c.tools = registered
 
 	return nil
+}
+
+// CallTool calls the server's tool named tool with args and returns its text
+// result, the same way a tool registered by [Client.RegisterTools] does: under
+// [ClientConfig.ToolCallTimeout], with nil args sent as an empty object. tool is
+// the name the server published, not the namespaced one, and it is called
+// whether or not [ClientConfig.ExcludedTools] names it. It returns an error when
+// the call fails or the server reports one.
+func (c *Client) CallTool(ctx context.Context, tool string, args map[string]any) (string, error) {
+	return c.makeHandler(tool)(ctx, args)
 }
 
 func (c *Client) removeTools() {

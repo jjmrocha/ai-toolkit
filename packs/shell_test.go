@@ -1,6 +1,7 @@
 package packs
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -79,8 +80,9 @@ func TestShellToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
+		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -92,8 +94,9 @@ func TestShellToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
+		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
 		assert.Equal(t, expected, result)
 	})

@@ -1,6 +1,10 @@
 package packs
 
-import "github.com/jjmrocha/ai-toolkit/mcp"
+import (
+	"context"
+
+	"github.com/jjmrocha/ai-toolkit/mcp"
+)
 
 // ToolPack owns the tools one call registered in a ToolBox, and whatever serves
 // them.
@@ -13,8 +17,9 @@ type ToolPack interface {
 	// Instructions returns the pack's usage doctrine — text meant for the
 	// model using the tools, labeled by [mcp.Instruction.Name] and
 	// complementary to the tool descriptions in the tools list — or nil when
-	// the pack has none. A pack served by an MCP server returns what the
-	// server sent at handshake. The value is fixed for the pack's lifetime and
-	// survives [ToolPack.Close].
-	Instructions() *mcp.Instruction
+	// the pack has none. A pack served by an MCP server may ask that server
+	// for it under ctx, returning the error when the server fails to answer, so
+	// call it before [ToolPack.Close]. A pack that serves its own tools returns
+	// a fixed text and never fails.
+	Instructions(context.Context) (*mcp.Instruction, error)
 }

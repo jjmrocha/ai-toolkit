@@ -1,43 +1,47 @@
 package packs
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
-	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFileToolsInstructions(t *testing.T) {
-	t.Run("returns the file doctrine", func(t *testing.T) {
+	t.Run("returns the file doctrine naming the confined folder", func(t *testing.T) {
 		// given
+		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir())
+		pack, err := FileTools(toolBox, folder)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
-		expected := &mcp.Instruction{Name: "file", Text: fileInstruction}
-		assert.Equal(t, expected, result)
+		require.NoError(t, err)
+		assert.Equal(t, "file", result.Name)
+		assert.Contains(t, result.Text, folder)
 	})
 
-	t.Run("still returns the file doctrine after Close", func(t *testing.T) {
+	t.Run("still names the confined folder after Close", func(t *testing.T) {
 		// given
+		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir())
+		pack, err := FileTools(toolBox, folder)
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
-		expected := &mcp.Instruction{Name: "file", Text: fileInstruction}
-		assert.Equal(t, expected, result)
+		require.NoError(t, err)
+		assert.Equal(t, "file", result.Name)
+		assert.Contains(t, result.Text, folder)
 	})
 }
 

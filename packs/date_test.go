@@ -1,6 +1,7 @@
 package packs
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -20,8 +21,9 @@ func TestDateToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
+		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "date", Text: dateInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -33,8 +35,9 @@ func TestDateToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result := pack.Instructions()
+		result, err := pack.Instructions(context.Background())
 		// then
+		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "date", Text: dateInstruction}
 		assert.Equal(t, expected, result)
 	})
