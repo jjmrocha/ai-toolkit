@@ -109,7 +109,7 @@ func TestManagerClose(t *testing.T) {
 
 	t.Run("keeps the registration of a server it started", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, "search")
+		startTestMCPServer(t, []string{"search"}, nil)
 		ctx := context.Background()
 		m := NewManager(tools.NewToolBox())
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})

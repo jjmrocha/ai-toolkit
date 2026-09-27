@@ -246,11 +246,11 @@ type testMCPServer struct {
 	session *sdk.ServerSession
 }
 
-func startTestMCPServer(t *testing.T, toolNames ...string) *testMCPServer {
+func startTestMCPServer(t *testing.T, toolNames []string, options *sdk.ServerOptions) *testMCPServer {
 	t.Helper()
 
 	impl := sdk.Implementation{Name: "test-server", Version: "1.0.0"}
-	server := sdk.NewServer(&impl, nil)
+	server := sdk.NewServer(&impl, options)
 
 	for _, name := range toolNames {
 		server.AddTool(testTool(name), testToolHandler)

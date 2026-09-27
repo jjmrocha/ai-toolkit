@@ -106,6 +106,15 @@ func (s *sdkClient) supportsTools() bool {
 	return res.Capabilities.Tools != nil
 }
 
+func (s *sdkClient) instructions() string {
+	res := s.session.InitializeResult()
+	if res == nil {
+		return ""
+	}
+
+	return res.Instructions
+}
+
 func (s *sdkClient) listTools(ctx context.Context) ([]toolSpec, error) {
 	var tools []toolSpec
 

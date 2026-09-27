@@ -115,6 +115,13 @@ func (c *Client) Connected() bool {
 	return c.connected
 }
 
+// Instructions returns the usage instructions the server sent as part of its
+// initialize handshake, or an empty string if it sent none. The value is the one
+// captured at startup: it does not change for the lifetime of the [Client].
+func (c *Client) Instructions() string {
+	return c.session.instructions()
+}
+
 // Close shuts the server process down and removes this client's tools from the
 // [tools.ToolBox]. A call still waiting on the server is aborted rather than
 // waited out. It is safe to call more than once.

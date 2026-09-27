@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/tools"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -180,10 +181,39 @@ func TestHashToolName(t *testing.T) {
 	})
 }
 
+func TestClientInstructions(t *testing.T) {
+	t.Run("returns the instructions the server sent at handshake", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
+		ctx := context.Background()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		// when
+		result := client.Instructions()
+		// then
+		expected := "Use search to query the web."
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns empty when the server sent none", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, nil)
+		ctx := context.Background()
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		// when
+		result := client.Instructions()
+		// then
+		assert.Empty(t, result)
+	})
+}
+
 func TestClientConnected(t *testing.T) {
 	t.Run("reports false and removes the tools once the server exits", func(t *testing.T) {
 		// given
-		server := startTestMCPServer(t, "search")
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := context.Background()
 		toolBox := tools.NewToolBox()
 		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
@@ -203,7 +233,7 @@ func TestClientConnected(t *testing.T) {
 func TestClientRegisterTools(t *testing.T) {
 	t.Run("follows the server's tool list when it changes", func(t *testing.T) {
 		// given
-		server := startTestMCPServer(t, "search", "fetch")
+		server := startTestMCPServer(t, []string{"search", "fetch"}, nil)
 		ctx := context.Background()
 		toolBox := tools.NewToolBox()
 		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"})
