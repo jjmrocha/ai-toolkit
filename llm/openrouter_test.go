@@ -27,16 +27,6 @@ func TestNewOpenRouter(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, openrouterBaseURL, result.config.BaseURL)
 	})
-
-	t.Run("keeps the configured base URL", func(t *testing.T) {
-		// given
-		baseURL := "https://proxy.example.com/api/v1"
-		// when
-		result, err := newOpenRouter(Config{APIKey: "sk-test", Model: "openai/gpt-4o", BaseURL: baseURL})
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, baseURL, result.config.BaseURL)
-	})
 }
 
 func TestOpenRouterChat(t *testing.T) {

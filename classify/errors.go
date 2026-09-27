@@ -15,6 +15,10 @@ var (
 	// ErrNoQuestions is returned by [Classifier.Classify] when
 	// Request.Questions is empty.
 	ErrNoQuestions = errors.New("no questions")
+	// ErrInvalidQuestion is returned by [Classifier.Classify] when a [YesNo]
+	// describes what one answer means but not the other. The provider is not
+	// called.
+	ErrInvalidQuestion = errors.New("invalid question")
 	// ErrMissingAnswer is returned by [Classifier.Classify] when the provider
 	// answers fewer questions than were asked.
 	ErrMissingAnswer = errors.New("missing answer")

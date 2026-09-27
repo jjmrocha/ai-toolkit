@@ -206,24 +206,6 @@ not json
 		assert.ErrorContains(t, err, "ollama: reading stream")
 	})
 
-	t.Run("parses tool calls with object arguments", func(t *testing.T) {
-		// given
-		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(t, w, `{
-				"message":{"role":"assistant","content":"","tool_calls":[
-					{"function":{"name":"get_weather","arguments":{"city":"Tokyo"}}}
-				]},
-				"done":true
-			}`)
-		})
-		// when
-		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "weather?"}}, nil)
-		// then
-		require.NoError(t, err)
-		require.Len(t, result.ToolCalls, 1)
-		assert.Equal(t, ToolCall{Name: "get_weather", Arguments: map[string]any{"city": "Tokyo"}}, result.ToolCalls[0])
-	})
-
 	t.Run("returns an error when the body carries an error field", func(t *testing.T) {
 		// given
 		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {

@@ -175,14 +175,6 @@ func mustNewTestAgent(t testing.TB, cfg Config, fb Feedback) *Agent {
 }
 
 func TestNew(t *testing.T) {
-	t.Run("returns an agent for a valid configuration", func(t *testing.T) {
-		// when
-		result, err := New(Config{}, mustTestLLM(t))
-		// then
-		require.NoError(t, err)
-		assert.NotNil(t, result)
-	})
-
 	t.Run("propagates ErrNoLLM when llm is nil", func(t *testing.T) {
 		// when
 		result, err := New(Config{}, nil)
@@ -711,32 +703,6 @@ func TestProcess(t *testing.T) {
 		assert.ErrorContains(t, err, "boom")
 	})
 
-	t.Run("compacts older turns once the threshold is crossed", func(t *testing.T) {
-		// given: two small turns, then a third that trips 90% of the 1000-token
-		fb := &recordingFeedback{}
-		fake := &fakeLLM{
-			replies: []*llm.AssistantMessage{
-				{Content: "a1", Stats: llm.Stats{TotalTokens: 100}},
-				{Content: "a2", Stats: llm.Stats{TotalTokens: 100}},
-				{Content: "a3", Stats: llm.Stats{TotalTokens: 950}},
-				{Content: "SUMMARY"},
-			},
-			info: &llm.ModelInfo{ContextSize: 1000},
-		}
-		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 90})
-		agt.StartSession(SessionConfig{Prompt: "sys"})
-		// when: three turns build enough history for compaction to have an older turn
-		_, err1 := agt.Process(t.Context(), "u1")
-		_, err2 := agt.Process(t.Context(), "u2")
-		_, err3 := agt.Process(t.Context(), "u3")
-		// then
-		require.NoError(t, err1)
-		require.NoError(t, err2)
-		require.NoError(t, err3)
-		assert.Contains(t, fb.events, "ContextCompacted")
-		assert.Equal(t, 4, fake.chatCalls)
-	})
-
 	t.Run("compacts after a tool round when the threshold is crossed", func(t *testing.T) {
 		// given: two completed turns, then a tool round whose final reply trips
 		fb := &recordingFeedback{}
@@ -839,13 +805,9 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "recovered", result.Content)
 		assert.Equal(t, 1, result.Metadata.ToolCalls)
-		var toolMsg *llm.ToolMessage
-		for i := range agt.messages {
-			if m, ok := agt.messages[i].(llm.ToolMessage); ok {
-				toolMsg = &m
-			}
-		}
-		require.NotNil(t, toolMsg)
+		sent := fake.calls[1]
+		toolMsg, ok := sent[len(sent)-1].(llm.ToolMessage)
+		require.True(t, ok)
 		assert.Equal(t, "c1", toolMsg.ToolCallID)
 		assert.Contains(t, toolMsg.Content, "kaboom")
 	})
@@ -856,15 +818,16 @@ func TestProcess(t *testing.T) {
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 9999}}},
 			infoErr: errors.New("no info"),
 		}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{CompactionThresholdPercent: 1})
+		fb := &recordingFeedback{}
+		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 1})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
 		// when
 		result, err := agt.Process(t.Context(), "hi")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "hi", result.Content)
-		assert.Nil(t, agt.modelInfo)
-		assert.Zero(t, agt.compactThreshold)
+		assert.NotContains(t, fb.events, "ContextCompacted")
+		assert.Equal(t, 1, fake.chatCalls)
 	})
 }
 

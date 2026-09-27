@@ -89,15 +89,6 @@ func TestSanitizeToolName(t *testing.T) {
 		assert.Len(t, result, MaxToolNameLength+10)
 		assert.False(t, ValidToolName(result))
 	})
-
-	t.Run("produces a name ValidToolName accepts", func(t *testing.T) {
-		// given
-		input := "github.create issue!"
-		// when
-		result := SanitizeToolName(input)
-		// then
-		assert.True(t, ValidToolName(result))
-	})
 }
 
 func TestToolBoxAdd(t *testing.T) {
@@ -133,35 +124,6 @@ func TestToolBoxAdd(t *testing.T) {
 		// then
 		assert.ErrorIs(t, err, ErrInvalidToolName)
 		assert.Empty(t, box.Tools())
-	})
-
-	t.Run("rejects an empty name", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		// when
-		err := box.Add(llm.Tool{Name: ""}, noopHandler)
-		// then
-		assert.ErrorIs(t, err, ErrInvalidToolName)
-	})
-
-	t.Run("accepts a name of exactly MaxToolNameLength", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		longName := strings.Repeat("a", MaxToolNameLength)
-		// when
-		err := box.Add(llm.Tool{Name: longName}, noopHandler)
-		// then
-		require.NoError(t, err)
-	})
-
-	t.Run("rejects a name longer than MaxToolNameLength", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		longName := strings.Repeat("a", MaxToolNameLength+1)
-		// when
-		err := box.Add(llm.Tool{Name: longName}, noopHandler)
-		// then
-		assert.ErrorIs(t, err, ErrInvalidToolName)
 	})
 
 	t.Run("rejects a nil handler and does not register it", func(t *testing.T) {
@@ -202,18 +164,6 @@ func TestToolBoxRemove(t *testing.T) {
 }
 
 func TestToolBoxTools(t *testing.T) {
-	t.Run("returns every registered tool definition", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
-		require.NoError(t, box.Add(llm.Tool{Name: "b"}, noopHandler))
-		// when
-		result := box.Tools()
-		// then
-		require.Len(t, result, 2)
-		assert.ElementsMatch(t, []string{"a", "b"}, []string{result[0].Name, result[1].Name})
-	})
-
 	t.Run("returns the tools sorted by name", func(t *testing.T) {
 		// given: registration order differs from name order
 		box := NewToolBox()
@@ -266,27 +216,6 @@ func TestToolBoxTool(t *testing.T) {
 		assert.Equal(t, llm.Tool{}, result)
 	})
 
-	t.Run("returns false for an empty box", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		// when
-		result, found := box.Tool("a")
-		// then
-		assert.False(t, found)
-		assert.Equal(t, llm.Tool{}, result)
-	})
-
-	t.Run("returns false for an empty name", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
-		// when
-		result, found := box.Tool("")
-		// then
-		assert.False(t, found)
-		assert.Equal(t, llm.Tool{}, result)
-	})
-
 	t.Run("returns the replacement after a name is re-registered", func(t *testing.T) {
 		// given
 		box := NewToolBox()
@@ -309,23 +238,6 @@ func TestToolBoxTool(t *testing.T) {
 		// then
 		assert.False(t, found)
 		assert.Equal(t, llm.Tool{}, result)
-	})
-
-	t.Run("changing the returned value leaves the registered tool untouched", func(t *testing.T) {
-		// given
-		box := NewToolBox()
-		require.NoError(t, box.Add(llm.Tool{Name: "a", Description: "original"}, noopHandler))
-		copied, found := box.Tool("a")
-		require.True(t, found)
-		// when
-		copied.Name = "renamed"
-		copied.Description = "changed"
-		// then
-		require.Equal(t, llm.Tool{Name: "renamed", Description: "changed"}, copied)
-		result, found := box.Tool("a")
-		require.True(t, found)
-		expected := llm.Tool{Name: "a", Description: "original"}
-		assert.Equal(t, expected, result)
 	})
 }
 

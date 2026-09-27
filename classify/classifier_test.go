@@ -126,6 +126,34 @@ func TestClassifierClassify(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNoQuestions)
 	})
 
+	t.Run("rejects a yes/no question that describes only one answer", func(t *testing.T) {
+		testCases := []struct {
+			name     string
+			question Question
+		}{
+			{name: "only yes described", question: YesNo{Instructions: "Is it?", True: "It is"}},
+			{name: "only no described", question: YesNo{Instructions: "Is it?", False: "It is not"}},
+			{name: "only yes described by pointer", question: &YesNo{Instructions: "Is it?", True: "It is"}},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				// given
+				c := &Classifier{provider: fakeProvider{
+					classifyFunc: func(context.Context, Request) (*Response, error) {
+						return nil, errors.New("provider must not be called")
+					},
+				}}
+				request := Request{Questions: map[string]Question{"q": testCase.question}}
+				// when
+				result, err := c.Classify(t.Context(), request)
+				// then
+				assert.Nil(t, result)
+				assert.ErrorIs(t, err, ErrInvalidQuestion)
+			})
+		}
+	})
+
 	t.Run("propagates the provider error", func(t *testing.T) {
 		// given
 		expectedErr := errors.New("boom")

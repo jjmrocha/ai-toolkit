@@ -26,9 +26,10 @@ type Question interface {
 type YesNo struct {
 	// Instructions is the yes/no question to evaluate.
 	Instructions string
-	// True describes what a yes means. Optional.
+	// True describes what a yes means. Optional, but set together with False:
+	// [Classifier.Classify] rejects a question that describes only one answer.
 	True string
-	// False describes what a no means. Optional.
+	// False describes what a no means. Optional, but set together with True.
 	False string
 }
 

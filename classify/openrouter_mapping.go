@@ -89,21 +89,11 @@ func toORQuestions(questions map[string]Question) map[string]orQuestion {
 }
 
 func toORYesNoCriteria(question YesNo) any {
-	criteria := make(map[string]string, 2)
-
-	if question.True != "" {
-		criteria["true"] = question.True
-	}
-
-	if question.False != "" {
-		criteria["false"] = question.False
-	}
-
-	if len(criteria) == 0 {
+	if question.True == "" && question.False == "" {
 		return nil
 	}
 
-	return criteria
+	return map[string]string{"true": question.True, "false": question.False}
 }
 
 func toORChoiceCriteria(question Choice) map[string]*string {

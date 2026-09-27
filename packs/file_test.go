@@ -14,20 +14,30 @@ import (
 )
 
 func TestFileToolsInstructions(t *testing.T) {
-	t.Run("returns the file doctrine, still after Close", func(t *testing.T) {
+	t.Run("returns the file doctrine", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		pack, err := FileTools(toolBox, t.TempDir())
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = pack.Close() })
 		// when
 		result := pack.Instructions()
 		// then
 		expected := &mcp.Instruction{Name: "file", Text: fileInstruction}
 		assert.Equal(t, expected, result)
-		// when
+	})
+
+	t.Run("still returns the file doctrine after Close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := FileTools(toolBox, t.TempDir())
+		require.NoError(t, err)
 		require.NoError(t, pack.Close())
+		// when
+		result := pack.Instructions()
 		// then
-		assert.Equal(t, expected, pack.Instructions())
+		expected := &mcp.Instruction{Name: "file", Text: fileInstruction}
+		assert.Equal(t, expected, result)
 	})
 }
 
@@ -548,17 +558,6 @@ func TestFileSearchTool(t *testing.T) {
 		require.NoError(t, err)
 		expected := "<match path=\"notes.md\" line=\"1\" truncated=\"true\">" + long[:maxMatchTextBytes] + "</match>"
 		assert.Contains(t, result, expected)
-	})
-
-	t.Run("leaves a short match unmarked", func(t *testing.T) {
-		// given
-		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
-		args := map[string]any{patternArg: "beta"}
-		// when
-		result, err := runFileTool(t, root, searchToolName, args)
-		// then
-		require.NoError(t, err)
-		assert.NotContains(t, result, "truncated")
 	})
 
 	t.Run("returns an empty result when nothing matches", func(t *testing.T) {

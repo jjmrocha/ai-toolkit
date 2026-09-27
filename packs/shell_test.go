@@ -72,20 +72,30 @@ func TestShellTools(t *testing.T) {
 }
 
 func TestShellToolsInstructions(t *testing.T) {
-	t.Run("returns the shell doctrine, still after Close", func(t *testing.T) {
+	t.Run("returns the shell doctrine", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		pack, err := ShellTools(toolBox)
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = pack.Close() })
 		// when
 		result := pack.Instructions()
 		// then
 		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
 		assert.Equal(t, expected, result)
-		// when
+	})
+
+	t.Run("still returns the shell doctrine after Close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := ShellTools(toolBox)
+		require.NoError(t, err)
 		require.NoError(t, pack.Close())
+		// when
+		result := pack.Instructions()
 		// then
-		assert.Equal(t, expected, pack.Instructions())
+		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
+		assert.Equal(t, expected, result)
 	})
 }
 

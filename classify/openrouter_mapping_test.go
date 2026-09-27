@@ -39,16 +39,6 @@ func TestToORQuestions(t *testing.T) {
 		assert.Nil(t, result["is_urgent"].Criteria)
 	})
 
-	t.Run("keeps the described side of a half-described yes/no question", func(t *testing.T) {
-		// given
-		questions := map[string]Question{"is_urgent": YesNo{Instructions: "Urgent?", True: "Time-sensitive"}}
-		expected := map[string]string{"true": "Time-sensitive"}
-		// when
-		result := toORQuestions(questions)
-		// then
-		assert.Equal(t, expected, result["is_urgent"].Criteria)
-	})
-
 	t.Run("maps a choice, sending null for an option with no description", func(t *testing.T) {
 		// given
 		questions := map[string]Question{
@@ -156,27 +146,15 @@ func TestFromORToResponse(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
-	errorCases := []struct {
-		name    string
-		answers map[string]orAnswer
-	}{
-		{
-			name:    "a question is left unanswered",
-			answers: map[string]orAnswer{"is_bug": {Type: "noul", Noul: 0.96}},
-		},
-	}
-
-	for _, tc := range errorCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// given
-			apiResp := orDecisionResponse{Answers: tc.answers}
-			// when
-			result, err := fromORToResponse(apiResp, questions)
-			// then
-			assert.Nil(t, result)
-			assert.ErrorIs(t, err, ErrMissingAnswer)
-		})
-	}
+	t.Run("a question is left unanswered", func(t *testing.T) {
+		// given
+		apiResp := orDecisionResponse{Answers: map[string]orAnswer{"is_bug": {Type: "noul", Noul: 0.96}}}
+		// when
+		result, err := fromORToResponse(apiResp, questions)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrMissingAnswer)
+	})
 
 	malformedCases := []struct {
 		name   string

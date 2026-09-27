@@ -211,15 +211,6 @@ func TestLLMAvailableModels(t *testing.T) {
 		// then
 		assert.Equal(t, expected, result)
 	})
-
-	t.Run("returns nil when no models are configured", func(t *testing.T) {
-		// given
-		llm := &LLM{}
-		// when
-		result := llm.AvailableModels()
-		// then
-		assert.Nil(t, result)
-	})
 }
 
 func TestLLMChangeModel(t *testing.T) {

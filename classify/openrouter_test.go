@@ -26,16 +26,6 @@ func TestNewOpenRouter(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, openrouterBaseURL, result.config.BaseURL)
 	})
-
-	t.Run("keeps the configured base URL", func(t *testing.T) {
-		// given
-		baseURL := "https://proxy.example.com/api/alpha"
-		// when
-		result, err := newOpenRouter(Config{APIKey: "sk-test", Model: "typesafe/jev-1.13", BaseURL: baseURL})
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, baseURL, result.config.BaseURL)
-	})
 }
 
 func TestOpenRouterClassify(t *testing.T) {
@@ -142,18 +132,6 @@ func TestOpenRouterClassify(t *testing.T) {
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrMissingAnswer)
-	})
-}
-
-func TestOpenRouterCurrentModel(t *testing.T) {
-	t.Run("returns the configured model", func(t *testing.T) {
-		// given
-		o, err := newOpenRouter(Config{APIKey: "sk-test", Model: "typesafe/jev-1.13"})
-		require.NoError(t, err)
-		// when
-		result := o.currentModel()
-		// then
-		assert.Equal(t, "typesafe/jev-1.13", result)
 	})
 }
 

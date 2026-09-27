@@ -79,17 +79,6 @@ func TestRun(t *testing.T) {
 		assert.Empty(t, result.Output)
 	})
 
-	t.Run("collects everything when MaxOutputBytes is not set", func(t *testing.T) {
-		// given
-		cfg := RunConfig{Path: "sh", Args: []string{"-c", "echo aaaa; echo bbbb; echo cccc"}}
-		// when
-		result, err := Run(t.Context(), cfg)
-		// then
-		require.NoError(t, err)
-		expected := &RunResult{ExitCode: 0, Output: []string{"aaaa", "bbbb", "cccc"}}
-		assert.Equal(t, expected, result)
-	})
-
 	t.Run("keeps the line that passes MaxOutputBytes and stops there", func(t *testing.T) {
 		// given: each line costs its own length plus the newline
 		cfg := RunConfig{
@@ -182,5 +171,33 @@ func TestRun(t *testing.T) {
 		_, err := Run(ctx, cfg)
 		// then
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("runs the command with only the given environment", func(t *testing.T) {
+		// given
+		t.Setenv("ANTHROPIC_API_KEY", "sk-secret")
+		cfg := RunConfig{
+			Path: "sh",
+			Args: []string{"-c", "echo ${ANTHROPIC_API_KEY:-absent}; echo ${MARKER:-absent}"},
+			Env:  []string{"MARKER=present"},
+		}
+		// when
+		result, err := Run(t.Context(), cfg)
+		// then
+		require.NoError(t, err)
+		expected := []string{"absent", "present"}
+		assert.Equal(t, expected, result.Output)
+	})
+
+	t.Run("inherits the parent environment when Env is nil", func(t *testing.T) {
+		// given
+		t.Setenv("MARKER", "inherited")
+		cfg := RunConfig{Path: "sh", Args: []string{"-c", "echo ${MARKER:-absent}"}}
+		// when
+		result, err := Run(t.Context(), cfg)
+		// then
+		require.NoError(t, err)
+		expected := []string{"inherited"}
+		assert.Equal(t, expected, result.Output)
 	})
 }

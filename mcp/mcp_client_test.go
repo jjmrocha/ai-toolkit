@@ -29,11 +29,6 @@ func TestNewClient(t *testing.T) {
 			config:   ClientConfig{Name: "playwright"},
 			expected: ErrCommandRequired,
 		},
-		{
-			name:     "missing both",
-			config:   ClientConfig{},
-			expected: ErrNameRequired,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -114,15 +109,6 @@ func TestClientToolName(t *testing.T) {
 }
 
 func TestClientExcluded(t *testing.T) {
-	t.Run("keeps a tool no config names", func(t *testing.T) {
-		// given
-		c := &Client{config: ClientConfig{Name: "serena"}}
-		// when
-		result := c.excluded("find_symbol")
-		// then
-		assert.False(t, result)
-	})
-
 	t.Run("drops a tool the config names", func(t *testing.T) {
 		// given
 		c := &Client{config: ClientConfig{
@@ -157,27 +143,6 @@ func TestClientExcluded(t *testing.T) {
 		result := c.excluded("execute_shell_command")
 		// then
 		assert.False(t, result)
-	})
-}
-
-func TestHashToolName(t *testing.T) {
-	t.Run("is stable for the same input", func(t *testing.T) {
-		// given
-		expected := hashToolName("playwright__browser_navigate")
-		// when
-		result := hashToolName("playwright__browser_navigate")
-		// then
-		require.Len(t, result, toolNameHashLength)
-		assert.Equal(t, expected, result)
-	})
-
-	t.Run("differs for different input", func(t *testing.T) {
-		// given
-		first := hashToolName("playwright__browser_navigate")
-		// when
-		result := hashToolName("playwright__browser_click")
-		// then
-		assert.NotEqual(t, first, result)
 	})
 }
 

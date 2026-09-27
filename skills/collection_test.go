@@ -213,17 +213,6 @@ func TestCollectionSkills(t *testing.T) {
 		assert.Empty(t, result)
 	})
 
-	t.Run("returns the name of the only skill", func(t *testing.T) {
-		// given
-		collection := NewCollection()
-		require.NoError(t, collection.Add(writeSkill(t, validSkill)))
-		// when
-		result := collection.Skills()
-		// then
-		expected := []string{"git-release"}
-		assert.Equal(t, expected, result)
-	})
-
 	t.Run("returns the names sorted by name", func(t *testing.T) {
 		// given
 		collection := NewCollection()

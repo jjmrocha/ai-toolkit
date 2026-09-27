@@ -191,17 +191,6 @@ func TestToAnthropicMessages(t *testing.T) {
 		assert.Empty(t, result)
 	})
 
-	t.Run("gives a tool call without arguments an empty input map", func(t *testing.T) {
-		// given: a seeded assistant turn whose tool call has nil arguments
-		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}
-		// when
-		result := toAnthropicMessages(messages)
-		// then
-		require.Len(t, result, 1)
-		require.Len(t, result[0].Content, 1)
-		assert.NotNil(t, result[0].Content[0].Input)
-	})
-
 	t.Run("sends a tool call without arguments as an empty JSON object", func(t *testing.T) {
 		// given: the API rejects a tool_use whose input is null
 		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}

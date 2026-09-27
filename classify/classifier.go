@@ -2,6 +2,7 @@ package classify
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -49,6 +50,17 @@ func New(cfg Config) (*Classifier, error) {
 func (c *Classifier) Classify(ctx context.Context, req Request) (*Response, error) {
 	if len(req.Questions) == 0 {
 		return nil, ErrNoQuestions
+	}
+
+	for id, q := range req.Questions {
+		if q.Type() != YesNoType {
+			continue
+		}
+
+		question := questionValue[YesNo](q)
+		if (question.True == "") != (question.False == "") {
+			return nil, fmt.Errorf("%w: yes/no question %q describes one answer, expected both or neither", ErrInvalidQuestion, id)
+		}
 	}
 
 	start := time.Now()

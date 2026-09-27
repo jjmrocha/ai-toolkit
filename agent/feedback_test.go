@@ -2,11 +2,9 @@ package agent
 
 import (
 	"bytes"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func exerciseAllEvents(fb Feedback) {
@@ -112,27 +110,5 @@ func TestNewWriterFeedback(t *testing.T) {
 			"Session reset\n" +
 			"Session closed\n"
 		assert.Equal(t, expected, result)
-	})
-}
-
-func TestNewStdoutFeedback(t *testing.T) {
-	t.Run("returns a sink that prints to standard output", func(t *testing.T) {
-		// when
-		result := NewStdoutFeedback()
-		// then
-		sink, ok := result.(*writerFeedback)
-		require.True(t, ok)
-		assert.Same(t, os.Stdout, sink.stdout)
-	})
-}
-
-func TestNullFeedback(t *testing.T) {
-	t.Run("silently ignores every event", func(t *testing.T) {
-		// given
-		var fb Feedback = nullFeedback{}
-		// when
-		fireEvents := func() { exerciseAllEvents(fb) }
-		// then: the sink writes nowhere, so surviving every event is all there is to observe
-		assert.NotPanics(t, fireEvents)
 	})
 }

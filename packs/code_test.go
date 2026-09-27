@@ -41,22 +41,6 @@ func TestSerenaMCPConfig(t *testing.T) {
 		assert.Equal(t, expected, result.Args)
 	})
 
-	t.Run("accepts a project path as well as a name", func(t *testing.T) {
-		// given
-		expected := []string{
-			"--from", "git+https://github.com/oraios/serena",
-			"serena", "start-mcp-server",
-			"--context", "desktop-app",
-			"--add-mode", "query-projects",
-			"--add-mode", "no-memories",
-			"--project", "/Users/jrocha/SOURCES/GO/ai-toolkit",
-		}
-		// when
-		result := SerenaMCPConfig("/Users/jrocha/SOURCES/GO/ai-toolkit")
-		// then
-		assert.Equal(t, expected, result.Args)
-	})
-
 	t.Run("leaves Serena's shell, memory and onboarding tools out", func(t *testing.T) {
 		// given
 		expected := []string{

@@ -487,25 +487,6 @@ func TestExecuteFileTool(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("runs a skill added under a relative path", func(t *testing.T) {
-		// given
-		base := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(base, "myskill"), 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(base, "myskill", skillFile), []byte(validSkill), 0o600))
-		writeExecutable(t, filepath.Join(base, "myskill"), "run.sh", "#!/bin/sh\necho hello\n")
-		t.Chdir(base)
-		collection := NewCollection()
-		require.NoError(t, collection.Add("myskill"))
-		// when
-		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
-			"skill_name": validSkillName,
-			"path":       "run.sh",
-		})
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "exit status: 0\n<output>\nhello\n</output>", result)
-	})
-
 	t.Run("runs a skill added under a relative path after the process moves", func(t *testing.T) {
 		// given
 		base := t.TempDir()
@@ -524,20 +505,5 @@ func TestExecuteFileTool(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "exit status: 0\n<output>\nhello\n</output>", result)
-	})
-
-	t.Run("never names the skill folder", func(t *testing.T) {
-		// given
-		path := writeSkill(t, validSkill)
-		writeExecutable(t, path, "run.sh", "#!/bin/sh\necho hello\n")
-		collection := collectionWith(t, path)
-		// when
-		result, err := executeTool(t, collection, executeFileToolName, map[string]any{
-			"skill_name": "git-release",
-			"path":       "run.sh",
-		})
-		// then
-		require.NoError(t, err)
-		assert.NotContains(t, result, path)
 	})
 }

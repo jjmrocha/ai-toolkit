@@ -115,8 +115,8 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 		Schema: tools.NewObjectBuilder().
 			String(inputArg, "the content to judge", true).
 			String(instructionsArg, "the yes/no question to answer about the input", true).
-			String(trueArg, "what a yes means", false).
-			String(falseArg, "what a no means", false).
+			String(trueArg, "what a yes means", true).
+			String(falseArg, "what a no means", true).
 			Build(),
 	}
 
@@ -184,11 +184,11 @@ func askYesNo(ctx context.Context, client *classify.Classifier, args map[string]
 
 	question := classify.YesNo{Instructions: instructions}
 
-	if question.True, err = optionalString(arguments, trueArg); err != nil {
+	if question.True, err = arguments.GetString(trueArg); err != nil {
 		return "", err
 	}
 
-	if question.False, err = optionalString(arguments, falseArg); err != nil {
+	if question.False, err = arguments.GetString(falseArg); err != nil {
 		return "", err
 	}
 

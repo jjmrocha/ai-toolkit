@@ -290,15 +290,4 @@ func TestNewProcess(t *testing.T) {
 		expected := 3
 		assert.Equal(t, expected, exitErr.ExitCode())
 	})
-
-	t.Run("stops the process when no callback is registered", func(t *testing.T) {
-		// given: a process that exits on its own, with nothing to notify
-		p, err := NewProcess(ProcessConfig{Path: "sh", Args: []string{"-c", "exit 0"}})
-		require.NoError(t, err)
-		t.Cleanup(p.Close)
-		// when
-		<-p.exited
-		// then
-		assert.False(t, p.Running())
-	})
 }

@@ -80,33 +80,3 @@ func TestInheritedEnv(t *testing.T) {
 		require.True(t, slices.IsSorted(result))
 	})
 }
-
-func TestProcessEnv(t *testing.T) {
-	t.Run("runs the command with only the given environment", func(t *testing.T) {
-		// given
-		t.Setenv("ANTHROPIC_API_KEY", "sk-secret")
-		cfg := RunConfig{
-			Path: "sh",
-			Args: []string{"-c", "echo ${ANTHROPIC_API_KEY:-absent}; echo ${MARKER:-absent}"},
-			Env:  []string{"MARKER=present"},
-		}
-		// when
-		result, err := Run(t.Context(), cfg)
-		// then
-		require.NoError(t, err)
-		expected := []string{"absent", "present"}
-		assert.Equal(t, expected, result.Output)
-	})
-
-	t.Run("inherits the parent environment when Env is nil", func(t *testing.T) {
-		// given
-		t.Setenv("MARKER", "inherited")
-		cfg := RunConfig{Path: "sh", Args: []string{"-c", "echo ${MARKER:-absent}"}}
-		// when
-		result, err := Run(t.Context(), cfg)
-		// then
-		require.NoError(t, err)
-		expected := []string{"inherited"}
-		assert.Equal(t, expected, result.Output)
-	})
-}

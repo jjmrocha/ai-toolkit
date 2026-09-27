@@ -110,6 +110,7 @@ Worth knowing:
 - Every question in a request is answered in parallel and in isolation: none of them sees another's answer.
 - `Answer` is a sealed interface — `YesNoAnswer`, `ChoiceAnswer`, `ScoreAnswer` — so switch on `Type()` before reading an answer's fields.
 - `YesNoAnswer.Value` is the probability of yes, not a severity: `0.5` means undecided, not "medium".
+- A `YesNo` describes both answers or neither: one of `True` and `False` without the other fails with `ErrInvalidQuestion` before anything is sent.
 - `ScoreAnswer.Score` is a probability-weighted position across your levels, so it lands between them.
 - `Confidence` describes how concentrated the probabilities are. What to do below a threshold is yours to decide; the package never decides for you.
 - `Stats` reports the input tokens — the only ones providers bill — and how long the call took.
@@ -482,7 +483,7 @@ defer pack.Close()
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `classify_yes_no` | `input`, `instructions`; optionally `true` and `false`, what each answer means | `{"yes_probability": 0.87}` |
+| `classify_yes_no` | `input`, `instructions`, `true` and `false` — what each answer means | `{"yes_probability": 0.87}` |
 | `classify_choice` | `input`, `instructions`, `options` — each a `name` and an optional `description` | `{"selected": "payments", "probabilities": {"payments": 0.81, "frontend": 0.19}, "confidence": 0.62}` |
 | `classify_score` | `input`, `instructions`, `levels`, lowest to highest | `{"score": 1.4, "probabilities": [{"level": "Next release", "probability": 0.1}, …], "confidence": 0.3}` |
 

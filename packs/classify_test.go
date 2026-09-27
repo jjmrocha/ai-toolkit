@@ -17,21 +17,32 @@ import (
 )
 
 func TestClassifyToolsInstructions(t *testing.T) {
-	t.Run("returns the classify doctrine, still after Close", func(t *testing.T) {
+	t.Run("returns the classify doctrine", func(t *testing.T) {
 		// given
 		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
 		toolBox := tools.NewToolBox()
 		pack, err := ClassifyTools(toolBox, client)
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = pack.Close() })
 		// when
 		result := pack.Instructions()
 		// then
 		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
 		assert.Equal(t, expected, result)
-		// when
+	})
+
+	t.Run("still returns the classify doctrine after Close", func(t *testing.T) {
+		// given
+		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		toolBox := tools.NewToolBox()
+		pack, err := ClassifyTools(toolBox, client)
+		require.NoError(t, err)
 		require.NoError(t, pack.Close())
+		// when
+		result := pack.Instructions()
 		// then
-		assert.Equal(t, expected, pack.Instructions())
+		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
+		assert.Equal(t, expected, result)
 	})
 }
 
@@ -133,10 +144,16 @@ func TestClassifyTools(t *testing.T) {
 		args := map[string]any{
 			"input":        "My checkout page shows a blank screen after I click Pay.",
 			"instructions": "Is the customer reporting a defect?",
+			"true":         "Something is broken",
+			"false":        "A feature request or a question",
 		}
 		expected := map[string]any{
 			"type":         "noul",
 			"instructions": "Is the customer reporting a defect?",
+			"criteria": map[string]any{
+				"true":  "Something is broken",
+				"false": "A feature request or a question",
+			},
 		}
 		// when
 		result, err := runClassifyTool(t, client, classifyYesNoToolName, args)
@@ -146,25 +163,36 @@ func TestClassifyTools(t *testing.T) {
 		assert.Equal(t, expected, server.question)
 	})
 
-	t.Run("yes_no sends what yes and no mean when given", func(t *testing.T) {
-		// given
-		client, server := newClassifyServer(t, http.StatusOK,
-			`{"answers":{"question":{"type":"noul","noul":0.2}}}`)
-		args := map[string]any{
-			"input":        "The page loads slowly on 3G.",
-			"instructions": "Is the customer reporting a defect?",
-			"true":         "Something is broken",
-			"false":        "A feature request or a question",
+	t.Run("yes_no rejects a call that leaves out what yes or no means without asking the model", func(t *testing.T) {
+		testCases := []struct {
+			name string
+			args map[string]any
+		}{
+			{
+				name: "neither described",
+				args: map[string]any{"input": "s", "instructions": "i"},
+			},
+			{
+				name: "only yes described",
+				args: map[string]any{"input": "s", "instructions": "i", "true": "t"},
+			},
+			{
+				name: "only no described",
+				args: map[string]any{"input": "s", "instructions": "i", "false": "f"},
+			},
 		}
-		expected := map[string]any{
-			"true":  "Something is broken",
-			"false": "A feature request or a question",
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				// given
+				client, server := newClassifyServer(t, http.StatusOK, `{}`)
+				// when
+				_, err := runClassifyTool(t, client, classifyYesNoToolName, testCase.args)
+				// then
+				require.ErrorIs(t, err, tools.ErrFieldNotFound)
+				assert.Zero(t, server.requests)
+			})
 		}
-		// when
-		_, err := runClassifyTool(t, client, classifyYesNoToolName, args)
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, expected, server.question["criteria"])
 	})
 
 	t.Run("choice answers with the option picked and the probability of each", func(t *testing.T) {
@@ -291,7 +319,7 @@ func TestClassifyTools(t *testing.T) {
 		// given
 		client, _ := newClassifyServer(t, http.StatusBadRequest,
 			`{"error":{"message":"instructions must not be empty"}}`)
-		args := map[string]any{"input": "s", "instructions": "i"}
+		args := map[string]any{"input": "s", "instructions": "i", "true": "t", "false": "f"}
 		// when
 		_, err := runClassifyTool(t, client, classifyYesNoToolName, args)
 		// then
