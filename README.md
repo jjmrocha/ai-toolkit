@@ -316,7 +316,7 @@ projects, backed by
 prerequisite is the `uvx` executable on `PATH`.
 
 ```go
-pack, err := packs.CodingTools(ctx, toolBox)
+pack, err := packs.CodingTools(ctx, toolBox, "ai-toolkit")
 if err != nil {
 	log.Fatal(err)
 }
@@ -326,12 +326,12 @@ defer pack.Close()
 
 Worth knowing:
 
-- The server starts with no project. The model reaches a code base by calling `serena__activate_project`, and the symbolic tools fail until it does.
-- The pack carries no shell: Serena's `execute_shell_command` is left out through `ExcludedTools`, and nothing takes its place. A model that has to build or run what it wrote needs `ShellTools` on the same `ToolBox`, which registers `shell_run` under a pack of its own, closed separately. To give Serena its own shell back instead, take `packs.SerenaMCPConfig()`, clear its `ExcludedTools`, and go through `mcp.NewClient` directly.
+- The third argument names a project to activate at startup: a project name or a path, whichever way `serena__activate_project` takes one, and the same repository can follow both. An empty string leaves the server with no project, so the model reaches a code base only by calling `serena__activate_project` first — the call still switches projects either way.
+- The pack carries no shell: Serena's `execute_shell_command` is left out through `ExcludedTools`, and nothing takes its place. A model that has to build or run what it wrote needs `ShellTools` on the same `ToolBox`, which registers `shell_run` under a pack of its own, closed separately. To give Serena its own shell back instead, take `packs.SerenaMCPConfig(project)`, clear its `ExcludedTools`, and go through `mcp.NewClient` directly.
 - Serena's memory tools — `write_memory`, `read_memory`, `list_memories`, `edit_memory`, `delete_memory` and `rename_memory` — and its memory-backed `onboarding` are left out, so the model keeps no project memories through this pack. Serena starts in its `no-memories` mode, which drops them on the server and tells the model in Serena's own instructions that memories are unavailable; `ExcludedTools` names them as well, so they stay out even if a later Serena changes what the mode covers.
 - One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
 - This pack reads and writes files with the authority of the program that started it — the whole filesystem — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with that reach, and remember that anything the model reads out of a repository can steer what it does next.
-- The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig()`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
+- The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig(project)`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
 - Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is a tool call away as `serena__initial_instructions`. It is worth having the model read it early, because the tool descriptions alone do not convey the workflow.
 - Serena's tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes minus the exclusions, so it moves with Serena's own development rather than being fixed here.
 - The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
@@ -339,7 +339,7 @@ Worth knowing:
 - `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
 - A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind. A server that later dies on its own drops its own tools.
 - This is a far wider pack than `WebTools`: 23 tools carrying roughly 27 KB of descriptions and schemas, nearly twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
-- `packs.SerenaMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` and `no-memories` modes added and `execute_shell_command`, the memory tools and `onboarding` in `ExcludedTools` — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
+- `packs.SerenaMCPConfig(project)` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` and `no-memories` modes added and `execute_shell_command`, the memory tools and `onboarding` in `ExcludedTools`, plus a `--project` argument when the project is non-empty — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
 
 ### `ShellTools`
 
