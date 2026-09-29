@@ -172,11 +172,42 @@ func TestAnthropicChat(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Done", result.Content)
 		expected := []anthropicContentBlock{
-			{Type: "thinking", Thinking: "Let me think.", Signature: "sig-123"},
+			{Type: "thinking", Thinking: new("Let me think."), Signature: "sig-123"},
 			{Type: "redacted_thinking", Data: "opaque"},
 			{Type: "text", Text: "Done"},
 		}
 		assert.Equal(t, expected, result.raw)
+	})
+
+	t.Run("sends an omitted thinking block back with an empty thinking field", func(t *testing.T) {
+		// given
+		var (
+			calls   int
+			gotBody []byte
+		)
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if calls == 1 {
+				writeSSE(t, w,
+					`{"type":"message_start","message":{"content":[],"usage":{}}}`,
+					`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+					`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-123"}}`,
+					`{"type":"content_block_stop","index":0}`,
+					`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}`,
+					`{"type":"message_stop"}`,
+				)
+				return
+			}
+			gotBody, _ = io.ReadAll(r.Body)
+			writeSSE(t, w, anthropicTextStream("ok")...)
+		})
+		first, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		require.NoError(t, err)
+		// when
+		_, err = a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}, *first, UserMessage{Content: "Again"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, string(gotBody), `{"type":"thinking","thinking":"","signature":"sig-123"}`)
 	})
 
 	t.Run("returns an error when a delta names a block that was not started", func(t *testing.T) {

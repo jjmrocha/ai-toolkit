@@ -18,7 +18,7 @@ const (
 	anthropicMessagesEndpoint = "/messages"
 	anthropicModelsEndpoint   = "/models"
 	anthropicVersion          = "2023-06-01"
-	defaultMaxTokens          = 4096
+	defaultMaxTokens          = 64000
 )
 
 type anthropic struct {
@@ -185,7 +185,12 @@ func (s *anthropicStream) finishBlock(index int) error {
 	case typeText:
 		block.Text += part
 	case "thinking":
-		block.Thinking += part
+		thinking := part
+		if block.Thinking != nil {
+			thinking = *block.Thinking + part
+		}
+
+		block.Thinking = &thinking
 	case typeToolUse:
 		if part == "" {
 			return nil

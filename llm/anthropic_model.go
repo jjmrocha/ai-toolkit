@@ -42,7 +42,7 @@ type anthropicContentBlock struct {
 	Input     map[string]any `json:"input,omitzero"`
 	ToolUseID string         `json:"tool_use_id,omitempty"`
 	Content   string         `json:"content,omitempty"`
-	Thinking  string         `json:"thinking,omitempty"`
+	Thinking  *string        `json:"thinking,omitempty"`
 	Signature string         `json:"signature,omitempty"`
 	Data      string         `json:"data,omitempty"`
 }
