@@ -7,43 +7,38 @@ import (
 	"time"
 )
 
-// Feedback receives an [Agent]'s lifecycle events as they happen, letting a
-// caller observe progress without changing the conversation. Implementations
-// must not block; an event may fire from within [Agent.Process]. [New] installs
-// a silent default that ignores every event; pass [NewStdoutFeedback] to
-// [Agent.SetFeedback] to print them instead.
+// Feedback receives an [Agent]'s events as they happen, so a caller can follow
+// progress without affecting the conversation. Methods are called from inside
+// [Agent.Process] and must not block. [New] installs a silent Feedback; pass
+// [NewStdoutFeedback] to [Agent.SetFeedback] to print events.
 type Feedback interface {
-	// ToolCalled fires just before the agent executes the named tool, with the
-	// arguments the model supplied for the call. The arguments are nil when the
-	// call carries none, and they arrive with JSON types, so numbers are
-	// float64. The map is the one the tool is about to run with and must not be
-	// modified.
+	// ToolCalled fires just before the agent runs the named tool, with the
+	// arguments the model passed: nil when there are none, and with JSON types, so
+	// numbers are float64. The tool runs with this map; do not modify it.
 	ToolCalled(toolName string, args map[string]any)
-	// ToolReturned fires just after the agent executes the named tool. Tool
-	// calls run one at a time, so it always pairs with the [Feedback.ToolCalled]
-	// immediately before it. result is what the tool returned and is empty when
-	// err is non-nil; err is the failure the call produced, nil on success; and
-	// elapsed is how long the call took.
+	// ToolReturned fires just after the agent runs the named tool. Tools run one
+	// at a time, so it always follows its [Feedback.ToolCalled]. result is what
+	// the tool returned, empty when err is not nil. elapsed is how long the call
+	// took.
 	ToolReturned(toolName string, result string, err error, elapsed time.Duration)
-	// InterimTextReceived fires when a model response that carries tool calls
-	// also carries text, before [Feedback.TokensUsed] for that response. It
-	// never fires for empty text, nor for the final answer, whose text is in
-	// [Response.Content].
+	// InterimTextReceived fires when a response that asks for tools also has text,
+	// before [Feedback.TokensUsed] for it. It never fires for empty text or for
+	// the final answer, which is in [Response.Content].
 	InterimTextReceived(content string)
-	// ContextCompacted fires when the conversation context is compacted to fit
-	// the model's window (see Config.CompactionThresholdPercent).
+	// ContextCompacted fires when the conversation is compacted (see
+	// Config.CompactionThresholdPercent).
 	ContextCompacted()
-	// ContextCompactionFailed fires when a compaction attempt is abandoned
-	// because the summarizing model call failed; the conversation is left
-	// unchanged and compaction is retried after the next completed turn.
+	// ContextCompactionFailed fires when the summarizing model call fails. The
+	// conversation is left as it was, and compaction is tried again after the next
+	// completed turn.
 	ContextCompactionFailed()
 	// ModelInfoUnavailable fires when the model's context window cannot be
-	// fetched, leaving automatic compaction disabled. The fetch is retried
-	// every turn until it succeeds, so the event fires on each failure.
+	// fetched, which turns automatic compaction off. The fetch is retried every
+	// turn, so it fires on each failure.
 	ModelInfoUnavailable()
-	// TokensUsed fires after each intermediate model response, one that carries
-	// tool calls, so callers can track token usage without waiting for the
-	// final answer. The final response's usage is in [Response.Metadata].
+	// TokensUsed fires after each response that asks for tools, so token usage can
+	// be tracked before the final answer. The final answer's usage is in
+	// [Response.Metadata].
 	TokensUsed(totalTokens int)
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
@@ -57,16 +52,14 @@ type writerFeedback struct {
 	stdout io.Writer
 }
 
-// NewStdoutFeedback returns a [Feedback] implementation that prints each event
-// to standard output. [New]'s default is silent; install this with
-// [Agent.SetFeedback] to opt into printing.
+// NewStdoutFeedback returns a [Feedback] that prints each event to standard
+// output. Install it with [Agent.SetFeedback].
 func NewStdoutFeedback() Feedback {
 	return NewWriterFeedback(os.Stdout)
 }
 
-// NewWriterFeedback returns a [Feedback] implementation that prints each event
-// to w. [New]'s default is silent; install this with [Agent.SetFeedback] to opt
-// into printing.
+// NewWriterFeedback returns a [Feedback] that prints each event to w. Install
+// it with [Agent.SetFeedback].
 func NewWriterFeedback(w io.Writer) Feedback {
 	return &writerFeedback{
 		stdout: w,

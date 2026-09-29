@@ -3,6 +3,7 @@ package packs
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -41,16 +42,6 @@ const (
 	maxFileReadBytes  = 1024 * 1024
 )
 
-var fileToolNames = []string{
-	readToolName,
-	writeToolName,
-	editToolName,
-	listToolName,
-	searchToolName,
-	deleteToolName,
-	workdirToolName,
-}
-
 const fileInstruction = `These tools reach only the folder %s and nothing
 outside it; name every file relative to that folder and never absolute. Find
 which file says something with file_search rather than reading the folder
@@ -63,6 +54,7 @@ type filePack struct {
 	toolBox *tools.ToolBox
 	root    *os.Root
 	path    string
+	names   []string
 	once    sync.Once
 }
 
@@ -77,7 +69,7 @@ func (p *filePack) Close() error {
 	var err error
 
 	p.once.Do(func() {
-		for _, name := range fileToolNames {
+		for _, name := range p.names {
 			p.toolBox.Remove(name)
 		}
 
@@ -87,36 +79,33 @@ func (p *filePack) Close() error {
 	return err
 }
 
-// FileTools registers file access confined to root in m, for an agent that
-// produces files without being a coding agent: "file_read" reads a text file a
-// page at a time, "file_write" writes one whole, "file_edit" replaces one piece
-// of text inside one, "file_list" lists a folder, "file_search" finds the lines
-// matching an expression across a folder's files, "file_delete" removes a file
-// or a folder that is already empty, and "file_workdir" reports root's absolute
-// path, which is how the model names a file it made to a tool that works
-// outside root. The returned [ToolPack] removes the seven tools again and
-// releases the root.
+// FileTools registers seven tools in m that work on the files under path and
+// nowhere else:
 //
-// It returns an error, and registers nothing, when root cannot be opened.
+//   - "file_read" reads a text file one page of lines at a time
+//   - "file_write" writes a whole file
+//   - "file_edit" replaces one piece of text in a file
+//   - "file_list" lists one folder
+//   - "file_search" finds the lines that match a regular expression
+//   - "file_delete" removes a file or an empty folder
+//   - "file_workdir" returns the folder's absolute path, for naming a file to a
+//     tool outside the pack
 //
-// The confinement is [os.Root]: paths are relative to root, and one that leaves
-// it — by climbing out, by being absolute, or through a symbolic link — is
-// refused rather than followed. So a pack rooted at a folder cannot touch the
-// rest of the filesystem, which is what separates it from [CodingTools] and
-// [ShellTools]; inside that folder the tools carry the authority of the program
-// that registered them. The boundary is not a secret: "file_workdir",
-// "file_write", "file_list" and the error text all name root's absolute path, so
-// register the pack under a folder whose path is safe to disclose.
+// [ToolPack.Close] removes the tools and closes the folder. FileTools returns an
+// error, and registers nothing, if path cannot be opened.
 //
-// Two refusals are deliberate. "file_edit" writes nothing unless its text
-// appears exactly once, so an edit never lands somewhere the model did not mean.
-// "file_delete" will not empty a folder, so nothing recursive happens behind a
-// single call.
+// The confinement is [os.Root]: a path that climbs out, is absolute, or leaves
+// through a symbolic link is refused. That is what separates this pack from
+// [CodingTools] and [ShellTools]. Inside the folder, the tools have the
+// program's authority. The folder's absolute path is not a secret:
+// "file_workdir", "file_write", "file_list" and error messages all show it, so
+// use a folder whose path is safe to disclose.
 //
-// "file_search" reports paths relative to root, the form the other tools take,
-// so a match is read with "file_read" without translating anything. It passes
-// over a binary file in silence and returns at most 100 matches unless the call
-// asks for more, marking a result it cut short.
+// "file_edit" writes nothing unless the text appears exactly once. "file_delete"
+// refuses a folder that is not empty, so no single call deletes recursively.
+// "file_search" returns paths relative to the folder, ready for "file_read",
+// skips binary files, and returns at most 100 matches unless the call asks for
+// more, marking a result it cut short.
 func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -146,11 +135,6 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				strconv.Itoa(defaultReadLines), false).
 			Build(),
 	}
-	err = m.Add(readTool, pack.readFile)
-	if err != nil {
-		return nil, err
-	}
-
 	writeTool := llm.Tool{
 		Name: writeToolName,
 		Description: "Write a text file, replacing whatever it held. Folders the path needs are created. " +
@@ -161,11 +145,6 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			String(contentArg, "The full content of the file", true).
 			Build(),
 	}
-	err = m.Add(writeTool, pack.writeFile)
-	if err != nil {
-		return nil, err
-	}
-
 	editTool := llm.Tool{
 		Name: editToolName,
 		Description: "Change part of a text file by replacing one piece of text with another. The text to " +
@@ -178,11 +157,6 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			String(newStringArg, "The text to put in its place", true).
 			Build(),
 	}
-	err = m.Add(editTool, pack.editFile)
-	if err != nil {
-		return nil, err
-	}
-
 	listTool := llm.Tool{
 		Name: listToolName,
 		Description: "List what a folder holds, sorted by name: one element per entry, carrying its name, " +
@@ -193,11 +167,6 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				"defaulting to that folder itself", false).
 			Build(),
 	}
-	err = m.Add(listTool, pack.listDir)
-	if err != nil {
-		return nil, err
-	}
-
 	searchTool := llm.Tool{
 		Name: searchToolName,
 		Description: "Search the files of a folder for the lines matching a regular expression, and " +
@@ -217,11 +186,6 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				strconv.Itoa(maxSearchMatches), false).
 			Build(),
 	}
-	err = m.Add(searchTool, pack.searchFiles)
-	if err != nil {
-		return nil, err
-	}
-
 	deleteTool := llm.Tool{
 		Name: deleteToolName,
 		Description: "Delete a file, or a folder that is already empty. A folder that still holds anything " +
@@ -232,11 +196,6 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 				"confined to", true).
 			Build(),
 	}
-	err = m.Add(deleteTool, pack.deleteFile)
-	if err != nil {
-		return nil, err
-	}
-
 	workdirTool := llm.Tool{
 		Name: workdirToolName,
 		Description: "Return the absolute path of the folder these tools work in. The file tools take " +
@@ -244,7 +203,15 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			"outside this folder.",
 		Schema: tools.NewObjectBuilder().Build(),
 	}
-	err = m.Add(workdirTool, pack.workdir)
+	pack.names, err = register(m, []registration{
+		{tool: readTool, handler: pack.readFile},
+		{tool: writeTool, handler: pack.writeFile},
+		{tool: editTool, handler: pack.editFile},
+		{tool: listTool, handler: pack.listDir},
+		{tool: searchTool, handler: pack.searchFiles},
+		{tool: deleteTool, handler: pack.deleteFile},
+		{tool: workdirTool, handler: pack.workdir},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -268,12 +235,12 @@ func (p *filePack) readFile(_ context.Context, args map[string]any) (string, err
 		return "", err
 	}
 
-	offset, err := lineArg(arguments, offsetArg, 1)
+	offset, err := positiveIntArg(arguments, offsetArg, 1)
 	if err != nil {
 		return "", err
 	}
 
-	limit, err := lineArg(arguments, limitArg, defaultReadLines)
+	limit, err := positiveIntArg(arguments, limitArg, defaultReadLines)
 	if err != nil {
 		return "", err
 	}
@@ -362,15 +329,9 @@ func (p *filePack) editFile(_ context.Context, args map[string]any) (string, err
 func (p *filePack) listDir(_ context.Context, args map[string]any) (string, error) {
 	arguments := tools.NewArguments(args)
 
-	path := "."
-
-	if arguments.Exists(pathArg) {
-		value, err := arguments.GetString(pathArg)
-		if err != nil {
-			return "", err
-		}
-
-		path = value
+	path, err := arguments.GetOptionalString(pathArg, ".")
+	if err != nil {
+		return "", err
 	}
 
 	entries, err := fs.ReadDir(p.root.FS(), path)
@@ -401,11 +362,11 @@ func (p *filePack) listDir(_ context.Context, args map[string]any) (string, erro
 }
 
 func renderFileEntry(name string, size int64, path string) string {
-	return "<file name=\"" + name + "\" size=\"" + strconv.FormatInt(size, 10) + "\" path=\"" + path + "\"/>"
+	return fmt.Sprintf(`<file name=%q size="%d" path=%q/>`, name, size, path)
 }
 
 func renderDirEntry(name string, path string) string {
-	return "<dir name=\"" + name + "\" path=\"" + path + "\"/>"
+	return fmt.Sprintf(`<dir name=%q path=%q/>`, name, path)
 }
 
 func renderDir(path string, lines []string) string {
@@ -414,7 +375,7 @@ func renderDir(path string, lines []string) string {
 		listing += "\n"
 	}
 
-	return "<dir path=\"" + path + "\">\n" + listing + "</dir>"
+	return fmt.Sprintf(`<dir path=%q>`, path) + "\n" + listing + "</dir>"
 }
 
 func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string, error) {
@@ -430,35 +391,26 @@ func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string
 		return "", fmt.Errorf("%w: %s: %w", ErrInvalidPattern, patternArg, err)
 	}
 
-	path := "."
-	if arguments.Exists(pathArg) {
-		path, err = arguments.GetString(pathArg)
-		if err != nil {
-			return "", err
-		}
+	path, err := arguments.GetOptionalString(pathArg, ".")
+	if err != nil {
+		return "", err
 	}
 
-	glob := ""
-	if arguments.Exists(globArg) {
-		glob, err = arguments.GetString(globArg)
-		if err != nil {
-			return "", err
-		}
+	glob, err := arguments.GetOptionalString(globArg, "")
+	if err != nil {
+		return "", err
 	}
 
 	if _, err = filepath.Match(glob, ""); err != nil {
 		return "", fmt.Errorf("%w: %s: %w", ErrInvalidPattern, globArg, err)
 	}
 
-	recursive := true
-	if arguments.Exists(recursiveArg) {
-		recursive, err = arguments.GetBool(recursiveArg)
-		if err != nil {
-			return "", err
-		}
+	recursive, err := arguments.GetOptionalBool(recursiveArg, true)
+	if err != nil {
+		return "", err
 	}
 
-	limit, err := lineArg(arguments, limitArg, maxSearchMatches)
+	limit, err := positiveIntArg(arguments, limitArg, maxSearchMatches)
 	if err != nil {
 		return "", err
 	}
@@ -475,6 +427,10 @@ func (p *filePack) searchFiles(ctx context.Context, args map[string]any) (string
 		MaxMatches:   limit,
 		MaxTextBytes: maxMatchTextBytes,
 	})
+	if errors.Is(err, filepath.ErrBadPattern) {
+		return "", fmt.Errorf("%w: %s: %w", ErrInvalidPattern, globArg, err)
+	}
+
 	if err != nil {
 		return "", fmt.Errorf("searching %q: %w", path, err)
 	}
@@ -500,13 +456,9 @@ func (p *filePack) renderSearch(result *search.Result) string {
 		listing.WriteString("\n")
 	}
 
-	open := "<search matches=\"" + strconv.Itoa(len(result.Matches)) +
-		"\" files=\"" + strconv.Itoa(files) + "\""
-	if result.Truncated {
-		open += " truncated=\"true\""
-	}
+	open := fmt.Sprintf(`<search matches="%d" files="%d"%s>`, len(result.Matches), files, truncatedAttr(result.Truncated))
 
-	return open + ">\n" + listing.String() + "</search>"
+	return open + "\n" + listing.String() + "</search>"
 }
 
 func (p *filePack) relativePath(path string) string {
@@ -519,12 +471,15 @@ func (p *filePack) relativePath(path string) string {
 }
 
 func renderMatch(path string, match search.Match) string {
-	open := "<match path=\"" + path + "\" line=\"" + strconv.Itoa(match.Line) + "\""
-	if match.Truncated {
-		open += " truncated=\"true\""
+	return fmt.Sprintf(`<match path=%q line="%d"%s>%s</match>`, path, match.Line, truncatedAttr(match.Truncated), match.Text)
+}
+
+func truncatedAttr(truncated bool) string {
+	if !truncated {
+		return ""
 	}
 
-	return open + ">" + match.Text + "</match>"
+	return ` truncated="true"`
 }
 
 func (p *filePack) deleteFile(_ context.Context, args map[string]any) (string, error) {
@@ -540,12 +495,8 @@ func (p *filePack) deleteFile(_ context.Context, args map[string]any) (string, e
 	return "deleted " + path, nil
 }
 
-func lineArg(arguments *tools.Arguments, name string, fallback int) (int, error) {
-	if !arguments.Exists(name) {
-		return fallback, nil
-	}
-
-	value, err := arguments.GetInt(name)
+func positiveIntArg(arguments *tools.Arguments, name string, fallback int) (int, error) {
+	value, err := arguments.GetOptionalInt(name, fallback)
 	if err != nil {
 		return 0, err
 	}
@@ -593,7 +544,7 @@ func renderPage(lines []string, offset int, total int) string {
 		from, to = offset, offset+len(lines)-1
 	}
 
-	page := strconv.Itoa(from) + "-" + strconv.Itoa(to) + " of " + strconv.Itoa(total)
+	open := fmt.Sprintf(`<file lines="%d-%d of %d">`, from, to, total)
 
-	return "<file lines=\"" + page + "\">\n" + strings.Join(lines, "\n") + "\n</file>"
+	return open + "\n" + strings.Join(lines, "\n") + "\n</file>"
 }

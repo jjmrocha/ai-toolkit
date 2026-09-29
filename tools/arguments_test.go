@@ -84,6 +84,39 @@ func TestGetString(t *testing.T) {
 	})
 }
 
+func TestGetOptionalString(t *testing.T) {
+	t.Run("returns the value when the field is present", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": "Lisbon"})
+		// when
+		result, err := args.GetOptionalString("field", "Porto")
+		// then
+		require.NoError(t, err)
+		expected := "Lisbon"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns the fallback when the field is missing", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{})
+		// when
+		result, err := args.GetOptionalString("field", "Porto")
+		// then
+		require.NoError(t, err)
+		expected := "Porto"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("errors when the field has another type", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": 42})
+		// when
+		_, err := args.GetOptionalString("field", "Porto")
+		// then
+		require.ErrorIs(t, err, ErrInvalidFieldType)
+	})
+}
+
 func TestGetInt(t *testing.T) {
 	t.Run("returns an int value", func(t *testing.T) {
 		// given
@@ -127,6 +160,39 @@ func TestGetInt(t *testing.T) {
 	})
 }
 
+func TestGetOptionalInt(t *testing.T) {
+	t.Run("returns the value when the field is present", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": 7})
+		// when
+		result, err := args.GetOptionalInt("field", 3)
+		// then
+		require.NoError(t, err)
+		expected := 7
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns the fallback when the field is missing", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{})
+		// when
+		result, err := args.GetOptionalInt("field", 3)
+		// then
+		require.NoError(t, err)
+		expected := 3
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("errors when the field has another type", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": "seven"})
+		// when
+		_, err := args.GetOptionalInt("field", 3)
+		// then
+		require.ErrorIs(t, err, ErrInvalidFieldType)
+	})
+}
+
 func TestGetFloat64(t *testing.T) {
 	t.Run("returns a float64 value", func(t *testing.T) {
 		// given
@@ -167,6 +233,39 @@ func TestGetFloat64(t *testing.T) {
 	})
 }
 
+func TestGetOptionalFloat64(t *testing.T) {
+	t.Run("returns the value when the field is present", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": 2.5})
+		// when
+		result, err := args.GetOptionalFloat64("field", 1.5)
+		// then
+		require.NoError(t, err)
+		expected := 2.5
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns the fallback when the field is missing", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{})
+		// when
+		result, err := args.GetOptionalFloat64("field", 1.5)
+		// then
+		require.NoError(t, err)
+		expected := 1.5
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("errors when the field has another type", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": "two"})
+		// when
+		_, err := args.GetOptionalFloat64("field", 1.5)
+		// then
+		require.ErrorIs(t, err, ErrInvalidFieldType)
+	})
+}
+
 func TestGetBool(t *testing.T) {
 	t.Run("returns the bool value", func(t *testing.T) {
 		// given
@@ -194,6 +293,39 @@ func TestGetBool(t *testing.T) {
 		_, err := args.GetBool("ok")
 		// then
 		assert.ErrorIs(t, err, ErrInvalidFieldType)
+	})
+}
+
+func TestGetOptionalBool(t *testing.T) {
+	t.Run("returns the value when the field is present", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": false})
+		// when
+		result, err := args.GetOptionalBool("field", true)
+		// then
+		require.NoError(t, err)
+		expected := false
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns the fallback when the field is missing", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{})
+		// when
+		result, err := args.GetOptionalBool("field", true)
+		// then
+		require.NoError(t, err)
+		expected := true
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("errors when the field has another type", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"field": "yes"})
+		// when
+		_, err := args.GetOptionalBool("field", true)
+		// then
+		require.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 
@@ -277,6 +409,39 @@ func TestGetArrayOfStrings(t *testing.T) {
 		_, err := args.GetArrayOfStrings("tags")
 		// then
 		assert.ErrorIs(t, err, ErrInvalidFieldType)
+	})
+}
+
+func TestGetOptionalArrayOfStrings(t *testing.T) {
+	t.Run("returns the value when the field is present", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"tags": []any{"a", "b"}})
+		// when
+		result, err := args.GetOptionalArrayOfStrings("tags", []string{"c"})
+		// then
+		require.NoError(t, err)
+		expected := []string{"a", "b"}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns the fallback when the field is missing", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{})
+		// when
+		result, err := args.GetOptionalArrayOfStrings("tags", []string{"c"})
+		// then
+		require.NoError(t, err)
+		expected := []string{"c"}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("errors when the field has another type", func(t *testing.T) {
+		// given
+		args := NewArguments(map[string]any{"tags": "a"})
+		// when
+		_, err := args.GetOptionalArrayOfStrings("tags", []string{"c"})
+		// then
+		require.ErrorIs(t, err, ErrInvalidFieldType)
 	})
 }
 

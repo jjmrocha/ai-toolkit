@@ -30,11 +30,10 @@ const (
 
 var executeTimeout = 2 * time.Minute
 
-// RegisterTools adds the collection's three tools — [loadToolName],
-// [loadFileToolName] and [executeFileToolName] — to tb, so the model can load a
-// skill's instructions, read the files that skill ships, and run them. All three
-// names are reserved: a tool already registered under any of them is replaced.
-// Remove them again with [Collection.UnregisterTools].
+// RegisterTools adds three tools to tb: "skill_load", "skill_load_file" and
+// "skill_execute_file", which load a skill's instructions, read the files it
+// ships, and run them. The names are reserved: a tool already registered under
+// one of them is replaced. [Collection.UnregisterTools] removes them.
 func (c *Collection) RegisterTools(tb *tools.ToolBox) {
 	loadTool := llm.Tool{
 		Name: loadToolName,
@@ -71,8 +70,8 @@ func (c *Collection) RegisterTools(tb *tools.ToolBox) {
 	_ = tb.Add(executeFileTool, c.executeSkillFile)
 }
 
-// UnregisterTools removes the collection's three tools from tb, leaving every
-// other tool in place. It is a no-op when they are not registered.
+// UnregisterTools removes the three tools from tb and nothing else. It does
+// nothing if they are not registered.
 func (c *Collection) UnregisterTools(tb *tools.ToolBox) {
 	tb.Remove(loadToolName)
 	tb.Remove(loadFileToolName)
@@ -158,8 +157,8 @@ func (c *Collection) executeSkillFile(ctx context.Context, args map[string]any) 
 		return "", err
 	}
 
-	fileArgs, err := arguments.GetArrayOfStrings(argsArg)
-	if err != nil && !errors.Is(err, tools.ErrFieldNotFound) {
+	fileArgs, err := arguments.GetOptionalArrayOfStrings(argsArg, nil)
+	if err != nil {
 		return "", err
 	}
 

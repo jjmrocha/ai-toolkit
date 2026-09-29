@@ -6,18 +6,18 @@ import "errors"
 var (
 	// ErrMissingProvider is returned by [New] when Config.Provider is empty.
 	ErrMissingProvider = errors.New("missing provider")
-	// ErrUnsupportedProvider is returned by [New] when Config.Provider is not a recognized [Provider].
+	// ErrUnsupportedProvider is returned by [New] when Config.Provider is not a
+	// known [Provider].
 	ErrUnsupportedProvider = errors.New("unsupported provider")
 	// ErrMissingAPIKey is returned by [New] when Config.APIKey is empty.
 	ErrMissingAPIKey = errors.New("missing api_key")
 	// ErrMissingModel is returned by [New] when Config.Model is empty.
 	ErrMissingModel = errors.New("missing model")
-	// ErrNoQuestions is returned by [Classifier.Classify] when
-	// Request.Questions is empty.
+	// ErrNoQuestions is returned by [Classifier.Classify] when Request.Questions
+	// is empty.
 	ErrNoQuestions = errors.New("no questions")
-	// ErrInvalidQuestion is returned by [Classifier.Classify] when a [YesNo]
-	// describes what one answer means but not the other. The provider is not
-	// called.
+	// ErrInvalidQuestion is returned by [Classifier.Classify], before calling the
+	// provider, when a [YesNo] describes one answer but not the other.
 	ErrInvalidQuestion = errors.New("invalid question")
 	// ErrMissingAnswer is returned by [Classifier.Classify] when the provider
 	// answers fewer questions than were asked.

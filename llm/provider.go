@@ -8,7 +8,7 @@ type Provider string
 const (
 	// ProviderOpenRouter selects the OpenRouter backend (https://openrouter.ai).
 	ProviderOpenRouter Provider = "openrouter"
-	// ProviderOllama selects a local or remote Ollama backend (https://ollama.com).
+	// ProviderOllama selects an Ollama server, local or remote (https://ollama.com).
 	ProviderOllama Provider = "ollama"
 	// ProviderAnthropic selects the Anthropic backend (https://www.anthropic.com).
 	ProviderAnthropic Provider = "anthropic"

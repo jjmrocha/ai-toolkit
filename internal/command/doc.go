@@ -1,9 +1,8 @@
-// Package command runs child processes on the toolkit's behalf.
+// Package command runs child processes for the toolkit.
 //
-// [Process] runs a child process and hands back its output one line at a time,
-// owning the child from [NewProcess] until [Process.Close]. [Run] wraps it for
-// the common case: launch a command, collect everything it writes, and report
-// the status it exited with. [InheritedEnv] builds a child's environment from an
-// allowlist, so a child does not receive the credentials the calling process
-// holds in its own.
+// [Process] runs a child and delivers its output one line at a time; it owns
+// the child from [NewProcess] until [Process.Close]. [Run] covers the common
+// case: launch a command, collect all its output, and report its exit status.
+// [InheritedEnv] builds a child's environment from an allowlist, so the child
+// does not get the credentials in the caller's environment.
 package command

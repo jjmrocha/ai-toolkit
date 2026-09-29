@@ -6,19 +6,18 @@ import (
 	"sync"
 )
 
-// LLM is a configured client for a single model on a single provider. Create
-// one with [New]; it is safe for concurrent use.
+// LLM is a client for one model on one provider. Create one with [New]. It is
+// safe for concurrent use.
 type LLM struct {
 	config   Config
 	provider llmProvider
 	mu       sync.RWMutex
 }
 
-// New creates an [LLM] backed by the provider named in cfg. It returns
+// New creates an [LLM] for the provider named in cfg. It returns
 // [ErrMissingProvider] or [ErrMissingModel] when those fields are empty,
-// [ErrUnsupportedProvider] when the provider is not recognized, and
-// [ErrInvalidEffort] when Config.Effort is not a recognized [Effort]. An empty
-// Config.Effort defaults to [EffortOff].
+// [ErrUnsupportedProvider] for an unknown provider, and [ErrInvalidEffort] for
+// an unknown Config.Effort. An empty Config.Effort means [EffortOff].
 func New(cfg Config) (*LLM, error) {
 	if cfg.Provider == "" {
 		return nil, ErrMissingProvider
@@ -74,9 +73,7 @@ func New(cfg Config) (*LLM, error) {
 	}, nil
 }
 
-// Chat sends the conversation in messages to the configured model, optionally
-// offering the given tools, and returns the assistant's reply. The context
-// controls cancellation and deadline.
+// Chat sends messages to the model, offering it tools, and returns its reply.
 func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -84,11 +81,9 @@ func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*Assi
 	return l.provider.chat(ctx, messages, tools)
 }
 
-// ModelInfo reports metadata about the configured model: its provider, its
-// human-readable name, and its context-window size. It returns [ErrModelNotFound]
-// when the provider does not offer the model and [ErrMissingContextLength] when
-// the provider reports no context size for it. The context controls
-// cancellation and deadline.
+// ModelInfo returns the model's provider, display name and context window. It
+// returns [ErrModelNotFound] when the provider does not offer the model and
+// [ErrMissingContextLength] when the provider reports no context size.
 func (l *LLM) ModelInfo(ctx context.Context) (*ModelInfo, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -102,8 +97,7 @@ func (l *LLM) ModelInfo(ctx context.Context) (*ModelInfo, error) {
 	return info, nil
 }
 
-// CurrentModel returns the identifier of the model the client is currently
-// configured to use.
+// CurrentModel returns the model the client uses now.
 func (l *LLM) CurrentModel() string {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -111,16 +105,15 @@ func (l *LLM) CurrentModel() string {
 	return l.provider.currentModel()
 }
 
-// AvailableModels returns the models the client can switch between: the
-// identifiers from Config.Models plus the active Config.Model, which [New]
-// includes even when Config.Models is empty. The active model is always present.
+// AvailableModels returns the models the client can switch between:
+// Config.Models plus Config.Model, which is always included.
 func (l *LLM) AvailableModels() []string {
 	return l.config.Models
 }
 
-// ChangeModel switches the client to model, which must be one of
-// [LLM.AvailableModels] (the active model always qualifies). It returns
-// [ErrMissingModel] when model is empty and [ErrModelNotFound] otherwise.
+// ChangeModel switches the client to model, which must be in
+// [LLM.AvailableModels]. It returns [ErrMissingModel] when model is empty and
+// [ErrModelNotFound] when it is not available.
 func (l *LLM) ChangeModel(model string) error {
 	if model == "" {
 		return ErrMissingModel
@@ -136,7 +129,7 @@ func (l *LLM) ChangeModel(model string) error {
 	return l.provider.changeModel(model)
 }
 
-// Effort reports the reasoning effort the client currently applies to requests.
+// Effort returns the reasoning effort the client applies to requests.
 func (l *LLM) Effort() Effort {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -144,10 +137,9 @@ func (l *LLM) Effort() Effort {
 	return l.provider.effort()
 }
 
-// ChangeEffort sets the reasoning effort applied to subsequent requests. An
-// empty Effort selects [EffortOff], matching [New]. It returns
-// [ErrInvalidEffort] without changing anything when e is not a recognized
-// [Effort].
+// ChangeEffort sets the reasoning effort for later requests. An empty e means
+// [EffortOff], as in [New]. It returns [ErrInvalidEffort], changing nothing,
+// when e is not a known [Effort].
 func (l *LLM) ChangeEffort(e Effort) error {
 	if e == "" {
 		e = EffortOff

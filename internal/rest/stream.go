@@ -10,15 +10,14 @@ import (
 	"time"
 )
 
-// IdleTimeout is the longest a streamed response body may go without sending
-// data before [WithIdleTimeout] gives up on it.
+// IdleTimeout is how long a streamed body may go without data before
+// [WithIdleTimeout] gives up.
 const IdleTimeout = 5 * time.Minute
 
-// WithIdleTimeout wraps body so that a read waiting longer than timeout for
-// data closes body and fails with [ErrIdleTimeout]. Every read that returns
-// restarts the timeout, so a body that keeps sending is never cut short.
-//
-// Closing the returned reader closes body.
+// WithIdleTimeout wraps body so that a read that waits longer than timeout
+// closes body and fails with [ErrIdleTimeout]. Each read that returns restarts
+// the timer, so a body that keeps sending is never cut off. Closing the
+// returned reader closes body.
 func WithIdleTimeout(body io.ReadCloser, timeout time.Duration) io.ReadCloser {
 	r := &idleReader{body: body, timeout: timeout}
 
@@ -53,11 +52,11 @@ func (r *idleReader) Close() error {
 	return r.body.Close()
 }
 
-// Events reads body as a stream of server-sent events and yields the data of
-// each event, in order, with the lines of a multi-line event joined by
-// newlines. Comment lines, keep-alives and every field other than data are
-// skipped. Iteration ends with the body; an error reading it is yielded once,
-// after the events that came before it, and ends iteration too.
+// Events reads body as server-sent events and yields each event's data in
+// order, joining a multi-line event's lines with newlines. Comments,
+// keep-alives and fields other than data are skipped. Iteration ends with the
+// body. A read error is yielded once, after the events before it, and ends
+// iteration.
 func Events(body io.Reader) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		reader := bufio.NewReader(body)

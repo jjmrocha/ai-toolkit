@@ -6,35 +6,32 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// SessionConfig declares what a session exposes to the model: the system prompt
-// and the tools it may call. Pass it to [Agent.StartSession].
+// SessionConfig is what a session gives the model: the system prompt and the
+// tools it may call. Pass it to [Agent.StartSession].
 type SessionConfig struct {
-	// Prompt becomes the session's system message, preserved across
-	// [Agent.ResetSession].
+	// Prompt becomes the system message, and survives [Agent.ResetSession].
 	Prompt string
-	// ToolBox holds the tools the model may call during the session. A nil
-	// ToolBox is treated as an empty one.
+	// ToolBox holds the tools the model may call. Nil means no tools.
 	ToolBox *tools.ToolBox
-	// Skills are the skills the model may load during the session. Their tools
-	// are registered in ToolBox until the session ends, and their catalog is
-	// appended to Prompt. A nil or empty Collection means no skills.
+	// Skills are the skills the model may load. Their tools are registered in
+	// ToolBox until the session ends, and their catalog is appended to Prompt. Nil
+	// or empty means no skills.
 	Skills *skills.Collection
-	// Messages resumes a saved conversation, such as one returned by
-	// [Agent.Messages]: they follow the system message built from Prompt, in
-	// order. Any [llm.SystemMessage] among them is skipped, so the session runs
-	// under the new Prompt. Nil or empty starts a fresh conversation.
+	// Messages resumes a saved conversation, such as one from [Agent.Messages].
+	// They follow the system message built from Prompt, in order. Any
+	// [llm.SystemMessage] among them is skipped, so the new Prompt applies. Nil or
+	// empty starts a new conversation.
 	Messages []llm.Message
 }
 
-// Config tunes an [Agent]'s behavior. The zero value is usable: MaxIterations
-// defaults to unbounded and compaction runs at the default threshold.
+// Config tunes an [Agent]. The zero value works: no iteration limit and the
+// default compaction threshold.
 type Config struct {
-	// MaxIterations caps how many model/tool rounds a single [Agent.Process]
-	// call may run before it returns [ErrMaxIterations]. Zero means no limit.
+	// MaxIterations caps the model/tool rounds in one [Agent.Process] call, after
+	// which it returns [ErrMaxIterations]. Zero means no limit.
 	MaxIterations int
-	// CompactionThresholdPercent is the percentage of the model's context
-	// window at which [Agent.Process] summarizes the older turns. Zero selects
-	// the default of 85%. Must be between 0 and 100; otherwise [New] returns
-	// [ErrInvalidThreshold].
+	// CompactionThresholdPercent is the share of the context window, in percent,
+	// at which [Agent.Process] summarizes the older turns. Zero means 85. Outside
+	// 0 to 100, [New] returns [ErrInvalidThreshold].
 	CompactionThresholdPercent int
 }

@@ -18,12 +18,6 @@ const (
 	timeOfDayLayout     = "15:04:05.000"
 )
 
-var dateToolNames = []string{
-	currentDateToolName,
-	currentTimeToolName,
-	timeZoneToolName,
-}
-
 var now = time.Now
 
 const dateInstruction = `You have no clock of your own: the date and time you
@@ -34,12 +28,13 @@ long session, because the day may have moved.`
 
 type datePack struct {
 	toolBox *tools.ToolBox
+	names   []string
 	once    sync.Once
 }
 
 func (p *datePack) Close() error {
 	p.once.Do(func() {
-		for _, name := range dateToolNames {
+		for _, name := range p.names {
 			p.toolBox.Remove(name)
 		}
 	})
@@ -54,34 +49,24 @@ func (p *datePack) Instructions(_ context.Context) (*mcp.Instruction, error) {
 	}, nil
 }
 
-// DateTools registers the three tools that tell the model when it is in m:
+// DateTools registers three tools in m that tell the model when it is:
 // "current_date" returns the date as "2006-01-02", "current_time" the time of
-// day as "15:04:05.000" on a 24-hour clock, and "time_zone" the host's zone
-// with its offset from UTC. None of them takes an argument. The returned
-// [ToolPack] removes the three again.
+// day as "15:04:05.000" on a 24-hour clock, and "time_zone" the host's zone and
+// its offset from UTC. None takes an argument, and all read [time.Now] in the
+// host's zone.
 //
-// A model has no clock of its own and its sense of the date comes from training
-// data, so anything it dates without calling these is a guess. Register the pack
-// wherever a date reaches the answer — a report header, a filing period, a
-// valuation's as-of date.
+// A model has no clock; a date it writes without these tools comes from its
+// training data. Register the pack wherever a date reaches the answer.
 //
-// All three read the host clock through [time.Now], in the host's own zone.
-// Nothing is launched to serve them, so [ToolPack.Close] only unregisters, and
-// a dropped pack costs nothing beyond the tools staying registered.
-//
-// It fails with the error [tools.ToolBox.Add] returns when m rejects a
-// registration, which leaves any tool already registered by the call in place.
+// Nothing is launched, so [ToolPack.Close] only unregisters. If m rejects a
+// registration, DateTools returns the error from [tools.ToolBox.Add] and leaves
+// the tools it already registered in place.
 func DateTools(m *tools.ToolBox) (ToolPack, error) {
 	dateTool := llm.Tool{
 		Name: currentDateToolName,
 		Description: "Return today's date on the host, as \"2006-01-02\". Call it rather than assuming a " +
 			"date: you have no clock, and the one you remember is the one you were trained on.",
 		Schema: tools.NewObjectBuilder().Build(),
-	}
-
-	err := m.Add(dateTool, currentDate)
-	if err != nil {
-		return nil, err
 	}
 
 	timeTool := llm.Tool{
@@ -91,11 +76,6 @@ func DateTools(m *tools.ToolBox) (ToolPack, error) {
 		Schema: tools.NewObjectBuilder().Build(),
 	}
 
-	err = m.Add(timeTool, currentTime)
-	if err != nil {
-		return nil, err
-	}
-
 	zoneTool := llm.Tool{
 		Name: timeZoneToolName,
 		Description: "Return the host's time zone and its offset from UTC, as \"WEST (UTC+01:00)\". " +
@@ -103,12 +83,16 @@ func DateTools(m *tools.ToolBox) (ToolPack, error) {
 		Schema: tools.NewObjectBuilder().Build(),
 	}
 
-	err = m.Add(zoneTool, timeZone)
+	names, err := register(m, []registration{
+		{tool: dateTool, handler: currentDate},
+		{tool: timeTool, handler: currentTime},
+		{tool: zoneTool, handler: timeZone},
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &datePack{toolBox: m}, nil
+	return &datePack{toolBox: m, names: names}, nil
 }
 
 func currentDate(context.Context, map[string]any) (string, error) {

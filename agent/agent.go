@@ -20,9 +20,9 @@ type modelInterface interface {
 	ChangeEffort(e llm.Effort) error
 }
 
-// Agent runs a tool-calling chat loop against an LLM, holding the conversation
-// state for a single session. It is not safe for concurrent use; serialize
-// calls to Process, StartSession, ResetSession, and Close.
+// Agent runs a tool-calling chat loop against an LLM and holds one session's
+// conversation. It is not safe for concurrent use: serialize calls to its
+// methods.
 type Agent struct {
 	config           Config
 	llm              modelInterface
@@ -34,11 +34,10 @@ type Agent struct {
 	modelInfo        *llm.ModelInfo
 }
 
-// New creates an [Agent] from cfg and an [llm.LLM], using a silent default
-// [Feedback]; install [NewStdoutFeedback] with [Agent.SetFeedback] to print
-// lifecycle events. It returns [ErrNoLLM] when llm is nil and
-// [ErrInvalidThreshold] when Config.CompactionThresholdPercent is outside
-// 0–100.
+// New creates an [Agent] for an [llm.LLM], with silent [Feedback]; use
+// [Agent.SetFeedback] with [NewStdoutFeedback] to print events. It returns
+// [ErrNoLLM] when llm is nil and [ErrInvalidThreshold] when
+// Config.CompactionThresholdPercent is outside 0 to 100.
 func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 	if llm == nil {
 		return nil, ErrNoLLM
@@ -57,14 +56,13 @@ func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 	}, nil
 }
 
-// StartSession begins a new conversation, discarding any previous one.
-// SessionConfig.Prompt becomes the session's system message and is preserved
-// across [Agent.ResetSession]; SessionConfig.ToolBox holds the tools the model
-// may call until the session ends. When SessionConfig.Skills carries at least
-// one skill, its tools are registered in that ToolBox and its catalog is
-// appended to the system message, both until [Agent.Close] or the next session.
-// SessionConfig.Messages, when set, resumes a saved conversation after that
-// system message. It must be called before [Agent.Process].
+// StartSession starts a new conversation, discarding any previous one, and must
+// be called before [Agent.Process]. SessionConfig.Prompt becomes the system
+// message and survives [Agent.ResetSession]. SessionConfig.ToolBox holds the
+// tools the model may call. Skills in SessionConfig.Skills register their tools
+// in that ToolBox and append their catalog to the system message, until
+// [Agent.Close] or the next session. SessionConfig.Messages, if set, resumes a
+// saved conversation after the system message.
 func (a *Agent) StartSession(cfg SessionConfig) {
 	a.unregisterSkills()
 
@@ -107,8 +105,7 @@ func (a *Agent) unregisterSkills() {
 	a.skills = nil
 }
 
-// ResetSession clears the conversation back to its system message, keeping the
-// prompt from [Agent.StartSession] but discarding all later turns. It returns
+// ResetSession drops every turn after the system message. It returns
 // [ErrNoSession] if no session has been started.
 func (a *Agent) ResetSession() error {
 	if len(a.messages) == 0 {
@@ -120,9 +117,9 @@ func (a *Agent) ResetSession() error {
 	return nil
 }
 
-// Close ends the agent's session and releases its conversation state, removing
-// any skill tools it registered in the session's [tools.ToolBox]. After Close,
-// [Agent.Process] returns [ErrNoSession] until a new session is started.
+// Close ends the session and removes the skill tools it registered in the
+// session's [tools.ToolBox]. After Close, [Agent.Process] returns
+// [ErrNoSession] until a new session starts.
 func (a *Agent) Close() {
 	a.unregisterSkills()
 	a.toolBox = nil
@@ -130,19 +127,17 @@ func (a *Agent) Close() {
 	a.fb.SessionClosed()
 }
 
-// Messages returns a copy of the session's conversation as the model sees it:
-// the system message first — the prompt with any skill catalog appended — then
-// every later turn, with turns folded by [Agent.CompactContext] showing as their
-// summary. Pass it to SessionConfig.Messages to resume the conversation later.
-// It returns nil when no session has been started or after [Agent.Close].
+// Messages returns a copy of the conversation as the model sees it: the system
+// message (the prompt plus any skill catalog), then every later turn, with
+// turns folded by [Agent.CompactContext] shown as their summary. Pass it to
+// SessionConfig.Messages to resume the conversation later. It returns nil when
+// there is no session.
 func (a *Agent) Messages() []llm.Message {
 	return slices.Clone(a.messages)
 }
 
-// SetFeedback replaces the agent's lifecycle event sink, letting a caller — such
-// as a chat UI — install its own [Feedback] after construction. A nil fb is
-// ignored, keeping the current sink. Like the rest of [Agent], it is not safe
-// for concurrent use; do not call it while a [Agent.Process] is in flight.
+// SetFeedback replaces the agent's [Feedback], for example with a chat UI's own.
+// A nil fb is ignored. Do not call it while [Agent.Process] is running.
 func (a *Agent) SetFeedback(fb Feedback) {
 	if fb == nil {
 		return
@@ -150,31 +145,27 @@ func (a *Agent) SetFeedback(fb Feedback) {
 	a.fb = fb
 }
 
-// Process runs one round of the conversation: it appends userInput (when
-// non-empty) and repeatedly calls the model, executing every tool the model
-// requests and feeding the results back, until the model replies without
-// requesting tools. That final reply is returned as a [Response] together with
-// token usage and timing [Metadata]. A failing tool is reported to the model as
-// its error text so the model can recover rather than aborting the round.
+// Process runs one round: it appends userInput, if not empty, and calls the
+// model again and again, running every tool it asks for and feeding back the
+// results, until it replies without asking for tools. It returns that reply as
+// a [Response] with token usage and timing in [Metadata]. A failing tool is
+// reported to the model as its error text, so the model can recover and the
+// round goes on.
 //
 // The tools offered to the model are read from the session's ToolBox once,
-// before the first model call, and stay fixed for the whole round, so the menu
-// never shifts under the model mid-round. A tool registered while the round is
-// running — by an MCP server announcing a change to its tool list, say, or by a
-// pack another tool mounted — is offered from the next Process call on. One
-// removed the same way stays on offer until then and fails with
-// [tools.ErrToolNotFound] if the model calls it, which reaches the model as
-// tool-error text like any other failure.
+// before the first model call, and stay fixed for the round. A tool registered
+// during the round, by an MCP server changing its tool list, say, is offered
+// from the next Process call. A tool removed during the round is still offered
+// until then, and calling it fails with [tools.ErrToolNotFound], which the
+// model sees as tool error text.
 //
-// On the first round it also queries the model's context window (see
-// [llm.LLM.ModelInfo]) to size the compaction threshold; the result is cached
-// for the agent's lifetime. Once a completed turn crosses
+// The first round also asks for the model's context window (see
+// [llm.LLM.ModelInfo]) and caches it. Once a completed turn goes past
 // Config.CompactionThresholdPercent of that window, the older turns are
 // summarized before the next round.
 //
 // Process returns [ErrNoSession] if no session has been started,
-// [ErrMaxIterations] if Config.MaxIterations is reached first, or any error from
-// the model. The context controls cancellation and deadline.
+// [ErrMaxIterations] if it reaches Config.MaxIterations, or the model's error.
 func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error) {
 	if len(a.messages) == 0 {
 		return nil, ErrNoSession
@@ -277,10 +268,9 @@ func (a *Agent) compactIfNeeded(ctx context.Context, lastTotalTokens int) {
 	}
 }
 
-// ModelInfo reports the model the agent is currently using — its provider,
-// name, context window, and reasoning effort. It resolves the model's context
-// window on demand, so it is safe to call before the first turn; it returns nil
-// when that information cannot be fetched from the underlying client.
+// ModelInfo returns the model the agent uses: provider, name, context window
+// and reasoning effort. It fetches the context window if needed, so it works
+// before the first turn. It returns nil if the client cannot provide it.
 func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
 	a.loadModelLimits(ctx)
 	if a.modelInfo == nil {
@@ -295,17 +285,15 @@ func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
 	}
 }
 
-// AvailableModels returns the model identifiers the agent can switch to via
-// [Agent.ChangeModel]. The active model is always included, so the result is
-// never empty.
+// AvailableModels returns the models [Agent.ChangeModel] accepts. It always
+// includes the active model.
 func (a *Agent) AvailableModels() []string {
 	return a.llm.AvailableModels()
 }
 
-// ChangeModel switches the agent to model, which must be one of
-// [Agent.AvailableModels]. On success the context window is re-derived on the
-// next turn; it propagates the underlying client's error on failure, leaving the
-// current model in place.
+// ChangeModel switches the agent to model, which must be in
+// [Agent.AvailableModels]. The context window is fetched again on the next
+// turn. On failure it returns the client's error and keeps the current model.
 func (a *Agent) ChangeModel(model string) error {
 	if err := a.llm.ChangeModel(model); err != nil {
 		return err
@@ -317,19 +305,17 @@ func (a *Agent) ChangeModel(model string) error {
 	return nil
 }
 
-// ChangeEffort sets the reasoning effort applied to subsequent turns. It
-// propagates the underlying client's error, leaving the current effort in
-// place.
+// ChangeEffort sets the reasoning effort for later turns. On failure it returns
+// the client's error and keeps the current effort.
 func (a *Agent) ChangeEffort(e llm.Effort) error {
 	return a.llm.ChangeEffort(e)
 }
 
-// CompactContext summarizes the conversation up to the most recent turn, keeping
-// the system message and the last turn intact. It is called automatically when
-// a completed turn crosses Config.CompactionThresholdPercent of the model's
-// context window, but can also be called manually to reduce memory usage or
-// token cost. It does nothing if there are no turns to summarize or if the
-// model fails to produce a summary.
+// CompactContext summarizes the conversation, keeping the system message and
+// the last turn as they are. [Agent.Process] calls it once a completed turn
+// goes past Config.CompactionThresholdPercent of the context window; call it
+// yourself to cut token cost sooner. It does nothing if there is nothing to
+// summarize or the model fails to summarize.
 func (a *Agent) CompactContext(ctx context.Context) {
 	keepFrom := indexOfTheBeginningOfTurnToKeep(a.messages)
 	if keepFrom <= 1 {

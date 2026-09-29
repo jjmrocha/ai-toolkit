@@ -19,12 +19,11 @@ const (
 	toolNameHashLength     = 6
 )
 
-// Client registers the tools exposed by a single MCP server into a
-// [tools.ToolBox] and owns the lifetime of that server's process. Create one
-// with [NewClient] and always pair it with a deferred [Client.Close]. Once
-// [Client.RegisterTools] has bound the client to a ToolBox, a server that
-// announces a change to its tool list has those tools registered again
-// automatically. It is safe for concurrent use.
+// Client registers one MCP server's tools in a [tools.ToolBox] and owns the
+// server's process. Create one with [NewClient] and always defer
+// [Client.Close]. After [Client.RegisterTools], a server that changes its tool
+// list gets its tools registered again automatically. It is safe for
+// concurrent use.
 type Client struct {
 	config ClientConfig
 
@@ -37,12 +36,11 @@ type Client struct {
 	tools     []string
 }
 
-// NewClient launches the MCP server described by cfg and completes the protocol
-// handshake. ctx bounds the startup handshake only. It returns
-// [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete, or an error if
-// the server fails to start or the handshake fails. The server runs until
-// [Client.Close] is called. Call [Client.RegisterTools] to bind the client to a
-// [tools.ToolBox].
+// NewClient launches the MCP server described by cfg and completes the
+// handshake, which ctx bounds. The server runs until [Client.Close]. It returns
+// [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete, or an error
+// if the server fails to start or the handshake fails. Call
+// [Client.RegisterTools] to register its tools.
 func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameRequired
@@ -74,8 +72,7 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	return c, nil
 }
 
-// Name returns the name the client registered under, which is also the prefix
-// used for the tools it registers in a [tools.ToolBox].
+// Name returns the client's name, which prefixes the tools it registers.
 func (c *Client) Name() string {
 	return c.config.Name
 }
@@ -111,9 +108,9 @@ func (c *Client) onProgress(token string) {
 	c.requests.reset(token)
 }
 
-// Connected reports whether the server's child process is still running. It
-// returns false once the process has exited, whether it was closed, died on its
-// own, or was stopped because its output could no longer be read.
+// Connected reports whether the server process is still running. It is false
+// once the process has exited, whether it was closed, died, or was stopped
+// because its output could not be read.
 func (c *Client) Connected() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -121,10 +118,9 @@ func (c *Client) Connected() bool {
 	return c.connected
 }
 
-// Instructions returns the usage instructions the server sent as part of its
-// initialize handshake, paired with the name the client registered under, or
-// nil if the server sent none. The value is the one captured at startup: it
-// does not change for the lifetime of the [Client].
+// Instructions returns the instructions the server sent in its handshake,
+// labeled with the client's name, or nil if it sent none. They are captured at
+// startup and do not change.
 func (c *Client) Instructions() *Instruction {
 	instructions := c.session.instructions()
 	if instructions == "" {
@@ -137,9 +133,9 @@ func (c *Client) Instructions() *Instruction {
 	}
 }
 
-// Close shuts the server process down and removes this client's tools from the
-// [tools.ToolBox]. A call still waiting on the server is aborted rather than
-// waited out. It is safe to call more than once.
+// Close stops the server process and removes the client's tools from the
+// [tools.ToolBox]. Calls still waiting on the server are aborted. It is safe to
+// call more than once.
 func (c *Client) Close() error {
 	c.session.close()
 
@@ -148,22 +144,20 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// RegisterTools queries the server for its tools and registers each one in tb,
-// namespaced as "<ClientConfig.Name>__<tool>" and backed by a handler that
-// forwards the call to the server. A namespaced name the providers would reject
-// is rewritten rather than dropped; the server is still called by the name it
-// published. A tool named in [ClientConfig.ExcludedTools] is skipped. ctx bounds
-// the tools/list request. Tools registered here are removed again by
-// [Client.Close].
+// RegisterTools lists the server's tools and registers each one in tb as
+// "<ClientConfig.Name>__<tool>", with a handler that forwards the call to the
+// server. A namespaced name the providers would reject is rewritten, not
+// dropped; the server is still called by its own name. Tools in
+// [ClientConfig.ExcludedTools] are skipped. ctx bounds the tools/list request.
+// [Client.Close] removes the tools again.
 //
-// Calling it again replaces the tools the previous call registered, which is how
-// the client refreshes itself when the server announces a change to its tool
-// list.
+// Calling it again replaces the tools the previous call registered. That is how
+// the client refreshes when the server changes its tool list.
 //
-// A server whose handshake declared no tools capability is never asked for a
-// tool list: nothing is registered and the call succeeds, leaving the server
-// running for whatever else it offers. A server that declares no capabilities at
-// all is asked anyway.
+// A server whose handshake declared no tools capability is not asked for a
+// list: nothing is registered, the call succeeds, and the server keeps running
+// for whatever else it offers. A server that declared no capabilities at all is
+// asked anyway.
 func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 	if !c.session.supportsTools() {
 		return nil
@@ -210,11 +204,11 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 }
 
 // CallTool calls the server's tool named tool with args and returns its text
-// result, the same way a tool registered by [Client.RegisterTools] does: under
-// [ClientConfig.ToolCallTimeout], with nil args sent as an empty object. tool is
-// the name the server published, not the namespaced one, and it is called
-// whether or not [ClientConfig.ExcludedTools] names it. It returns an error when
-// the call fails or the server reports one.
+// result, as a tool registered by [Client.RegisterTools] would: under
+// [ClientConfig.ToolCallTimeout], with nil args sent as an empty object. tool
+// is the server's own name for it, not the namespaced one, and it is called
+// even if [ClientConfig.ExcludedTools] lists it. It returns an error when the
+// call fails or the server reports one.
 func (c *Client) CallTool(ctx context.Context, tool string, args map[string]any) (string, error) {
 	return c.makeHandler(tool)(ctx, args)
 }

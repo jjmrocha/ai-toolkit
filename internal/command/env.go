@@ -30,17 +30,14 @@ var defaultEnvNames = []string{
 
 var defaultEnvPrefixes = []string{"LC_"}
 
-// InheritedEnv builds a child process's environment from the calling process's,
-// copying only what a child is expected to need: the variables that locate the
-// user and the tools, the ones that keep TLS, proxies and locale working, every
-// LC_ variable, and the variables extra names. Everything
-// else is left behind, so a child does not receive the credentials the calling
-// process holds in its environment.
+// InheritedEnv builds a child's environment from the caller's, copying only
+// what a child needs: the variables that locate the user and the tools, those
+// that keep TLS, proxies and locale working, every LC_ variable, and the
+// variables named in extra. Nothing else is copied, so the child does not get
+// the credentials in the caller's environment.
 //
-// A name in extra that the calling process does not set is skipped rather than
-// passed on empty, so a child cannot tell an unset variable from one that was
-// never allowed. The result is sorted, and suitable for [ProcessConfig.Env] and
-// [RunConfig.Env].
+// A name in extra that the caller does not set is skipped, not passed empty.
+// The result is sorted, ready for [ProcessConfig.Env] and [RunConfig.Env].
 func InheritedEnv(extra []string) []string {
 	allowed := sets.New(append(slices.Clone(defaultEnvNames), extra...)...)
 

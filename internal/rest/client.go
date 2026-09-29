@@ -15,13 +15,12 @@ const (
 	retryMaxWaitTime = 30 * time.Second
 )
 
-// NewClient returns a client bound to baseURL, with a retry policy that backs
-// off on 429 and 5xx responses, honoring Retry-After.
+// NewClient returns a client for baseURL that retries 429 and 5xx responses
+// with backoff, honoring Retry-After.
 //
-// A request fails when its response headers take longer than 5 minutes to
-// arrive. Reading the body has no deadline of its own: a caller streaming the
-// body bounds it with [WithIdleTimeout], and any caller can bound the whole
-// request through its context.
+// A request fails if its response headers take more than 5 minutes. Reading the
+// body has no deadline: bound a streamed body with [WithIdleTimeout], or the
+// whole request with its context.
 func NewClient(baseURL string) *resty.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = headerTimeout

@@ -20,40 +20,36 @@ const (
 )
 
 // ExitNotification is called once with the result of waiting on the process:
-// nil when it exited cleanly, otherwise the error from the wait. An exit status
-// is recovered from that error with [errors.As] on an [os/exec.ExitError].
+// nil for a clean exit, otherwise the wait error. Get the exit status from it
+// with [errors.As] on an [os/exec.ExitError].
 type ExitNotification func(error)
 
-// ProcessConfig describes the process [NewProcess] launches. Path and Args are
-// run with os/exec without a shell, so they are trusted input: supply them from
+// ProcessConfig describes the process [NewProcess] launches. Path and Args run
+// through os/exec with no shell, so they are trusted input: take them from
 // operator configuration, never from an untrusted source.
 type ProcessConfig struct {
 	// Path is the executable to launch.
 	Path string
 	// Args are the arguments passed to Path.
 	Args []string
-	// Dir is the working directory the process runs in. An empty Dir runs it in
-	// the calling process's working directory.
+	// Dir is the working directory. Empty means the caller's.
 	Dir string
-	// Env is the process's environment, each entry in KEY=VALUE form. A nil Env
-	// hands the process the calling process's own environment, credentials
-	// included; [InheritedEnv] builds a filtered one. An empty but non-nil Env
-	// runs the process with no environment at all.
+	// Env is the environment, as KEY=VALUE entries. Nil passes the caller's whole
+	// environment, credentials included; [InheritedEnv] builds a filtered one.
+	// Empty but not nil means no environment at all.
 	Env []string
-	// IncludeStderr merges the process's stderr into [Process.Output], in the
-	// order the process wrote it. When false, Output carries stdout alone and
-	// stderr is discarded.
+	// IncludeStderr merges stderr into [Process.Output], in the order the process
+	// wrote it. When false, Output is stdout only and stderr is discarded.
 	IncludeStderr bool
-	// AllowInput gives the process a stdin for [Process.Write] to send to.
-	// Without it the process reads from the null device, so anything waiting on
-	// stdin sees end of input at once.
+	// AllowInput gives the process a stdin for [Process.Write]. Without it, stdin
+	// is the null device, so a read sees end of input at once.
 	AllowInput bool
-	// OnExit is notified when the process exits. A nil OnExit is not called.
+	// OnExit is called when the process exits, if not nil.
 	OnExit ExitNotification
 }
 
-// Process is a running child process whose stdout, and optionally stderr, is
-// delivered line by line on [Process.Output]. Build one with [NewProcess] and
+// Process is a running child process whose stdout, and optionally stderr,
+// arrives line by line on [Process.Output]. Create one with [NewProcess] and
 // release it with [Process.Close].
 type Process struct {
 	cmd        *exec.Cmd
@@ -65,9 +61,8 @@ type Process struct {
 	closeOnce  sync.Once
 }
 
-// NewProcess launches the process cfg describes and starts reading its output.
-// The returned [Process] owns the child until [Process.Close] is called, which
-// the caller must do even when the process exits on its own.
+// NewProcess launches the process and starts reading its output. The caller
+// must call [Process.Close], even if the process exits on its own.
 func NewProcess(cfg ProcessConfig) (*Process, error) {
 	cmd := exec.Command(cfg.Path, cfg.Args...) //nolint:gosec // command and args are operator-provided configuration
 	cmd.Dir = cfg.Dir
@@ -172,12 +167,10 @@ func (p *Process) readLoop(stdout io.ReadCloser) {
 	go p.Close()
 }
 
-// Close stops the process and releases everything [NewProcess] started. A
-// process that has already exited is reaped at once. One that is still running
-// is given a grace period to leave on its own, then sent SIGTERM; if it
-// outlasts a second grace period it is sent SIGKILL. Close returns once the
-// process has been reaped, so it blocks for as long as those periods take.
-// Calling Close more than once is safe.
+// Close stops the process and releases everything [NewProcess] started. An
+// exited process is reaped at once. A running one gets a grace period to exit,
+// then SIGTERM, then after a second grace period SIGKILL. Close blocks until
+// the process is reaped. It is safe to call more than once.
 func (p *Process) Close() {
 	p.closeOnce.Do(func() {
 		close(p.closing)
@@ -208,12 +201,11 @@ func (p *Process) Running() bool {
 	}
 }
 
-// Write sends msg to the process's stdin, followed by a newline. It returns
-// [ErrInvalidMessage] when msg holds a newline of its own,
-// [ErrInputNotAllowed] when the process was built without
-// [ProcessConfig.AllowInput], [ErrProcessClosed] once the process has exited or
-// Close has been called, and ctx's error when ctx ends before the message is
-// handed over.
+// Write sends msg and a newline to the process's stdin. It returns
+// [ErrInvalidMessage] when msg has a newline, [ErrInputNotAllowed] when
+// [ProcessConfig.AllowInput] was not set, [ErrProcessClosed] once the process
+// has exited or Close was called, and ctx's error when ctx ends before the
+// message is sent.
 func (p *Process) Write(ctx context.Context, msg string) error {
 	if !p.allowInput {
 		return fmt.Errorf("%w: the process was built without a stdin", ErrInputNotAllowed)
@@ -235,8 +227,8 @@ func (p *Process) Write(ctx context.Context, msg string) error {
 	}
 }
 
-// Output returns the channel carrying the process's output, one line at a time
-// with the newline removed. It is closed when the process's output ends.
+// Output returns the channel of output lines, without newlines. It is closed
+// when the output ends.
 func (p *Process) Output() <-chan string {
 	return p.incoming
 }

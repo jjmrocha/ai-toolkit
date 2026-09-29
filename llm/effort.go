@@ -1,16 +1,15 @@
 package llm
 
-// Effort controls how much reasoning ("thinking") the model does before it
-// answers. Its values are relative rungs, not provider literals: each provider
-// maps them onto its own scale, so the same Effort reaches the wire as
-// different values on different backends. An empty Effort is treated as
-// [EffortOff] by [New] and [LLM.ChangeEffort].
+// Effort sets how much the model reasons ("thinks") before it answers. The
+// values are relative levels: each provider maps them onto its own scale, so
+// the same Effort is sent as different values to different providers. [New]
+// and [LLM.ChangeEffort] treat an empty Effort as [EffortOff].
 type Effort string
 
 const (
-	// EffortOff asks for as little reasoning as the provider allows. It turns
-	// reasoning off on OpenRouter and Ollama; Anthropic has no off switch that
-	// is safe for tool calling, so it receives the lowest effort level instead.
+	// EffortOff asks for as little reasoning as the provider allows. OpenRouter and
+	// Ollama turn reasoning off. Anthropic has no off switch that is safe with tool
+	// calls, so it gets its lowest level.
 	EffortOff Effort = "off"
 	// EffortLow requests a small amount of reasoning.
 	EffortLow Effort = "low"

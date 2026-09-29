@@ -2,7 +2,7 @@ package classify
 
 import "context"
 
-// Provider identifies a supported classification backend.
+// Provider identifies a classification backend.
 type Provider string
 
 // ProviderOpenRouter selects the OpenRouter backend (https://openrouter.ai),

@@ -13,12 +13,10 @@ type field struct {
 	required bool
 }
 
-// ObjectBuilder builds the JSON Schema for an object-typed set of tool
-// parameters. Add fields with the field methods (each returns the builder for
-// chaining) and call [ObjectBuilder.Build] to produce the schema map for
-// llm.Tool.Schema. Nested objects and arrays of objects are described with
-// their own ObjectBuilder, so schemas of any depth compose without hand-written
-// maps.
+// ObjectBuilder builds the JSON Schema of a tool's parameters. Each field method
+// returns the builder for chaining, and [ObjectBuilder.Build] returns the map
+// for llm.Tool.Schema. Nested objects and arrays of objects take their own
+// ObjectBuilder, so schemas nest to any depth.
 //
 // The zero value is not usable; create one with [NewObjectBuilder].
 type ObjectBuilder struct {
@@ -93,9 +91,8 @@ func (sb *ObjectBuilder) Boolean(name string, desc string, required bool) *Objec
 	return sb
 }
 
-// Object adds a nested object field named name, whose properties are described
-// by spec, its own [ObjectBuilder]. The nested object's required fields are
-// preserved.
+// Object adds an object field named name whose properties, required ones
+// included, come from spec.
 func (sb *ObjectBuilder) Object(name string, desc string, required bool, spec *ObjectBuilder) *ObjectBuilder {
 	s := spec.Build()
 	s[keyDescription] = desc
@@ -186,8 +183,8 @@ func (sb *ObjectBuilder) ArrayOfBooleans(name string, desc string, required bool
 	return sb
 }
 
-// ArrayOfObjects adds a field named name that is an array whose elements are
-// objects described by spec, its own [ObjectBuilder].
+// ArrayOfObjects adds a field named name that is an array of objects described
+// by spec.
 func (sb *ObjectBuilder) ArrayOfObjects(name string, desc string, required bool, spec *ObjectBuilder) *ObjectBuilder {
 	s := map[string]any{
 		keyType:        typeArray,
@@ -204,14 +201,9 @@ func (sb *ObjectBuilder) ArrayOfObjects(name string, desc string, required bool,
 	return sb
 }
 
-// Build assembles the accumulated fields into a JSON Schema object of the form
-// {"type":"object","properties":{...},"required":[...]}, suitable for
-// llm.Tool.Schema. The "required" key is omitted when no field is required.
-// Build can be called more than once and returns a new map each time.
-//
-// The field methods are [ObjectBuilder.String], [ObjectBuilder.Integer],
-// [ObjectBuilder.Number], [ObjectBuilder.Boolean], [ObjectBuilder.Object] and
-// the ArrayOf variants of each.
+// Build returns the schema as {"type":"object","properties":{...},
+// "required":[...]}, for llm.Tool.Schema. "required" is left out when no field
+// is required. Each call returns a new map.
 func (sb *ObjectBuilder) Build() map[string]any {
 	fields := make(map[string]any)
 	required := make([]string, 0)

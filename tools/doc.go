@@ -1,6 +1,5 @@
-// Package tools helps wire model tool calls to Go code. It provides a [ToolBox]
-// that pairs each [llm.Tool] definition with the [Handler] that runs it, an
-// [ObjectBuilder] for constructing the JSON Schema that describes a tool's
-// parameters without hand-writing nested maps, and an [Arguments] wrapper for
-// reading a call's decoded arguments back out with typed accessors.
+// Package tools connects model tool calls to Go code. A [ToolBox] pairs each
+// [llm.Tool] definition with the [Handler] that runs it. An [ObjectBuilder]
+// builds the JSON Schema for a tool's parameters, and [Arguments] reads a
+// call's decoded arguments with typed accessors.
 package tools

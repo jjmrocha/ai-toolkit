@@ -488,6 +488,19 @@ func TestFileListTool(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
+	t.Run("escapes a quote in a file name", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{`a".md`: "one\n"})
+		// when
+		result, err := runFileTool(t, root, listToolName, map[string]any{})
+		// then
+		require.NoError(t, err)
+		expected := "<dir path=\".\">\n" +
+			`<file name="a\".md" size="4" path="` + strings.ReplaceAll(filepath.Join(root, `a".md`), `"`, `\"`) + "\"/>\n" +
+			"</dir>"
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("lists the folder the call asks for", func(t *testing.T) {
 		// given
 		root := rootWith(t, map[string]string{"reports/q1.md": "payload\n"})
@@ -547,6 +560,21 @@ func TestFileSearchTool(t *testing.T) {
 		require.NoError(t, err)
 		expected := "<search matches=\"1\" files=\"1\">\n" +
 			"<match path=\"notes/q3.md\" line=\"2\">beta</match>\n" +
+			"</search>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("names the file on every match it holds", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"notes/q3.md": "beta\nalpha\nbeta\n"})
+		args := map[string]any{patternArg: "beta"}
+		// when
+		result, err := runFileTool(t, root, searchToolName, args)
+		// then
+		require.NoError(t, err)
+		expected := "<search matches=\"2\" files=\"1\">\n" +
+			"<match path=\"notes/q3.md\" line=\"1\">beta</match>\n" +
+			"<match path=\"notes/q3.md\" line=\"3\">beta</match>\n" +
 			"</search>"
 		assert.Equal(t, expected, result)
 	})
@@ -681,6 +709,16 @@ func TestFileSearchTool(t *testing.T) {
 		// given
 		root := rootWith(t, map[string]string{"notes.md": "beta\n"})
 		args := map[string]any{patternArg: "beta", globArg: "["}
+		// when
+		_, err := runFileTool(t, root, searchToolName, args)
+		// then
+		assert.ErrorIs(t, err, ErrInvalidPattern)
+	})
+
+	t.Run("rejects a glob that fails only against a file name", func(t *testing.T) {
+		// given
+		root := rootWith(t, map[string]string{"xy.md": "beta\n"})
+		args := map[string]any{patternArg: "beta", globArg: "x*[z"}
 		// when
 		_, err := runFileTool(t, root, searchToolName, args)
 		// then

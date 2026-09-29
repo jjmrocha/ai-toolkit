@@ -26,8 +26,8 @@ type skill struct {
 }
 
 // Collection holds the skills a session may load. Fill it with [Collection.Add]
-// before handing it to an agent; each skill is a folder containing a SKILL.md
-// whose frontmatter carries the skill's name and description.
+// before giving it to an agent. Each skill is a folder with a SKILL.md whose
+// frontmatter has the skill's name and description.
 //
 // A Collection is safe for concurrent use.
 type Collection struct {
@@ -35,24 +35,23 @@ type Collection struct {
 	skills map[string]skill
 }
 
-// NewCollection returns an empty [Collection] ready for [Collection.Add].
+// NewCollection returns an empty [Collection].
 func NewCollection() *Collection {
 	return &Collection{
 		skills: make(map[string]skill),
 	}
 }
 
-// Add reads path/SKILL.md and registers the skill it describes under the name
-// from its frontmatter. The rest of the folder is listed so the model can read
-// those files later, and the listing is taken once, here. A relative path is
-// resolved against the working directory as it stands now, so a later chdir
-// does not move the skill.
+// Add reads path/SKILL.md and adds the skill under the name in its
+// frontmatter. It also lists the rest of the folder, once, so the model can
+// read those files later. A relative path is resolved against the current
+// working directory, so a later chdir does not move the skill.
 //
 // It returns [ErrSkillFolderNotFound] when path is not a directory,
-// [ErrNoSkillFile] when the folder holds no SKILL.md, [ErrInvalidFrontmatter]
-// when that file's frontmatter cannot be read, [ErrNameRequired] or
-// [ErrDescriptionRequired] when the frontmatter omits either, and
-// [ErrDuplicateSkill] when the name is already taken.
+// [ErrNoSkillFile] when there is no SKILL.md, [ErrInvalidFrontmatter] when its
+// frontmatter cannot be read, [ErrNameRequired] or [ErrDescriptionRequired]
+// when the frontmatter lacks either, and [ErrDuplicateSkill] when the name is
+// taken.
 func (c *Collection) Add(path string) error {
 	path, err := filepath.Abs(path)
 	if err != nil {
@@ -117,15 +116,13 @@ func (c *Collection) Add(path string) error {
 	return nil
 }
 
-// AddClaudeSkill registers the skill stored under skillName in the user's
-// Claude skills folder, ~/.claude/skills, the way [Collection.Add] registers a
-// skill given its path. The name must be a single folder in that directory, so
-// a skill outside it cannot be reached.
+// AddClaudeSkill adds the skill in folder skillName of the user's Claude skills
+// folder, ~/.claude/skills, as [Collection.Add] would. skillName must be a
+// single folder name, so nothing outside that directory can be reached.
 //
-// Beyond the errors [Collection.Add] returns — [ErrSkillFolderNotFound] when
-// the folder holds no such skill — it returns [ErrInvalidSkillName] when
-// skillName is not a single folder, and reports the failure when the home
-// directory cannot be located.
+// It returns the errors [Collection.Add] does ([ErrSkillFolderNotFound] when
+// there is no such skill), [ErrInvalidSkillName] when skillName is not a single
+// folder name, and an error when the home directory cannot be found.
 func (c *Collection) AddClaudeSkill(skillName string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -142,10 +139,9 @@ func (c *Collection) AddClaudeSkill(skillName string) error {
 	return c.Add(path)
 }
 
-// Catalog renders the block of skill names and descriptions an agent adds to
-// its system message, sorted by name so the prompt stays identical across
-// sessions built from the same collection. It returns an empty string when no
-// skills have been added.
+// Catalog returns the list of skill names and descriptions an agent adds to its
+// system message. It is sorted by name, so the prompt is the same for every
+// session built from the same collection. It is empty when there are no skills.
 func (c *Collection) Catalog() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -173,7 +169,7 @@ func (c *Collection) Catalog() string {
 	return strings.Join(lines, "\n")
 }
 
-// Skills returns the names of all skills in the collection, sorted by name.
+// Skills returns the names of the skills in the collection, sorted.
 func (c *Collection) Skills() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

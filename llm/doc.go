@@ -1,5 +1,4 @@
-// Package llm provides a provider-agnostic client for chat-based large language
-// models. Construct an [LLM] with [New], then call [LLM.Chat] to exchange
-// messages and [LLM.ModelInfo] to query model metadata. OpenRouter, Ollama, and
-// Anthropic are the supported providers.
+// Package llm is a chat client for OpenRouter, Ollama and Anthropic behind one
+// API. Create an [LLM] with [New], send messages with [LLM.Chat], and read model
+// metadata with [LLM.ModelInfo].
 package llm

@@ -3,23 +3,40 @@ package packs
 import (
 	"context"
 
+	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/mcp"
+	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// ToolPack owns the tools one call registered in a ToolBox, and whatever serves
-// them.
+// ToolPack owns the tools one constructor registered, and whatever serves them.
 type ToolPack interface {
-	// Close removes the tools the pack registered and stops whatever serves
-	// them. A pack served by a process of its own leaves that process running
-	// for the life of the program when it is dropped rather than closed, since
-	// nothing else owns it. It is safe to call more than once.
+	// Close removes the pack's tools and stops the server behind them, if any.
+	// It is safe to call more than once. A pack backed by its own process that is
+	// dropped without Close leaves that process running until the program exits.
 	Close() error
-	// Instructions returns the pack's usage doctrine — text meant for the
-	// model using the tools, labeled by [mcp.Instruction.Name] and
-	// complementary to the tool descriptions in the tools list — or nil when
-	// the pack has none. A pack served by an MCP server may ask that server
-	// for it under ctx, returning the error when the server fails to answer, so
-	// call it before [ToolPack.Close]. A pack that serves its own tools returns
-	// a fixed text and never fails.
+	// Instructions returns usage guidance for the model, labeled by
+	// [mcp.Instruction.Name], or nil if the pack has none. It complements the tool
+	// descriptions. A pack served by an MCP server may ask the server under ctx
+	// and return its error, so call it before [ToolPack.Close]. The packs that
+	// serve their own tools return fixed text and never fail.
 	Instructions(context.Context) (*mcp.Instruction, error)
+}
+
+type registration struct {
+	tool    llm.Tool
+	handler tools.Handler
+}
+
+func register(m *tools.ToolBox, registrations []registration) ([]string, error) {
+	names := make([]string, 0, len(registrations))
+
+	for _, r := range registrations {
+		if err := m.Add(r.tool, r.handler); err != nil {
+			return nil, err
+		}
+
+		names = append(names, r.tool.Name)
+	}
+
+	return names, nil
 }

@@ -27,12 +27,6 @@ const (
 	classifyQuestionID     = "question"
 )
 
-var classifyToolNames = []string{
-	classifyYesNoToolName,
-	classifyChoiceToolName,
-	classifyScoreToolName,
-}
-
 const classifyInstruction = `Hand a judgement call to these tools instead of
 making it yourself when a labelled answer settles it — a yes or a no, a pick
 from named options, a rating on ordered levels. The classifier is calibrated:
@@ -44,12 +38,13 @@ decision: weigh it against what you know, and say when you went against it.`
 
 type classifyPack struct {
 	toolBox *tools.ToolBox
+	names   []string
 	once    sync.Once
 }
 
 func (p *classifyPack) Close() error {
 	p.once.Do(func() {
-		for _, name := range classifyToolNames {
+		for _, name := range p.names {
 			p.toolBox.Remove(name)
 		}
 	})
@@ -85,27 +80,24 @@ type levelProbability struct {
 	Probability float64 `json:"probability"`
 }
 
-// ClassifyTools registers the three tools that let the model hand a judgement
-// call to the classification model behind client, one question per call:
-// "classify_yes_no" asks a [classify.YesNo], "classify_choice" a
-// [classify.Choice] and "classify_score" a [classify.Score]. Each takes the
-// input to judge and the question's instructions, and returns the answer as
-// JSON — the probability of yes, the option picked with the probability of each,
-// or the position across the levels with the probability of each. The returned
-// [ToolPack] removes the three again.
+// ClassifyTools registers three tools in m that send one judgement call at a
+// time to the classification model behind client: "classify_yes_no" asks a
+// [classify.YesNo], "classify_choice" a [classify.Choice] and "classify_score"
+// a [classify.Score]. Each takes the input to judge and the question's
+// instructions, and returns JSON: the probability of yes; the option picked and
+// each option's probability; or the position across the levels and each
+// level's probability.
 //
-// Whatever the model puts in the input is sent to the classification provider,
-// and every call is billed on its input tokens, the whole input included.
+// Everything the model puts in the input is sent to the classification
+// provider, and each call is billed on the whole input.
 //
-// A choice with fewer than two options or the same option twice, and a score
-// with fewer than two levels, fail with [ErrInvalidQuestion] before the provider
-// is called. An error from [classify.Classifier.Classify] is returned as it is.
+// A choice with fewer than two options or a repeated option, and a score with
+// fewer than two levels, fail with [ErrInvalidQuestion] before the provider is
+// called. Errors from [classify.Classifier.Classify] are returned unchanged.
 //
-// The caller owns client: [ToolPack.Close] only unregisters the tools, and a
-// dropped pack costs nothing beyond the tools staying registered.
-//
-// It fails with the error [tools.ToolBox.Add] returns when m rejects a
-// registration, which leaves any tool already registered by the call in place.
+// The caller owns client, so [ToolPack.Close] only unregisters. If m rejects a
+// registration, ClassifyTools returns the error from [tools.ToolBox.Add] and
+// leaves the tools it already registered in place.
 func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, error) {
 	yesNoTool := llm.Tool{
 		Name: classifyYesNoToolName,
@@ -119,13 +111,6 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 			String(trueArg, "what a yes means", true).
 			String(falseArg, "what a no means", true).
 			Build(),
-	}
-
-	err := m.Add(yesNoTool, func(ctx context.Context, args map[string]any) (string, error) {
-		return askYesNo(ctx, client, args)
-	})
-	if err != nil {
-		return nil, err
 	}
 
 	choiceTool := llm.Tool{
@@ -144,13 +129,6 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 			Build(),
 	}
 
-	err = m.Add(choiceTool, func(ctx context.Context, args map[string]any) (string, error) {
-		return askChoice(ctx, client, args)
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	scoreTool := llm.Tool{
 		Name: classifyScoreToolName,
 		Description: "Ask a calibrated classifier to rate an input against ordered levels, instead of " +
@@ -165,14 +143,22 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 			Build(),
 	}
 
-	err = m.Add(scoreTool, func(ctx context.Context, args map[string]any) (string, error) {
-		return askScore(ctx, client, args)
+	names, err := register(m, []registration{
+		{tool: yesNoTool, handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return askYesNo(ctx, client, args)
+		}},
+		{tool: choiceTool, handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return askChoice(ctx, client, args)
+		}},
+		{tool: scoreTool, handler: func(ctx context.Context, args map[string]any) (string, error) {
+			return askScore(ctx, client, args)
+		}},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &classifyPack{toolBox: m}, nil
+	return &classifyPack{toolBox: m, names: names}, nil
 }
 
 func askYesNo(ctx context.Context, client *classify.Classifier, args map[string]any) (string, error) {
@@ -223,7 +209,7 @@ func askChoice(ctx context.Context, client *classify.Classifier, args map[string
 			return "", err
 		}
 
-		if description, err = optionalString(option, optionDescriptionArg); err != nil {
+		if description, err = option.GetOptionalString(optionDescriptionArg, ""); err != nil {
 			return "", err
 		}
 
@@ -301,14 +287,6 @@ func inputAndInstructions(arguments *tools.Arguments) (string, string, error) {
 	}
 
 	return input, instructions, nil
-}
-
-func optionalString(arguments *tools.Arguments, name string) (string, error) {
-	if !arguments.Exists(name) {
-		return "", nil
-	}
-
-	return arguments.GetString(name)
 }
 
 func askOne[T classify.Answer](ctx context.Context, client *classify.Classifier, input string, question classify.Question) (T, error) {

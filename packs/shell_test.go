@@ -70,6 +70,25 @@ func TestShellTools(t *testing.T) {
 		// then
 		require.NoError(t, err)
 	})
+
+	t.Run("leaves a newer pack's tool in place on a second close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		oldPack, err := ShellTools(toolBox)
+		require.NoError(t, err)
+		require.NoError(t, oldPack.Close())
+
+		newPack, err := ShellTools(toolBox)
+		require.NoError(t, err)
+
+		defer func() { _ = newPack.Close() }()
+		// when
+		err = oldPack.Close()
+		// then
+		require.NoError(t, err)
+		require.Len(t, toolBox.Tools(), 1)
+		assert.Equal(t, shellToolName, toolBox.Tools()[0].Name)
+	})
 }
 
 func TestShellToolsInstructions(t *testing.T) {

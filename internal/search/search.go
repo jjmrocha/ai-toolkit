@@ -18,76 +18,69 @@ const (
 	maxSearchLineSize = 1024 * 1024
 )
 
-// Config describes the search [Files] runs over a folder.
+// Config describes a search [Files] runs.
 type Config struct {
-	// Dir is the folder to search, as an absolute path. Files walks it in
-	// lexical order, so the same search twice returns the same matches.
+	// Dir is the folder to search, as an absolute path. Files walks it in lexical
+	// order, so the same search returns the same matches.
 	Dir string
-	// Pattern is the expression every line is matched against. The caller
-	// compiles it, so a pattern the model got wrong is refused before anything
-	// is read.
+	// Pattern is matched against every line. The caller compiles it, so a bad
+	// pattern is refused before anything is read.
 	Pattern *regexp.Regexp
-	// Glob is matched against a file's name alone, never its path, so "*.md"
-	// finds a file called that however deep it sits. An empty Glob searches
-	// every file.
+	// Glob is matched against a file's name, not its path, so "*.md" finds such a
+	// file at any depth. Empty searches every file.
 	Glob string
-	// Recursive reports whether the folders under [Config.Dir] are
-	// searched too. A false Recursive searches only the files directly in it.
+	// Recursive reports whether folders under [Config.Dir] are searched too. When
+	// false, only the files directly in it are.
 	Recursive bool
-	// MaxMatches is how many matches Files collects before it stops walking,
-	// which is what bounds the work a broad pattern costs. A zero MaxMatches
-	// collects everything.
+	// MaxMatches is how many matches Files collects before it stops walking, which
+	// bounds the cost of a broad pattern. Zero collects everything.
 	MaxMatches int
-	// MaxTextBytes is how much of a matching line [Match.Text] carries. A
-	// longer line is cut at the last whole character that fits, so a match never
-	// holds more than this however long the line was, and
-	// [Match.Truncated] says it was cut. A zero MaxTextBytes keeps whole
-	// lines.
+	// MaxTextBytes caps the bytes of a line kept in [Match.Text]. A longer line is
+	// cut at the last whole character that fits, and [Match.Truncated] is set.
+	// Zero keeps whole lines.
 	MaxTextBytes int
 }
 
 // Match is one line that matched [Config.Pattern].
 type Match struct {
-	// Path is the file the line came from, as an absolute path.
+	// Path is the file's absolute path.
 	Path string
 	// Line is the line's number in that file, counting from 1.
 	Line int
-	// Text is the line itself, with the newline removed, cut to
-	// [Config.MaxTextBytes] when it ran over.
+	// Text is the line without its newline, cut to [Config.MaxTextBytes] if
+	// longer.
 	Text string
-	// Truncated reports whether the line was cut to
-	// [Config.MaxTextBytes], so Text holds only its start.
+	// Truncated reports whether Text was cut to [Config.MaxTextBytes].
 	Truncated bool
 }
 
 // Result is what [Files] collected before it stopped.
 type Result struct {
-	// Matches holds the matching lines, in the order the walk found them:
-	// grouped by file, and by line number within a file.
+	// Matches are the matching lines in the order found: grouped by file, and by
+	// line number within a file.
 	Matches []Match
-	// Truncated reports whether the walk stopped on [Config.MaxMatches]
-	// with matches still to find. Files looks one match past the limit to tell
-	// a file that ended exactly on it from one that did not, so a false
-	// Truncated means [Result.Matches] holds everything there was.
+	// Truncated reports whether the walk stopped at [Config.MaxMatches] with more
+	// matches left. Files looks one match past the limit, so a false Truncated
+	// means Matches holds every match.
 	Truncated bool
 }
 
-// Files reads every file under [Config.Dir] that [Config.Glob]
-// names and returns the lines matching [Config.Pattern], stopping once it
-// has [Config.MaxMatches] of them.
+// Files reads every file under [Config.Dir] that [Config.Glob] matches and
+// returns the lines matching [Config.Pattern], stopping at [Config.MaxMatches].
 //
-// The folder is opened as an [os.Root] and walked from inside it, so a symbolic
-// link that leaves the folder is refused rather than followed, and a caller
-// that already confined the path keeps that confinement here.
+// The folder is opened as an [os.Root] and walked from inside, so a symbolic
+// link that leaves it is refused, and a path the caller already confined stays
+// confined.
 //
-// Three kinds of file are passed over in silence: one that is not a regular
-// file; one holding a NUL byte in its first 8 KiB, the test grep uses for a
-// binary; and one that fails to open or read, so a single unreadable file does
-// not void a search that found matches elsewhere. A line longer than 1 MiB makes
-// a file unreadable, so its matches are discarded along with it.
+// Three kinds of file are skipped silently: anything not a regular file; a file
+// with a NUL byte in its first 8 KiB, grep's test for binary; and a file that
+// fails to open or read, so one bad file does not spoil the search. A line over
+// 1 MiB makes a file unreadable, so its matches are dropped.
 //
-// Files returns an error only when [Config.Dir] itself cannot be opened
-// or walked, or when ctx ends first.
+// Files returns an error only when [Config.Dir] cannot be opened or walked,
+// when [Config.Glob] is malformed, or when ctx ends first. A malformed Glob is
+// reported with [filepath.ErrBadPattern] once a file name reaches the part that
+// does not parse.
 func Files(ctx context.Context, cfg Config) (*Result, error) {
 	root, err := os.OpenRoot(cfg.Dir)
 	if err != nil {
@@ -124,7 +117,12 @@ func Files(ctx context.Context, cfg Config) (*Result, error) {
 			return fs.SkipDir
 		}
 
-		if !entry.Type().IsRegular() || !matchesGlob(cfg.Glob, entry.Name()) {
+		matched, globErr := matchesGlob(cfg.Glob, entry.Name())
+		if globErr != nil {
+			return globErr
+		}
+
+		if !entry.Type().IsRegular() || !matched {
 			return nil
 		}
 
@@ -162,14 +160,12 @@ func elide(text string, maxText int) (string, bool) {
 	return text[:cut], true
 }
 
-func matchesGlob(glob string, name string) bool {
+func matchesGlob(glob string, name string) (bool, error) {
 	if glob == "" {
-		return true
+		return true, nil
 	}
 
-	matched, err := filepath.Match(glob, name)
-
-	return err == nil && matched
+	return filepath.Match(glob, name)
 }
 
 func searchFile(root *os.Root, name string, pattern *regexp.Regexp, maxText int, budget int) []Match {

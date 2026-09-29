@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/internal/command"
@@ -33,10 +34,13 @@ README or CI configuration rather than inventing one.`
 
 type shellPack struct {
 	toolBox *tools.ToolBox
+	once    sync.Once
 }
 
 func (p *shellPack) Close() error {
-	p.toolBox.Remove(shellToolName)
+	p.once.Do(func() {
+		p.toolBox.Remove(shellToolName)
+	})
 
 	return nil
 }
@@ -48,20 +52,19 @@ func (p *shellPack) Instructions(_ context.Context) (*mcp.Instruction, error) {
 	}, nil
 }
 
-// ShellTools registers a single tool, "shell_run", that runs a command line
-// with /bin/sh in m. It needs nothing beyond the shell, and the returned
-// [ToolPack] removes the tool again. Nothing is launched, so its Close only
-// unregisters. It fails, registering nothing, with the error [tools.ToolBox.Add]
-// returns when m rejects the registration.
+// ShellTools registers "shell_run" in m, which runs a command line with
+// /bin/sh. Nothing is launched, so [ToolPack.Close] only unregisters. If m
+// rejects the registration, ShellTools returns the error from
+// [tools.ToolBox.Add].
 //
-// The command runs with the authority of the program that registered the tool:
-// its whole filesystem, its environment and the credentials in it. Register it
-// only for a model and a conversation you would trust with a shell.
+// Commands run with the program's authority: its whole filesystem, its
+// environment and any credentials in it. Register it only for a model you would
+// trust with a shell.
 //
-// The call chooses the working directory and a timeout of up to ten minutes,
-// two by default. A command that outlasts its timeout is stopped, and the model
-// is told so rather than handed an error. Output is capped at 1 MiB, after
-// which the command is stopped and the result is marked truncated.
+// The call picks the working directory and a timeout of up to ten minutes, two
+// by default. A command that runs past its timeout is stopped and the model is
+// told so; that is not an error. Output is capped at 1 MiB, after which the
+// command is stopped and the result marked truncated.
 func ShellTools(m *tools.ToolBox) (ToolPack, error) {
 	tool := llm.Tool{
 		Name: shellToolName,
@@ -93,8 +96,8 @@ func runShellCommand(ctx context.Context, args map[string]any) (string, error) {
 		return "", err
 	}
 
-	dir, err := arguments.GetString(workdirArg)
-	if err != nil && !errors.Is(err, tools.ErrFieldNotFound) {
+	dir, err := arguments.GetOptionalString(workdirArg, "")
+	if err != nil {
 		return "", err
 	}
 
@@ -124,12 +127,8 @@ func runShellCommand(ctx context.Context, args map[string]any) (string, error) {
 }
 
 func shellTimeout(arguments *tools.Arguments) (time.Duration, error) {
-	millis, err := arguments.GetInt(timeoutArg)
+	millis, err := arguments.GetOptionalInt(timeoutArg, int(defaultShellTimeout.Milliseconds()))
 	if err != nil {
-		if errors.Is(err, tools.ErrFieldNotFound) {
-			return defaultShellTimeout, nil
-		}
-
 		return 0, err
 	}
 
@@ -148,10 +147,7 @@ func renderShellTimeout(timeout time.Duration) string {
 }
 
 func renderShellResult(result *command.RunResult) string {
-	open := "<output>"
-	if result.Truncated {
-		open = `<output truncated="true">`
-	}
+	open := fmt.Sprintf(`<output%s>`, truncatedAttr(result.Truncated))
 
 	lines := []string{
 		"exit status: " + strconv.Itoa(result.ExitCode),

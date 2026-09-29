@@ -3,12 +3,10 @@ package tools
 import "fmt"
 
 // Arguments wraps the decoded arguments of a tool call (the map[string]any a
-// [Handler] receives) and provides typed accessors that return each field
-// already converted to a Go type, with an error instead of a panic on a type
-// mismatch: every accessor reports [ErrFieldNotFound] or [ErrInvalidFieldType].
-// Because the values arrive with JSON types, numbers are float64; the numeric
-// accessors also accept int so the same code works for programmatically built
-// maps.
+// [Handler] receives) with typed accessors. Each accessor returns
+// [ErrFieldNotFound] or [ErrInvalidFieldType] instead of panicking. JSON
+// numbers arrive as float64; the numeric accessors also accept int, so maps
+// built in code work too.
 type Arguments struct {
 	data map[string]any
 }
@@ -41,9 +39,19 @@ func (a *Arguments) GetString(key string) (string, error) {
 	return str, nil
 }
 
-// GetInt returns the field named key as an int. JSON numbers decode as float64,
-// so a float64 is accepted and truncated toward zero; an int is returned as is.
-// It returns [ErrFieldNotFound] if the field is missing and
+// GetOptionalString returns the field named key as [Arguments.GetString] does,
+// or fallback when the field is missing. It returns [ErrInvalidFieldType] if
+// the field is present but is not a string.
+func (a *Arguments) GetOptionalString(key string, fallback string) (string, error) {
+	if !a.Exists(key) {
+		return fallback, nil
+	}
+
+	return a.GetString(key)
+}
+
+// GetInt returns the field named key as an int. A float64 is truncated toward
+// zero. It returns [ErrFieldNotFound] if the field is missing and
 // [ErrInvalidFieldType] if it is neither an int nor a float64.
 func (a *Arguments) GetInt(key string) (int, error) {
 	value, ok := a.data[key]
@@ -59,6 +67,17 @@ func (a *Arguments) GetInt(key string) (int, error) {
 	default:
 		return 0, fmt.Errorf("%w: %s is not an int", ErrInvalidFieldType, key)
 	}
+}
+
+// GetOptionalInt returns the field named key as [Arguments.GetInt] does, or
+// fallback when the field is missing. It returns [ErrInvalidFieldType] if the
+// field is present but is neither an int nor a float64.
+func (a *Arguments) GetOptionalInt(key string, fallback int) (int, error) {
+	if !a.Exists(key) {
+		return fallback, nil
+	}
+
+	return a.GetInt(key)
 }
 
 // GetFloat64 returns the field named key as a float64. An int is accepted and
@@ -80,6 +99,17 @@ func (a *Arguments) GetFloat64(key string) (float64, error) {
 	}
 }
 
+// GetOptionalFloat64 returns the field named key as [Arguments.GetFloat64]
+// does, or fallback when the field is missing. It returns [ErrInvalidFieldType]
+// if the field is present but is neither a float64 nor an int.
+func (a *Arguments) GetOptionalFloat64(key string, fallback float64) (float64, error) {
+	if !a.Exists(key) {
+		return fallback, nil
+	}
+
+	return a.GetFloat64(key)
+}
+
 // GetBool returns the bool field named key. It returns [ErrFieldNotFound] if
 // the field is missing and [ErrInvalidFieldType] if it is not a bool.
 func (a *Arguments) GetBool(key string) (bool, error) {
@@ -96,9 +126,20 @@ func (a *Arguments) GetBool(key string) (bool, error) {
 	return b, nil
 }
 
-// GetObject returns the nested object field named key wrapped in its own
-// [Arguments]. It returns [ErrFieldNotFound] if the field is missing and
-// [ErrInvalidFieldType] if it is not an object.
+// GetOptionalBool returns the field named key as [Arguments.GetBool] does, or
+// fallback when the field is missing. It returns [ErrInvalidFieldType] if the
+// field is present but is not a bool.
+func (a *Arguments) GetOptionalBool(key string, fallback bool) (bool, error) {
+	if !a.Exists(key) {
+		return fallback, nil
+	}
+
+	return a.GetBool(key)
+}
+
+// GetObject returns the object field named key as its own [Arguments]. It
+// returns [ErrFieldNotFound] if the field is missing and [ErrInvalidFieldType]
+// if it is not an object.
 func (a *Arguments) GetObject(key string) (*Arguments, error) {
 	value, ok := a.data[key]
 	if !ok {
@@ -140,10 +181,22 @@ func (a *Arguments) GetArrayOfStrings(key string) ([]string, error) {
 	return result, nil
 }
 
-// GetArrayOfInts returns the field named key as a []int, accepting float64
-// elements (truncated toward zero) as well as int. It returns
-// [ErrFieldNotFound] if the field is missing and [ErrInvalidFieldType] if it is
-// not an array or contains an element that is neither.
+// GetOptionalArrayOfStrings returns the field named key as
+// [Arguments.GetArrayOfStrings] does, or fallback when the field is missing. It
+// returns [ErrInvalidFieldType] if the field is present but is not an array or
+// contains a non-string element.
+func (a *Arguments) GetOptionalArrayOfStrings(key string, fallback []string) ([]string, error) {
+	if !a.Exists(key) {
+		return fallback, nil
+	}
+
+	return a.GetArrayOfStrings(key)
+}
+
+// GetArrayOfInts returns the field named key as a []int. Float64 elements are
+// truncated toward zero. It returns [ErrFieldNotFound] if the field is missing
+// and [ErrInvalidFieldType] if it is not an array or holds an element that is
+// neither an int nor a float64.
 func (a *Arguments) GetArrayOfInts(key string) ([]int, error) {
 	value, ok := a.data[key]
 	if !ok {
@@ -170,10 +223,10 @@ func (a *Arguments) GetArrayOfInts(key string) ([]int, error) {
 	return result, nil
 }
 
-// GetArrayOfFloat64s returns the field named key as a []float64, accepting int
-// elements (converted) as well as float64. It returns [ErrFieldNotFound] if the
-// field is missing and [ErrInvalidFieldType] if it is not an array or contains
-// an element that is neither.
+// GetArrayOfFloat64s returns the field named key as a []float64. Int elements
+// are converted. It returns [ErrFieldNotFound] if the field is missing and
+// [ErrInvalidFieldType] if it is not an array or holds an element that is
+// neither a float64 nor an int.
 func (a *Arguments) GetArrayOfFloat64s(key string) ([]float64, error) {
 	value, ok := a.data[key]
 	if !ok {
@@ -227,10 +280,9 @@ func (a *Arguments) GetArrayOfBools(key string) ([]bool, error) {
 	return result, nil
 }
 
-// GetArrayOfObjects returns the field named key as a slice of [Arguments], one
-// per object element. It returns [ErrFieldNotFound] if the field is missing and
-// [ErrInvalidFieldType] if it is not an array or contains a non-object
-// element.
+// GetArrayOfObjects returns the field named key as one [Arguments] per object
+// element. It returns [ErrFieldNotFound] if the field is missing and
+// [ErrInvalidFieldType] if it is not an array or holds a non-object element.
 func (a *Arguments) GetArrayOfObjects(key string) ([]*Arguments, error) {
 	value, ok := a.data[key]
 	if !ok {

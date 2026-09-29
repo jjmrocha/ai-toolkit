@@ -7,53 +7,46 @@ import (
 	"os/exec"
 )
 
-// RunConfig describes the command [Run] launches. Path and Args are run with
-// os/exec without a shell, so they are trusted input: supply them from operator
+// RunConfig describes the command [Run] launches. Path and Args run through
+// os/exec with no shell, so they are trusted input: take them from operator
 // configuration, never from an untrusted source.
 type RunConfig struct {
 	// Path is the executable to launch.
 	Path string
 	// Args are the arguments passed to Path.
 	Args []string
-	// Dir is the working directory the process runs in. An empty Dir runs it in
-	// the calling process's working directory.
+	// Dir is the working directory. Empty means the caller's.
 	Dir string
-	// Env is the command's environment, each entry in KEY=VALUE form. A nil Env
-	// hands the command the calling process's own environment, credentials
-	// included; [InheritedEnv] builds a filtered one. An empty but non-nil Env
-	// runs the command with no environment at all.
+	// Env is the environment, as KEY=VALUE entries. Nil passes the caller's whole
+	// environment, credentials included; [InheritedEnv] builds a filtered one.
+	// Empty but not nil means no environment at all.
 	Env []string
-	// MaxOutputBytes is how much output [Run] collects before it stops the
-	// command, counting each line and the newline that followed it. The line
-	// that passes the limit is kept, so [RunResult.Output] may run over it by
-	// that much, and [RunResult] is marked truncated. A zero MaxOutputBytes
-	// collects everything.
+	// MaxOutputBytes is how much output [Run] collects, counting each line and its
+	// newline, before it stops the command and marks the [RunResult] truncated. The
+	// line that crosses the limit is kept, so the output can exceed it by one line.
+	// Zero collects everything.
 	MaxOutputBytes int
 }
 
-// RunResult is what [Run] collected from a command that ran to completion.
+// RunResult is what [Run] collected from a command that finished.
 type RunResult struct {
 	// ExitCode is the status the command exited with.
 	ExitCode int
-	// Output holds the command's output, one line at a time with the newline
-	// removed.
+	// Output is the command's output, one line per element, without newlines.
 	Output []string
-	// Truncated reports whether the command was stopped for writing more than
-	// [RunConfig.MaxOutputBytes]. [RunResult.Output] then holds only the start
-	// of its output, and [RunResult.ExitCode] describes the kill, not the
-	// command's own choice.
+	// Truncated reports whether the command was stopped for exceeding
+	// [RunConfig.MaxOutputBytes]. Output then holds only the start, and ExitCode
+	// reflects the kill, not the command.
 	Truncated bool
 }
 
-// Run launches the command cfg describes, collects its output until it ends,
-// and waits for it to exit. The command's stderr is always merged into the
-// output, in the order the command wrote it; [NewProcess] is the way to read
-// stdout on its own.
+// Run launches the command, collects its output until it ends, and waits for
+// it to exit. Stderr is always merged into the output, in the order it was
+// written; use [NewProcess] to read stdout alone.
 //
-// A non-zero exit status is part of the [RunResult], not an error. Run returns
-// an error when the command cannot be started, when ctx ends first, or when
-// waiting on it fails for any other reason. Unless [RunConfig.MaxOutputBytes]
-// says otherwise, Run keeps everything the command writes.
+// A non-zero exit status goes in the [RunResult], not the error. Run returns an
+// error when the command cannot start, when ctx ends first, or when waiting on
+// it fails for another reason.
 func Run(ctx context.Context, cfg RunConfig) (*RunResult, error) {
 	exited := make(chan error, 1)
 

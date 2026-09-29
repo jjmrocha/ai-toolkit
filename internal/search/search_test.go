@@ -321,6 +321,17 @@ func TestFiles(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
+	t.Run("returns an error when Glob is malformed", func(t *testing.T) {
+		// given
+		dir := dirWith(t, map[string]string{"xy.md": "beta\n"})
+		cfg := Config{Dir: dir, Pattern: regexp.MustCompile("beta"), Glob: "x*[z"}
+		// when
+		result, err := Files(t.Context(), cfg)
+		// then
+		assert.ErrorIs(t, err, filepath.ErrBadPattern)
+		assert.Nil(t, result)
+	})
+
 	t.Run("stops when the context is done", func(t *testing.T) {
 		// given
 		dir := dirWith(t, map[string]string{"notes.md": "beta\n"})

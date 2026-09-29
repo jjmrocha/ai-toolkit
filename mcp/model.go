@@ -1,22 +1,20 @@
 package mcp
 
-// Status reports whether a registered MCP is currently running, as returned by
+// Status is one registered MCP and whether it is running, as returned by
 // [Manager.Status].
 type Status struct {
 	// Name is the MCP's registered name.
 	Name string
-	// Active is true while the MCP's server process is running.
+	// Active is true while the MCP's process is running.
 	Active bool
 }
 
-// Instruction pairs an MCP's registered name with the usage instructions it
-// sent as part of its initialize handshake, as returned by
-// [Client.Instructions] and [Manager.Instructions].
+// Instruction is usage guidance for a model, labeled with the name of the MCP
+// or pack it came from.
 type Instruction struct {
 	// Name is the MCP's registered name.
 	Name string
-	// Text is the instructions the server sent at handshake, empty when it
-	// sent none.
+	// Text is the guidance, empty when there is none.
 	Text string
 }
 

@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/jjmrocha/ai-toolkit.svg)](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit)
 
 A personal, highly opinionated set of Go packages for working with chat-based
-LLMs. It's built for my own use and reflects my own taste in API design — there
+LLMs. It's built for my own use and reflects my own taste in API design. There
 are more mature, better-supported libraries out there, and you should probably
 reach for one of those first. But if it happens to fit your needs as-is, feel
 free to use it.
@@ -17,21 +17,21 @@ go get github.com/jjmrocha/ai-toolkit
 
 | Package | What it does | Builds on |
 | --- | --- | --- |
-| [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | — |
-| [`classify`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/classify) | Typed questions answered with probabilities, not text | — |
+| [`llm`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/llm) | One chat API across three providers | |
+| [`classify`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/classify) | Typed questions answered with probabilities, not text | |
 | [`tools`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/tools) | Registers tools and dispatches the model's calls | `llm` |
 | [`mcp`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/mcp) | Turns an MCP server's tools into `tools` entries | `llm`, `tools` |
 | [`skills`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/skills) | On-demand instructions the model loads by name | `llm`, `tools` |
 | [`agent`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/agent) | Runs the call-tool-feed-back loop for you | `llm`, `tools`, `skills` |
 | [`packs`](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit/packs) | Ready-made tool bundles, registered in one call | `classify`, `mcp`, `tools` |
 
-The sections below are a tour. The full API reference lives on
+The sections below are a tour. The full API reference is on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
 
 ## `llm`
 
-One API for chatting with OpenRouter, Ollama, or Anthropic — swap `Provider` and
-`Model` to change backends.
+One API for OpenRouter, Ollama and Anthropic. Change `Provider` and `Model` to
+switch backends.
 
 ```go
 model, err := llm.New(llm.Config{
@@ -58,16 +58,16 @@ fmt.Printf("tokens: %d\n", reply.Stats.TotalTokens)
 Worth knowing:
 
 - Ollama needs no API key.
-- Every reply carries `Stats` — including prompt-cache reads and writes — and the provider's native `StopReason`.
-- `Config.Effort` maps one knob, `EffortOff` through `EffortMax`, onto Anthropic's adaptive-thinking effort level and OpenRouter/Ollama's reasoning level. The values are relative rungs, not provider literals, so the same `Effort` reaches each backend as whatever that backend calls it.
-- `Config.Models` lists what `ChangeModel` may switch to mid-conversation; the active model is always included.
-- `ChangeModel` and `ChangeEffort` both validate before they mutate and return an error otherwise, so a rejected switch leaves the client on its current settings.
+- Every reply carries `Stats`, prompt-cache reads and writes included, and the provider's own `StopReason`.
+- `Config.Effort`, from `EffortOff` to `EffortMax`, maps onto Anthropic's adaptive-thinking effort and the OpenRouter and Ollama reasoning level. The values are relative levels, so each provider receives its own equivalent.
+- `Config.Models` lists what `ChangeModel` may switch to mid-conversation. The active model is always included.
+- `ChangeModel` and `ChangeEffort` validate first. A rejected change returns an error and leaves the client as it was.
 
 ## `classify`
 
-Asks a classification model typed questions about an input and gets typed answers back.
-No prose to parse: each answer carries the probabilities behind it. The provider
-is OpenRouter, which serves TypeSafe's Jev models.
+Asks a classification model typed questions about an input and returns typed
+answers, each with the probabilities behind it. There is no prose to parse. The
+provider is OpenRouter, which serves TypeSafe's Jev models.
 
 ```go
 client, err := classify.New(classify.Config{
@@ -106,19 +106,19 @@ fmt.Println(team.Selected, team.Confidence)
 
 Worth knowing:
 
-- `Request.Questions` and `Response.Answers` share the identifiers you choose. They are never sent to the model.
-- Every question in a request is answered in parallel and in isolation: none of them sees another's answer.
-- `Answer` is a sealed interface — `YesNoAnswer`, `ChoiceAnswer`, `ScoreAnswer` — so switch on `Type()` before reading an answer's fields.
+- `Request.Questions` and `Response.Answers` share the identifiers you choose. The model never sees them.
+- The questions are answered in parallel, and none sees another's answer.
+- `Answer` is a sealed interface (`YesNoAnswer`, `ChoiceAnswer`, `ScoreAnswer`). Switch on `Type()` before reading the fields.
 - `YesNoAnswer.Value` is the probability of yes, not a severity: `0.5` means undecided, not "medium".
-- A `YesNo` describes both answers or neither: one of `True` and `False` without the other fails with `ErrInvalidQuestion` before anything is sent.
-- `ScoreAnswer.Score` is a probability-weighted position across your levels, so it lands between them.
-- `Confidence` describes how concentrated the probabilities are. What to do below a threshold is yours to decide; the package never decides for you.
-- `Stats` reports the input tokens — the only ones providers bill — and how long the call took.
+- A `YesNo` describes both answers or neither. Setting only one of `True` and `False` fails with `ErrInvalidQuestion` before anything is sent.
+- `ScoreAnswer.Score` is a probability-weighted position across your levels, so it can land between them.
+- `Confidence` is how concentrated the probabilities are. The package applies no threshold; that decision is yours.
+- `Stats` reports the input tokens, the only ones providers bill, and how long the call took.
 
 ## `tools`
 
-Removes the two chores of tool calling: writing parameter schemas by hand and
-dispatching the model's calls yourself.
+Handles the two chores of tool calling: writing parameter schemas and
+dispatching the model's calls.
 
 ```go
 toolBox := tools.NewToolBox()
@@ -153,21 +153,20 @@ for _, call := range reply.ToolCalls {
 
 Worth knowing:
 
-- `Tools` returns a name-sorted slice, so the tool section of the prompt stays byte-identical across requests — which is what prompt caching needs.
-- `Tool(name)` looks one definition up by name, returning `false` when nothing is registered under it — a cheaper check than scanning `Tools`. The value it hands back is a shallow copy, so its `Schema` map must be left alone.
-- A `ToolBox` is safe for concurrent use: tools can be added and removed while other goroutines list or execute them.
-- `SetInterceptor` installs a gate `Execute` consults after it finds the tool and before it runs the handler: return an error and the call is blocked, the handler never runs, and the error comes back wrapped. It covers every tool in the box however it was registered — by a pack, by an MCP server at runtime, or by your own `Add` — so it is the one place to ask for approval, keep an audit trail, or refuse a command outright. `SetInterceptor(nil)` clears it; unguarded is the default.
-- `ObjectBuilder` nests — pass one to `Object` or `ArrayOfObjects` to describe schemas of any depth.
-- `Arguments` accessors return `ErrFieldNotFound` or `ErrInvalidFieldType` instead of panicking, and take an `int` where JSON handed you a `float64`. `Exists(key) bool` reports whether a field is there at all, whatever its type — which is how an optional argument gets a default, read only when the call set it, rather than asking for it and sorting `ErrFieldNotFound` out of the error that comes back.
-- `ValidToolName` and `SanitizeToolName` apply the providers' naming rules (64 characters; letters, digits, `_`, `-`) to names from outside sources.
+- `Tools` returns the tools sorted by name, so the tools section of the prompt is byte-identical across requests. Prompt caching needs that.
+- `Tool(name)` returns one definition, or `false` if there is none. Its `Schema` map is shared with the registration; don't modify it.
+- A `ToolBox` is safe for concurrent use. Tools can be added and removed while other goroutines list or run them.
+- `SetInterceptor` installs a check that `Execute` runs after finding the tool and before calling the handler. If it returns an error, the handler never runs and `Execute` returns that error wrapped. It covers every tool, however it was registered (a pack, an MCP server, your own `Add`), so it is the one place to ask for approval, keep an audit trail, or refuse a command. `SetInterceptor(nil)` removes it; by default there is none.
+- `ObjectBuilder` nests: pass one to `Object` or `ArrayOfObjects` for schemas of any depth.
+- `Arguments` accessors return `ErrFieldNotFound` or `ErrInvalidFieldType` instead of panicking, and accept an `int` where JSON gives a `float64`. `Exists(key)` reports whether a field is present, whatever its type. For optional arguments, `GetOptionalString`, `GetOptionalInt`, `GetOptionalFloat64`, `GetOptionalBool` and `GetOptionalArrayOfStrings` take a fallback: a missing field returns it, and a present one is read like its `Get` counterpart, `ErrInvalidFieldType` included.
+- `ValidToolName` and `SanitizeToolName` apply the providers' naming rules (up to 64 characters; letters, digits, `_`, `-`) to names from outside sources.
 
 ## `mcp`
 
-Connects a stdio-based [MCP](https://modelcontextprotocol.io) server to a
-`tools.ToolBox`, so the tools it exposes become callable like any other tool. The
-protocol is spoken by the official
-[Go SDK](https://github.com/modelcontextprotocol/go-sdk); this package owns the
-process, the namespacing, and the mapping onto `ToolBox`.
+Connects a stdio [MCP](https://modelcontextprotocol.io) server to a
+`tools.ToolBox`, so its tools are called like any other. The official
+[Go SDK](https://github.com/modelcontextprotocol/go-sdk) speaks the protocol;
+this package owns the process, the namespacing and the `ToolBox` entries.
 
 ```go
 toolBox := tools.NewToolBox()
@@ -191,24 +190,24 @@ reply, err := model.Chat(ctx, messages, toolBox.Tools()) // MCP tools included
 
 Worth knowing:
 
-- Tools are namespaced `"<Name>__<tool>"`, e.g. `playwright__browser_navigate`. A namespaced name the providers would reject is rewritten rather than dropped; the server is still called by the name it published.
-- `NewClient` rejects a config without a `Name` (`ErrNameRequired`) or without a `Command` (`ErrCommandRequired`) before launching anything.
-- A server whose handshake declares no tools capability is never asked for a tool list. `RegisterTools` registers nothing and succeeds, so a resources-only or prompts-only server keeps running instead of being torn down for declining a method it never claimed. A server that declares no capabilities at all is asked anyway.
-- A server that announces `notifications/tools/list_changed` has its tools registered again automatically: the list is fetched afresh under its own thirty-second timeout and the `ToolBox` entries are replaced. A refresh that fails changes nothing — the tools already registered stay exactly as they were. Calling `RegisterTools` again does the same by hand, so a caller that knows the list has moved need not tear the client down.
-- `Close` shuts the process down and removes the tools it registered, aborting any call still waiting on the server. `Connected` reports whether the process is still up. A `Client` is safe for concurrent use.
-- `Name` returns the name the client registered under — the `ClientConfig.Name`, which also prefixes every tool it registers.
-- `Instructions` returns an `*Instruction` — the server's registered name paired with the usage instructions it sent as part of its initialize handshake, text meant for the model that tells it how to use this server's tools — or nil if the server sent none. The value is fixed for the client's lifetime. Feed it into the system prompt when a server carries guidance worth keeping.
-- `CallTool` calls one of the server's tools directly and returns its text result, on the same terms as a registered tool — `ToolCallTimeout`, progress resetting the clock, nil args sent as an empty object. It takes the name the server published, not the namespaced one, and reaches a tool whether or not `ExcludedTools` names it, so a program can read what a tool returns without offering that tool to the model.
-- `ExcludedTools` names tools the server publishes that you do not want registered, by the name the server publishes them under rather than the namespaced one. The filter applies every time the list is read, so a tool named here stays unregistered when the server announces a change to its list, and a name the server never publishes is ignored. It is how you drop one capability from a server you otherwise want — `packs.CodingTools` uses it to leave Serena's shell out.
-- `ToolCallTimeout` bounds one call to this server's tools, defaulting to sixty seconds. It is an idle timeout rather than a total budget: every progress notification the server sends restarts the clock, so a tool that reports progress runs as long as it keeps reporting, while one that goes quiet fails that single call. The timeout sits inside the caller's own context, so a failed call leaves the caller's deadline intact — the agent loop reports the failure to the model and carries on rather than losing the turn. The abort reaches the handler as `context.Canceled`, the same as a cancellation from above: `ErrRequestTimeout` is recorded as the internal context's cancellation cause and is never returned, so a caller cannot currently tell a quiet server from a cancelled turn.
-- Content the model cannot read as text is summarised rather than dropped. An image, audio clip, resource link, or binary embedded resource becomes a short descriptor such as `[image: image/png, 48213 bytes]`; text content and text-bearing resources pass through unchanged, and a result carrying only structured content is rendered as its JSON.
-- The server gets a filtered environment, not yours: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_DIR`, `SSL_CERT_FILE`, the proxy variables in both cases, and every `LC_` variable. Name anything else a particular server needs in `InheritEnv` and it is copied from the calling process — the config names variables, it never holds their values. A name you did not set is skipped rather than passed on empty.
-- `Command` and `Args` are run without a shell, but they are still trusted input: supply them from operator configuration, never from an untrusted source.
+- Tools are registered as `"<Name>__<tool>"`, e.g. `playwright__browser_navigate`. A name the providers would reject is rewritten, not dropped; the server is still called by its own name.
+- `NewClient` rejects a config without a `Name` (`ErrNameRequired`) or a `Command` (`ErrCommandRequired`) before launching anything.
+- A server whose handshake declares no tools capability is never asked for tools. `RegisterTools` registers nothing and succeeds, so a server that only offers resources or prompts keeps running. A server that declares no capabilities at all is asked anyway.
+- When a server sends `notifications/tools/list_changed`, its tools are registered again automatically: the list is fetched with a 30-second timeout and the `ToolBox` entries replaced. If the refresh fails, the old tools stay as they were. Calling `RegisterTools` again does the same by hand.
+- `Close` stops the process, removes its tools, and aborts calls still waiting on the server. `Connected` reports whether the process is still up. A `Client` is safe for concurrent use.
+- `Name` returns `ClientConfig.Name`, which also prefixes every tool the client registers.
+- `Instructions` returns the usage instructions the server sent in its handshake, as an `*Instruction` labeled with the client's name, or nil if it sent none. They don't change for the client's lifetime. Put them in the system prompt when a server's guidance is worth keeping.
+- `CallTool` calls one of the server's tools directly and returns its text result, on the same terms as a registered tool: `ToolCallTimeout`, progress resetting the timer, nil args sent as an empty object. It takes the server's own tool name and ignores `ExcludedTools`, so a program can use a tool without offering it to the model.
+- `ExcludedTools` names server tools to leave unregistered, by the server's name for them, not the namespaced one. It applies every time the list is read, so an excluded tool stays out after a list change. `packs.CodingTools` uses it to leave out Serena's shell.
+- `ToolCallTimeout` limits one tool call, 60 seconds by default. It is an idle timeout: every progress notification restarts it, so a tool that keeps reporting progress keeps running, and one that goes quiet fails that call. It runs inside the caller's context, so the caller's deadline survives and the agent loop reports the failure to the model and goes on. The handler sees the abort as `context.Canceled`, like any cancellation. `ErrRequestTimeout` is only recorded as the internal cancellation cause and never returned, so a caller can't yet tell a quiet server from a cancelled turn.
+- Content the model can't read as text is summarized, not dropped. An image, audio clip, resource link or binary resource becomes a descriptor like `[image: image/png, 48213 bytes]`. Text passes through unchanged, and a result with only structured content is rendered as JSON.
+- The server gets a filtered environment: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`, `TMPDIR`, `LANG`, `TZ`, `SSL_CERT_DIR`, `SSL_CERT_FILE`, the proxy variables in either case, and every `LC_` variable. Name anything else a server needs in `InheritEnv` to copy it from your process. The config holds names, never values. A name you haven't set is skipped, not passed empty.
+- `Command` and `Args` run without a shell but are still trusted input. Take them from operator configuration, never from an untrusted source.
 
 ### `Manager`
 
-Runs several MCP servers on demand against a shared `ToolBox` — for example, to
-expose a server's tools only while a user has it switched on.
+Runs several MCP servers on demand against one `ToolBox`, for example to offer
+a server's tools only while a user has it switched on.
 
 ```go
 manager := mcp.NewManager(toolBox)
@@ -230,26 +229,22 @@ for _, status := range manager.Status() {
 manager.Stop("playwright") // tools removed, config kept for a later Start
 ```
 
-`Register` records a launch configuration without starting it. `Start` and `Stop`
-bring a server up and down by name, keeping the configuration for a later
-restart; a server whose process has died is replaced on the next `Start`, and
-starting one that is already running is a no-op. Either call returns
-`ErrMCPNotRegistered` for a name that was never registered. `Status` reports
-which are running and `Close` stops everything it started, keeping the
-registrations so the same `Manager` can bring them back up. Safe for concurrent
-use.
+`Register` stores a configuration without starting it. `Start` and `Stop` bring
+a server up and down by name and keep its configuration. Starting a running
+server does nothing, and a dead one is replaced. Both return
+`ErrMCPNotRegistered` for an unknown name. `Status` shows which servers are
+running, and `Close` stops them all but keeps the registrations. A `Manager` is
+safe for concurrent use.
 
-`Instructions` returns one `Instruction` per running server that sent usage
-instructions at handshake, sorted by name. A server that sent none is left out
-rather than returned empty, one that is not running is left out too, and a dead
-client is reaped along the way as `Status` does; the result is nil when nothing
-running sent any.
+`Instructions` returns one `Instruction` per running server that sent
+instructions, sorted by name, or nil if none did. Dead clients are discarded
+along the way, as in `Status`.
 
 ## `skills`
 
-A skill is a folder with a `SKILL.md` inside: frontmatter carrying a `name` and a
-`description`, and a body holding the instructions. You add the folders a session
-should have — nothing is discovered automatically.
+A skill is a folder with a `SKILL.md`: frontmatter with a `name` and a
+`description`, then the instructions. You add the folders a session should
+have. Nothing is discovered automatically.
 
 ```go
 collection := skills.NewCollection()
@@ -273,25 +268,26 @@ Read the merged PRs since the last tag, then ...
 
 Worth knowing:
 
-- Only names and descriptions reach the model up front, as an `<available-skills>` block appended to the session's system prompt. Bodies load on demand, so a long skill costs nothing until it is used.
-- Three tools are registered for the session: `skill_load` returns a skill's instructions plus the list of files it ships, `skill_load_file` returns one of those files, and `skill_execute_file` runs one of them.
-- **`skill_load`, `skill_load_file` and `skill_execute_file` are reserved tool names.** A tool already registered under any of them is replaced while the session lasts, and removed when it ends.
-- `AddClaudeSkill` adds a skill by name from the user's Claude skills folder, `~/.claude/skills`, and is `Add` in every other respect. The name has to be a single folder in there — anything that would step outside it, `../other` included, is rejected with `ErrInvalidSkillName`, and a name that is not there gets `Add`'s own `ErrSkillFolderNotFound`.
-- An agent wires the collection up on `StartSession`; on its own, `RegisterTools` adds the three tools to any `ToolBox` and `UnregisterTools` takes them back out. `Catalog` renders the `<available-skills>` block, and `Skills` lists the names added so far, sorted.
-- File access is confined to the skill folder with `os.OpenRoot`, so a symlink pointing outside it is neither listed nor readable, and the model is never told the folder's real path.
-- `skill_execute_file` runs the file directly, from the skill's folder, with the arguments the model supplies and no shell. The file needs its own execute bit and shebang; the package never changes file modes, and it infers no interpreter from the extension. A file the skill does not ship cannot be run.
-- A non-zero exit is a result, not a failure: the tool returns the process's combined output and its exit status, and reports an error only when the process could not run at all.
-- Output is collected up to 1 MiB, after which the script is stopped and the result is marked truncated. A stopped script's exit status describes the kill rather than a choice it made.
-- The script gets no stdin, so one that reads input sees end of input at once instead of waiting.
-- A script is stopped after two minutes, and the model gets a result saying it timed out rather than an error. That limit is a default for a context with no deadline: a deadline the caller already set is kept whatever its length, and when it or a cancellation ends the script, the tool reports the context's error. Execution also leaves the `os.OpenRoot` sandbox behind: the process runs with the same authority as the program that started it and inherits its environment, credentials included, so add only folders you trust, exactly as with an `mcp` server command.
-- The body and the file list are read once, by `Add`. Editing a skill on disk does not change a collection already built.
-- Frontmatter is parsed as YAML, so any valid YAML scalar works for `name` and `description` — quoted, folded (`>`) or literal (`|`). Keys other than those two are ignored whatever they hold, including nested mappings and sequences. Content that is not valid YAML, or that maps either key to something other than a scalar, is rejected with `ErrInvalidFrontmatter`.
-- The catalog is sorted by name, so the system prompt stays byte-identical across sessions built from the same collection — which is what prompt caching needs.
+- Only names and descriptions reach the model up front, as an `<available-skills>` block appended to the system prompt. A skill's body loads when the model asks for it, so a long skill costs nothing until used.
+- The session gets three tools: `skill_load` returns a skill's instructions and the list of files it ships, `skill_load_file` returns one of those files, and `skill_execute_file` runs one.
+- `skill_load`, `skill_load_file` and `skill_execute_file` are reserved names. A tool already registered under one of them is replaced for the session and removed when it ends.
+- `AddClaudeSkill` adds a skill by name from `~/.claude/skills` and otherwise works like `Add`. The name must be a single folder there. Anything that would leave the folder, `../other` included, fails with `ErrInvalidSkillName`, and a missing one gets `Add`'s `ErrSkillFolderNotFound`.
+- An agent registers the collection in `StartSession`. Without an agent, `RegisterTools` adds the three tools to any `ToolBox` and `UnregisterTools` removes them. `Catalog` renders the `<available-skills>` block, and `Skills` lists the names, sorted.
+- File access is confined to the skill folder with `os.OpenRoot`. A symlink that points outside is neither listed nor readable, and the model never learns the folder's real path.
+- `skill_execute_file` runs the file directly from the skill's folder, with the model's arguments and no shell. The file needs its own execute bit and shebang; the package doesn't change modes or guess an interpreter from the extension. Only files the skill ships can run.
+- A non-zero exit is a result: the tool returns the combined output and the exit status. It reports an error only when the process could not run at all.
+- Output is collected up to 1 MiB, then the script is stopped and the result marked truncated. The exit status of a stopped script describes the kill.
+- The script gets no stdin, so a read sees end of input at once.
+- A script is stopped after two minutes, and the model is told it timed out; that's not an error. The two minutes apply only when the context has no deadline. A deadline you set is kept, and if it or a cancellation ends the script, the tool returns the context's error.
+- Running a script leaves the `os.OpenRoot` sandbox: the process has your program's authority and inherits its environment, credentials included. Add only folders you trust, as with an `mcp` server command.
+- `Add` reads the body and the file list once. Editing a skill on disk doesn't change a collection already built.
+- Frontmatter is YAML, so `name` and `description` can be any YAML scalar: quoted, folded (`>`) or literal (`|`). Other keys are ignored, whatever they hold. Invalid YAML, or either key mapped to a non-scalar, fails with `ErrInvalidFrontmatter`.
+- The catalog is sorted by name, so the system prompt is byte-identical across sessions built from the same collection, which prompt caching needs.
 
 ## `packs`
 
-A pack is a bundle of tools that arrives ready to use: one call registers it in
-a `ToolBox`, and the returned `ToolPack` takes it back out again.
+A pack is a bundle of ready-made tools. One call registers it in a `ToolBox`,
+and the returned `ToolPack` removes it again.
 
 ```go
 pack, err := packs.WebTools(ctx, toolBox)
@@ -302,38 +298,35 @@ if err != nil {
 defer pack.Close()
 ```
 
-`ToolPack.Instructions(ctx)` returns an `*mcp.Instruction` — the pack's usage
-doctrine, labeled by its tool family and meant for the model's system prompt —
-or nil when the pack has none, plus an error. A pack served by an MCP server may
-ask that server for its doctrine under `ctx` and returns the error when the
-server fails to answer, so call it before `Close`; the doctrine of the
-MCP-served packs below is the servers' own. The self-served packs' doctrine is
-written here in `packs`, complements the tool descriptions the tools list
-already carries, and never fails.
+`ToolPack.Instructions(ctx)` returns an `*mcp.Instruction` with the pack's
+usage guidance for the model's system prompt, or nil if there is none, plus an
+error. An MCP-served pack may ask its server under `ctx` and return the
+server's error, so call it before `Close`; its guidance is the server's own.
+The packs that serve their own tools return fixed text written in `packs`,
+which adds to the tool descriptions and never fails.
 
 ### `WebTools`
 
-`WebTools` gives the model web search, page fetching and site crawling, backed by
-[DonSeTch](https://github.com/dondai44423/donsetch). It is keyless, so the only
-prerequisite is the `donsetch` executable on `PATH`.
+`WebTools` gives the model web search, page fetching and site crawling through
+[DonSeTch](https://github.com/dondai44423/donsetch). It needs no API key, only
+the `donsetch` executable on `PATH`.
 
 Worth knowing:
 
-- The server publishes `web_search`, `web_fetch` and `web_crawl`, registered as `donsetch__web_search`, `donsetch__web_fetch` and `donsetch__web_crawl`.
-- `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
-- A registration that fails closes the server before returning, so a failed `WebTools` leaves nothing behind.
-- The tool call ceiling is 15 minutes rather than the two-minute default. `web_crawl` accepts a `deadline_s` of up to 600 seconds and the other two a `deadline_ms` of up to 600000, so a shorter ceiling would kill a long call before the server could report its own deadline — and the server's error tells the model what to do next, where a client-side timeout does not.
-- The three tools carry roughly 15 KB of descriptions and schemas, which every request pays for while they are registered. Close the pack when a session has finished with the web.
-- `packs.DonSeTchMCPConfig()` returns the `mcp.ClientConfig` this pack starts the server from, a fresh value each call that shares nothing with the pack. Adjust the returned config freely — a variant built from it goes through `mcp.NewClient` and `RegisterTools`, not through `WebTools`.
-- `ToolPack.Instructions` returns whatever the DonSeTch server sent at handshake, with no error — commonly nil, since DonSeTch publishes its guidance through tool descriptions rather than handshake instructions.
+- The tools are `donsetch__web_search`, `donsetch__web_fetch` and `donsetch__web_crawl`.
+- `ToolPack.Close` stops the server and removes its tools. Call it: nothing else owns the process, so a dropped `ToolPack` leaves the server running until the program exits.
+- If registration fails, the server is stopped before `WebTools` returns.
+- Tool calls time out after 15 minutes rather than the usual 60 seconds. `web_crawl` accepts a `deadline_s` of up to 600 and the other two a `deadline_ms` of up to 600000, so a shorter limit would cut a long call off before the server could report its own deadline. The server's error tells the model what to do next; a client-side timeout doesn't.
+- The three tools carry about 15 KB of descriptions and schemas, paid on every request while registered. Close the pack when a session is done with the web.
+- `packs.DonSeTchMCPConfig()` returns the `mcp.ClientConfig` the pack starts the server with, a new value each call. Change it freely and use it with `mcp.NewClient` and `RegisterTools` directly.
+- `ToolPack.Instructions` returns whatever DonSeTch sent in its handshake, never an error. That's usually nil: DonSeTch puts its guidance in the tool descriptions.
 
 ### `CodingTools`
 
-`CodingTools` gives the model a code base: symbol-aware navigation and editing,
-diagnostics, file and directory access and read-only queries against other
-projects, backed by
-[Serena](https://github.com/oraios/serena). It is keyless, so the only
-prerequisite is the `uvx` executable on `PATH`.
+`CodingTools` gives the model a code base through
+[Serena](https://github.com/oraios/serena): symbol-aware navigation and editing,
+diagnostics, file access and read-only queries against other projects. It needs
+no API key, only the `uvx` executable on `PATH`.
 
 ```go
 pack, err := packs.CodingTools(ctx, toolBox, "ai-toolkit")
@@ -346,26 +339,25 @@ defer pack.Close()
 
 Worth knowing:
 
-- The third argument names a project to activate at startup: a project name or a path, whichever way `serena__activate_project` takes one, and the same repository can follow both. An empty string leaves the server with no project, so the model reaches a code base only by calling `serena__activate_project` first — the call still switches projects either way.
-- The pack carries no shell: Serena's `execute_shell_command` is left out through `ExcludedTools`, and nothing takes its place. A model that has to build or run what it wrote needs `ShellTools` on the same `ToolBox`, which registers `shell_run` under a pack of its own, closed separately. To give Serena its own shell back instead, take `packs.SerenaMCPConfig(project)`, clear its `ExcludedTools`, and go through `mcp.NewClient` directly.
-- Serena's memory tools — `write_memory`, `read_memory`, `list_memories`, `edit_memory`, `delete_memory` and `rename_memory` — and its memory-backed `onboarding` are left out, so the model keeps no project memories through this pack. Serena starts in its `no-memories` mode, which drops them on the server and tells the model in Serena's own instructions that memories are unavailable; `ExcludedTools` names them as well, so they stay out even if a later Serena changes what the mode covers.
-- One project is active at a time, and activating another shuts the previous one's language servers down. A second code base is read without switching through `serena__query_project`, which runs one read-only tool against a project Serena already has registered — the editing tools are refused there, so a queried repository cannot be changed. Its symbolic tools reach the other project through Serena's project server, which is a separate `serena start-project-server` process the pack does not launch; `read_file`, `list_dir`, `find_file` and `search_for_pattern` need no such thing. `serena__list_queryable_projects` names what can be queried, and a repository Serena has never registered is not on that list.
-- This pack reads and writes files with the authority of the program that started it — the whole filesystem — and the model, not the caller, picks the project directory. Register it only for a model and a conversation you would trust with that reach, and remember that anything the model reads out of a repository can steer what it does next.
-- The pack launches Serena from `git+https://github.com/oraios/serena`, unpinned, so a run executes whatever is on that branch at the time. Pinning is the operator's to add: take `packs.SerenaMCPConfig(project)`, point its `--from` argument at a tag, and use `mcp.NewClient` with `RegisterTools` directly, which is all this pack does.
-- Serena's own manual — how its tools fit together, and when to prefer symbolic search over reading whole files — is what `ToolPack.Instructions` returns: each call asks Serena for it through its `initial_instructions` tool. Put it in the system prompt and the model need not call `serena__initial_instructions` itself; the tool stays registered for a model that is not given it.
-- Serena's tools are registered under a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The exact set is whatever the server publishes minus the exclusions, so it moves with Serena's own development rather than being fixed here.
-- The tool call ceiling is 360 seconds rather than the two-minute default. Serena enforces its own per-call timeout, 240 seconds by default, and the client ceiling sits above it so the server's error reaches the model — a client-side timeout does not say what to do next.
-- The first symbolic call on a newly activated project is the slow one: Serena downloads that language's server if it is missing and indexes the project inside that call's budget.
-- `ToolPack.Close` stops the server process and removes its tools from the `ToolBox`. It must be called: nothing else owns the process, so a dropped `ToolPack` leaves the server running for the life of the program.
-- A registration that fails closes the server before returning, so a failed `CodingTools` leaves nothing behind. A server that later dies on its own drops its own tools.
-- This is a far wider pack than `WebTools`: 23 tools carrying roughly 27 KB of descriptions and schemas, nearly twice the web pack's bill and paid on every request while they are registered. Close the pack when a session has finished with the code.
-- `packs.SerenaMCPConfig(project)` returns the `mcp.ClientConfig` this pack starts the server from — Serena's `desktop-app` context with its `query-projects` and `no-memories` modes added and `execute_shell_command`, the memory tools and `onboarding` in `ExcludedTools`, plus a `--project` argument when the project is non-empty — on the same terms as `DonSeTchMCPConfig()`: a fresh value each call, free to adjust and hand to `mcp.NewClient`.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` pairing the name `serena` with Serena's manual, roughly 8 KB. Serena's handshake instructions are a single line telling the model to call `initial_instructions`, so the pack makes that call itself and returns what it answers. When the call fails — the server is gone, or `Close` has run — it falls back to the handshake line, or nil when that Serena version sent none, and never returns an error. It is Serena's own text, not this pack's.
+- The third argument is the project to activate at startup, as a name or a path, whichever `serena__activate_project` accepts. With an empty string, the model has to call `serena__activate_project` before it can reach any code.
+- There is no shell. Serena's `execute_shell_command` is excluded through `ExcludedTools`. A model that builds or runs code also needs `ShellTools`, which is a separate pack, closed separately. To give Serena its shell back, take `packs.SerenaMCPConfig(project)`, clear `ExcludedTools`, and use `mcp.NewClient` directly.
+- Serena's memory tools (`write_memory`, `read_memory`, `list_memories`, `edit_memory`, `delete_memory`, `rename_memory`) and the memory-backed `onboarding` are left out, so the model keeps no project memories. Serena starts in `no-memories` mode, which removes them on the server side and tells the model so. `ExcludedTools` lists them too, in case a later Serena changes what the mode covers.
+- One project is active at a time, and activating another stops the previous one's language servers. `serena__query_project` reads a second project without switching, by running one read-only tool against a project Serena already knows; editing tools are refused there. Its symbolic tools need Serena's project server, a separate `serena start-project-server` process the pack doesn't launch. `read_file`, `list_dir`, `find_file` and `search_for_pattern` work without it. `serena__list_queryable_projects` names the projects that can be queried.
+- The pack reads and writes files with your program's authority over the whole filesystem, and the model picks the project directory. Register it only for a model and conversation you'd trust with that, and remember that what the model reads in a repository can steer what it does next.
+- Serena is launched from `git+https://github.com/oraios/serena`, unpinned, so each run gets whatever is on that branch. To pin it, point the `--from` argument of `packs.SerenaMCPConfig(project)` at a tag and use `mcp.NewClient` and `RegisterTools` directly, which is all this pack does.
+- `ToolPack.Instructions` returns Serena's manual (about 8 KB), labeled `serena`, which explains how its tools fit together and when to prefer symbolic search over reading whole files. Each call fetches it through Serena's `initial_instructions` tool, because Serena's handshake instructions are a single line telling the model to make that call. Put the manual in the system prompt and the model needn't call `serena__initial_instructions`, though the tool stays registered. If the call fails (the server is gone, or `Close` ran), it falls back to the handshake line, or nil, and never returns an error.
+- Tools are registered with a `serena__` prefix, so `find_symbol` becomes `serena__find_symbol`. The set is whatever Serena publishes minus the exclusions, so it changes with Serena.
+- Tool calls time out after 360 seconds. Serena has its own per-call timeout, 240 seconds by default, and the client's sits above it so Serena's error reaches the model; a client-side timeout doesn't say what to do next.
+- The first symbolic call on a newly activated project is slow: Serena downloads the language server if needed and indexes the project within that call.
+- `ToolPack.Close` stops the server and removes its tools. Call it: nothing else owns the process, so a dropped `ToolPack` leaves the server running until the program exits.
+- If registration fails, the server is stopped before `CodingTools` returns. If the server dies later, its tools are removed.
+- The pack is much wider than `WebTools`: 23 tools and about 27 KB of descriptions and schemas, nearly double, paid on every request while registered. Close the pack when a session is done with the code.
+- `packs.SerenaMCPConfig(project)` returns the `mcp.ClientConfig` the pack starts Serena with (the `desktop-app` context, the `query-projects` and `no-memories` modes, the exclusions above, and `--project` when the project is not empty), a new value each call, like `DonSeTchMCPConfig()`.
 
 ### `ShellTools`
 
-`ShellTools` gives the model one tool, `shell_run`, that runs a command line
-with `/bin/sh`. Nothing is launched to serve it, so it takes no context:
+`ShellTools` gives the model one tool, `shell_run`, which runs a command line
+with `/bin/sh`. Nothing is launched, so it takes no context:
 
 ```go
 pack, err := packs.ShellTools(toolBox)
@@ -378,24 +370,24 @@ defer pack.Close()
 
 Worth knowing:
 
-- The call supplies the `command`, and optionally a `workdir` and a `timeout_ms`. The command runs as `/bin/sh -c <command>` from the program's own working directory unless `workdir` says otherwise.
-- `timeout_ms` runs from 1 to 600000 and defaults to 120000. A value outside that range is rejected with `ErrInvalidTimeout` before anything runs.
-- A command that outlasts its timeout is stopped, and the model is told to retry with a larger `timeout_ms` — a result rather than an error, because the error text alone would not say what to do next. The output collected up to that point is lost.
-- The result carries the exit status and the combined stdout and stderr, in the order the command wrote them, in the same shape `skill_execute_file` uses. A non-zero exit is a result, not an error.
-- Output is collected up to 1 MiB, after which the command is stopped and the result is marked truncated. A stopped command's exit status describes the kill rather than a choice it made.
-- The command gets no stdin, so one that reads input sees end of input at once instead of waiting.
-- The shell runs with the authority of the program that registered the tool: the whole filesystem, the environment and its credentials. Register it only for a model and a conversation you would trust with a shell.
-- `/bin/sh` is fixed, and no startup file is read. `PATH` is the one the program itself inherited, so a directory added only in an interactive shell's `.zshrc` or `.bashrc` is not on it.
-- `CodingTools` carries no shell, so an agent that has to build or run what it wrote loads this pack alongside it. The two are closed separately.
-- `ShellTools` fails, registering nothing, when the `ToolBox` rejects the registration — it passes `ToolBox.Add`'s error through rather than swallowing it.
-- `ToolPack.Close` only removes the tool from the `ToolBox`. There is no process to leak, so a dropped `ToolPack` costs nothing beyond the tool staying registered.
-- The tool carries roughly 700 bytes of description and schema, which every request pays for while it is registered.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `shell` whose text is the pack's doctrine: reach for it for terminal work, read and change files with the tools meant for that rather than a command, and take each command from the user's instructions or the repository's own configuration rather than inventing one.
+- The call gives a `command`, and optionally a `workdir` and a `timeout_ms`. It runs as `/bin/sh -c <command>`, in the program's working directory unless `workdir` says otherwise.
+- `timeout_ms` goes from 1 to 600000, default 120000. A value outside that range fails with `ErrInvalidTimeout` before anything runs.
+- A command that runs past its timeout is stopped, and the model is told to retry with a larger `timeout_ms`. That's a result, not an error, because an error alone wouldn't say what to do. Output collected up to that point is lost.
+- The result has the exit status and the combined stdout and stderr, in the order written, in the same format as `skill_execute_file`. A non-zero exit is a result, not an error.
+- Output is collected up to 1 MiB, then the command is stopped and the result marked truncated. The exit status of a stopped command describes the kill.
+- The command gets no stdin, so a read sees end of input at once.
+- The shell has your program's authority: the whole filesystem, the environment and its credentials. Register it only for a model and conversation you'd trust with a shell.
+- `/bin/sh` is fixed and reads no startup file. `PATH` is the one your program inherited, so a directory added only in `.zshrc` or `.bashrc` isn't on it.
+- `CodingTools` has no shell, so an agent that builds or runs code loads this pack too. The two are closed separately.
+- If the `ToolBox` rejects the registration, `ShellTools` returns `ToolBox.Add`'s error and registers nothing.
+- `ToolPack.Close` only removes the tool. There is no process, so a dropped `ToolPack` just leaves the tool registered.
+- The tool carries about 700 bytes of description and schema, paid on every request while registered.
+- `ToolPack.Instructions` returns guidance labeled `shell`: use it for terminal work, read and change files with the file tools rather than commands, and take commands from the user or the repository's own configuration instead of inventing them.
 
 ### `FileTools`
 
-`FileTools` gives the model files under one folder it cannot leave — for an
-agent that writes reports or notes rather than code, and so has no business
+`FileTools` gives the model the files under one folder it can't leave. It suits
+an agent that writes reports or notes rather than code, and has no business
 loading `CodingTools`:
 
 ```go
@@ -410,8 +402,8 @@ defer pack.Close()
 | Tool | What it does |
 | --- | --- |
 | `file_read` | Reads a text file a page at a time: `path`, and optionally `offset` and `limit` |
-| `file_write` | Writes a file whole, creating the folders its path needs |
-| `file_edit` | Replaces one piece of text inside a file |
+| `file_write` | Writes a whole file, creating the folders its path needs |
+| `file_edit` | Replaces one piece of text in a file |
 | `file_list` | Lists one folder, sorted by name, with each entry's full path |
 | `file_search` | Finds the lines matching a regular expression across a folder's files |
 | `file_delete` | Removes a file, or a folder that is already empty |
@@ -419,25 +411,26 @@ defer pack.Close()
 
 Worth knowing:
 
-- The confinement is `os.Root`. Paths are relative to the root, and one that leaves it — by climbing out, by being absolute, or through a symbolic link — is refused rather than followed. This is the one pack with a boundary: `CodingTools` and `ShellTools` both run with the program's full authority.
-- `FileTools` fails, registering nothing, when the root cannot be opened. The folder has to exist; the pack does not create it.
-- `file_read` returns `<file lines="1-40 of 120">`, so the model can tell a page from a whole file and call again with a larger `offset`. It reads at most 2000 lines by default and stops at 1 MiB, whichever comes first.
-- Arguments are always relative to the root; an absolute path is refused, even one that points inside it. Two results hand out absolute paths anyway, for the model to pass on to a tool that is not confined here: `file_write` answers `wrote 8 bytes to notes.md - /Users/you/workspace/notes.md`, and `file_list` gives one element per entry — `<file name="q1.md" size="8" path="/Users/you/workspace/reports/q1.md"/>` and `<dir name="2026" path="/Users/you/workspace/reports/2026"/>`.
-- `file_edit` writes nothing unless its `old_string` appears exactly once — zero matches is `ErrNoMatch`, several is `ErrManyMatches`. An edit never lands somewhere the model did not mean, and the file is left untouched on either error.
-- `file_search` takes a Go regular expression in `pattern`, and optionally `path` (which folder), `glob` (which file names), `recursive` (default `true`) and `limit` (default 100 matches). It answers `<search matches="3" files="2">` wrapping one `<match path="notes/q3.md" line="12">…</match>` per line. Unlike `file_list`, the paths here are **relative** to the root — the form every other file tool takes, so a match goes straight back into `file_read`.
-- `file_search` matches `glob` against the file's name alone, never its path, so `*.md` finds one at any depth; `path` is what narrows the search to a subtree. A file holding a NUL byte in its first 8 KiB is passed over as binary, as are unreadable files and any file with a line over 1 MiB.
-- `file_search` marks a result it cut short with `truncated="true"` on the `<search>` element, and it means there is genuinely more: it collects one match past `limit`, so a search that ends exactly on the limit is reported as complete. A single `<match>` carries the same attribute when the line itself ran long: a matching line over 500 bytes is cut at the last whole character that fits, so one very long line cannot crowd out the rest of the result. The two are independent — a complete search can hold cut matches, and a cut search can hold whole ones. There is no ceiling on `limit`, so a large one is honored in full. A pattern or glob that does not compile is `ErrInvalidPattern`, and nothing is read; a `limit` below one is `ErrInvalidRange`.
-- `file_delete` will not empty a folder: a folder that still holds anything is kept, so nothing recursive happens behind one call. Deleting a tree means deleting its files first.
-- The root is not a secret. `file_workdir` reports it, `file_write` and `file_list` embed it, and error text quotes the failing path in full — which is what lets a file written here be named to `shell_run` or a `CodingTools` tool. Root the pack at a folder whose path is safe to disclose.
-- `file_workdir` takes no arguments and reports the root as an absolute path, resolved when the pack was built. A pack rooted at a relative path still reports an absolute one, and a later `chdir` does not change the answer.
-- `ToolPack.Close` removes the seven tools and closes the root. There is no process to leak.
-- The seven tools carry roughly 4.1 KB of descriptions and schemas, which every request pays for while they are registered. `file_search` is the largest single tool of the seven, at about 1.1 KB.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `file` whose text is the pack's doctrine: the tools reach only the confined folder, named by its absolute path, and paths are relative to it, `file_search` before reading through, `file_edit` needs unambiguous surroundings, and never delete or discard work behind a single call.
+- The confinement is `os.Root`. Paths are relative to the root, and a path that leaves it (climbing out, absolute, or through a symbolic link) is refused. No other pack has a boundary: `CodingTools` and `ShellTools` have the program's full authority.
+- `FileTools` fails, registering nothing, when the root can't be opened. The folder must exist; the pack doesn't create it.
+- `file_read` returns `<file lines="1-40 of 120">`, so the model can tell a page from a whole file and ask for the next `offset`. By default it reads at most 2000 lines, and never more than 1 MiB.
+- Arguments are always relative to the root. An absolute path is refused, even one inside the root. Two results do include absolute paths, for passing to tools outside the root: `file_write` answers `wrote 8 bytes to notes.md - /Users/you/workspace/notes.md`, and `file_list` returns entries like `<file name="q1.md" size="8" path="/Users/you/workspace/reports/q1.md"/>` and `<dir name="2026" path="/Users/you/workspace/reports/2026"/>`. Names and paths are quoted Go-style, so a `"` in a name comes out as `\"`.
+- `file_edit` writes nothing unless `old_string` appears exactly once. No match is `ErrNoMatch`, several is `ErrManyMatches`, and either way the file is untouched.
+- `file_search` takes a Go regular expression in `pattern`, and optionally `path` (which folder), `glob` (which file names), `recursive` (default `true`) and `limit` (default 100 matches). It answers `<search matches="3" files="2">` around one `<match path="notes/q3.md" line="12">…</match>` per line. These paths are relative to the root, unlike `file_list`'s, so a match goes straight into `file_read`.
+- `glob` is matched against the file's name only, so `*.md` finds one at any depth; `path` narrows the search to a subtree. Files with a NUL byte in the first 8 KiB are skipped as binary, as are unreadable files and files with a line over 1 MiB.
+- A result cut short at `limit` has `truncated="true"` on `<search>`. The search looks one match past the limit, so a search that ends exactly on it is reported complete. A `<match>` has the same attribute when its line was over 500 bytes and got cut at the last whole character that fits, so one long line can't crowd out the rest. The two are independent. `limit` has no maximum.
+- A `pattern` or `glob` that doesn't compile fails with `ErrInvalidPattern` before anything is read. A glob whose fault only shows against a particular file name fails when the search reaches such a name. A `limit` below one is `ErrInvalidRange`.
+- `file_delete` won't delete a folder that has anything in it, so no single call deletes recursively. Delete a tree file by file.
+- The root isn't secret. `file_workdir` reports it, `file_write` and `file_list` include it, and error messages quote full paths. That's what lets a file written here be passed to `shell_run` or a `CodingTools` tool. Use a folder whose path is safe to disclose.
+- `file_workdir` takes no arguments and returns the root as an absolute path, fixed when the pack was built. A relative root still comes back absolute, and a later `chdir` doesn't change it.
+- `ToolPack.Close` removes the seven tools and closes the root.
+- The seven tools carry about 4.1 KB of descriptions and schemas, paid on every request while registered. `file_search` is the largest, at about 1.1 KB.
+- `ToolPack.Instructions` returns guidance labeled `file`: the tools reach only the root, named by its absolute path, and paths are relative to it; use `file_search` rather than reading everything; give `file_edit` enough context to be unambiguous; and never delete work in bulk.
 
 ### `DateTools`
 
 `DateTools` tells the model when it is. A model has no clock, and the date it
-remembers is the one it was trained on, so anything it dates without asking is a
+remembers is from its training, so any date it writes without asking is a
 guess:
 
 ```go
@@ -451,20 +444,20 @@ defer pack.Close()
 
 Worth knowing:
 
-- Three tools, none of which takes an argument. `current_date` returns `2026-09-20`, `current_time` returns `15:04:05.000` on a 24-hour clock, and `time_zone` returns `WEST (UTC+01:00)`.
-- `current_time` carries no date and no zone, and `current_date` no time. A model that needs a full timestamp calls all three; the split keeps the common case — what is today's date — a one-call answer that cannot be misread as a moment in time.
-- `time_zone` reports the host's zone from `time.Now().Zone()`: the abbreviation and the offset from UTC. A zone with no abbreviation gives the offset alone, `UTC+00:45`. The offset is the one in force now, so a zone that observes daylight saving reports the current side of it, not the standard one.
-- All three read the host clock in the host's own zone. There is no argument for a zone to convert to and no way to set the clock.
-- Register the pack wherever a date reaches the answer — a report header, a filing period, a valuation's as-of date. Without it a model fills those from training data and states the result as fact.
-- `ToolPack.Close` removes the three tools. Nothing is launched to serve them, so a dropped `ToolPack` costs nothing beyond the tools staying registered.
-- The three tools carry roughly 700 bytes of descriptions and schemas, which every request pays for while they are registered.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `date` whose text is the pack's doctrine: call the tools rather than trusting training data for when it is, wherever the answer carries a date or a deadline, and call again across a long session.
+- Three tools, no arguments. `current_date` returns `2026-09-20`, `current_time` returns `15:04:05.000` (24-hour), and `time_zone` returns `WEST (UTC+01:00)`.
+- `current_time` has no date or zone, and `current_date` no time. A full timestamp takes all three calls. The split keeps the common question, today's date, to one call that can't be mistaken for a moment in time.
+- `time_zone` reports the host's zone from `time.Now().Zone()`: the abbreviation and the UTC offset. A zone without an abbreviation gives just the offset, e.g. `UTC+00:45`. The offset is the current one, so during daylight saving it's the summer offset.
+- All three use the host clock in the host's zone. There's no way to ask for another zone or set the clock.
+- Register the pack wherever a date ends up in the answer: a report header, a filing period, a valuation date. Without it, the model takes the date from its training and states it as fact.
+- `ToolPack.Close` removes the three tools. There is no process, so a dropped `ToolPack` just leaves them registered.
+- The three tools carry about 700 bytes of descriptions and schemas, paid on every request while registered.
+- `ToolPack.Instructions` returns guidance labeled `date`: call the tools instead of trusting training data wherever the answer has a date or deadline, and call them again in a long session.
 
 ### `ClassifyTools`
 
-`ClassifyTools` lets the model hand a judgement call to a `classify` model
-instead of making it itself, and get calibrated probabilities back. You build
-the client; the pack only registers the tools:
+`ClassifyTools` lets the model hand a judgement call to a `classify` model and
+get calibrated probabilities back. You build the client; the pack only
+registers the tools:
 
 ```go
 client, err := classify.New(classify.Config{
@@ -486,27 +479,27 @@ defer pack.Close()
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `classify_yes_no` | `input`, `instructions`, `true` and `false` — what each answer means | `{"yes_probability": 0.87}` |
-| `classify_choice` | `input`, `instructions`, `options` — each a `name` and an optional `description` | `{"selected": "payments", "probabilities": {"payments": 0.81, "frontend": 0.19}, "confidence": 0.62}` |
+| `classify_yes_no` | `input`, `instructions`, and `true` and `false`, what each answer means | `{"yes_probability": 0.87}` |
+| `classify_choice` | `input`, `instructions`, `options`, each a `name` and an optional `description` | `{"selected": "payments", "probabilities": {"payments": 0.81, "frontend": 0.19}, "confidence": 0.62}` |
 | `classify_score` | `input`, `instructions`, `levels`, lowest to highest | `{"score": 1.4, "probabilities": [{"level": "Next release", "probability": 0.1}, …], "confidence": 0.3}` |
 
 Worth knowing:
 
-- One question per call. Several questions about the same input are several calls, each billed on its input tokens — the whole `input` included.
-- Everything the model puts in `input` is sent to OpenRouter. Register the pack only where that is acceptable.
+- One question per call. Several questions about the same input take several calls, each billed on the whole `input`.
+- Everything the model puts in `input` goes to OpenRouter. Register the pack only where that's acceptable.
 - The classification model sees the `input` and the question, nothing of the conversation, so the tool descriptions tell the model to make the input self-contained.
 - `yes_probability` is the probability of yes, so `0.5` means undecided. `score` is a probability-weighted position from `0` to the last level's index and can fall between levels. `confidence` is how concentrated the probabilities are, not how likely the answer is to be right.
-- A `classify_choice` with fewer than two options or the same option twice, and a `classify_score` with fewer than two levels, fail with `ErrInvalidQuestion` before anything is sent. The provider's own limits — at most 10 levels, 255 options — are left to it, and its error reaches the model like any other tool error.
-- There is no timeout or retry in the pack: the call runs under the caller's context, and the `classify` client already retries 429 and 5xx responses.
-- The caller owns the client. `ToolPack.Close` removes the three tools and nothing else.
-- The three tools carry roughly 2.4 KB of descriptions and schemas, which every request pays for while they are registered.
-- `ToolPack.Instructions` returns an `*mcp.Instruction` labeled `classify` whose text is the pack's doctrine: hand a judgement call to the tools when a labelled answer settles it, read calibrated probabilities as such, make the input self-contained, and treat the answer as advice to weigh — saying when you went against it.
+- A `classify_choice` with fewer than two options or a repeated option, and a `classify_score` with fewer than two levels, fail with `ErrInvalidQuestion` before anything is sent. The provider enforces its own limits (at most 10 levels, 255 options), and its error reaches the model like any tool error.
+- The pack adds no timeout or retry. Calls run under the caller's context, and the `classify` client already retries 429 and 5xx responses.
+- You own the client. `ToolPack.Close` only removes the three tools.
+- The three tools carry about 2.4 KB of descriptions and schemas, paid on every request while registered.
+- `ToolPack.Instructions` returns guidance labeled `classify`: use the tools when a labeled answer settles a judgement call, read the probabilities as calibrated, make the input self-contained, and treat the answer as advice, saying when you went against it.
 
 ## `agent`
 
-Ties `llm` and `tools` into a conversation loop: send user input, run whatever
-tools the model asks for, feed the results back, and repeat until the model
-returns a final answer — so you don't write that loop yourself.
+Ties `llm` and `tools` into a loop: send the user's input, run the tools the
+model asks for, feed back the results, and repeat until the model gives a final
+answer. You don't write that loop yourself.
 
 ```go
 agt, err := agent.New(agent.Config{MaxIterations: 10}, model)
@@ -533,17 +526,17 @@ fmt.Printf("%d tool calls, %d tokens\n",
 
 Worth knowing:
 
-- A failing tool is reported back to the model as its error text, so the model can recover instead of the turn aborting.
-- The tool list is read from the `ToolBox` once per `Process` call and stays fixed for that round, so the menu never shifts under the model mid-round. A tool registered while the round runs — by an MCP server announcing a tool-list change, say — is offered from the next `Process` on; one removed the same way stays on offer until then and fails with `ErrToolNotFound` if called, which the model sees as tool-error text.
-- Once a completed turn crosses `Config.CompactionThresholdPercent` of the model's context window (85% by default), the older turns are summarized into a single message while the system prompt and recent turns are kept verbatim.
-- `Config.MaxIterations` caps the model/tool rounds per `Process` call; zero means no limit, and hitting the cap returns `ErrMaxIterations`.
-- `Response.Metadata` reports token usage, stop reason, per-phase timing, and iteration and tool-call counts.
-- `StartSession` declares everything the model sees: the system prompt, the `ToolBox` it may call, and the `skills.Collection` it may load from. All three last until `Close` or the next `StartSession`, so one agent can run differently equipped sessions.
-- A `SessionConfig.Skills` collection has its tools registered in the session's `ToolBox` and its catalog appended to the prompt; `Close` removes those tools again.
-- `Messages` returns a copy of the conversation as the model sees it: the system message first (the prompt with any skill catalog appended), then every turn, including tool calls and results. Turns that compaction folded away show only as their summary. It returns nil when there is no session.
-- `SessionConfig.Messages` resumes a saved conversation: the messages follow the new system message, and any `llm.SystemMessage` among them is skipped, so the session runs under the new prompt. Storing the messages in between is up to the caller. Provider-specific assistant data, such as Anthropic thinking blocks, does not survive the round trip; the model is sent each assistant turn's text and tool calls instead.
-- Install a `Feedback` sink with `SetFeedback` to observe tool calls and session events; the default is silent. `ToolCalled(toolName string, args map[string]any)` fires just before each tool runs, with the arguments the model supplied — JSON-typed, so numbers are `float64`, and nil for a call with none. The map is the one the tool is about to run with, so a sink must read it, not modify it. `ToolReturned(toolName string, result string, err error, elapsed time.Duration)` fires just after the call, carrying what the tool returned — empty when `err` is non-nil — and how long it took. Tool calls run one at a time, so each `ToolReturned` pairs with the `ToolCalled` immediately before it. `InterimTextReceived(content string)` fires when a response that carries tool calls also carries text — the model narrating what it is about to do — before that response's `TokensUsed`; it never fires for empty text or for the final answer, whose text is in `Response.Content`. `TokensUsed(totalTokens int)` fires after each intermediate model response — one that carries tool calls — so usage can be tracked without waiting for the final answer, whose usage arrives in `Response.Metadata` instead.
+- A failing tool is reported to the model as its error text, so the model can recover and the turn goes on.
+- The tool list is read from the `ToolBox` once per `Process` call and stays fixed for that round. A tool registered during the round, by an MCP server changing its list, say, is offered from the next `Process`. A tool removed during the round is still offered until then, and calling it fails with `ErrToolNotFound`, which the model sees as tool error text.
+- Once a completed turn goes past `Config.CompactionThresholdPercent` of the context window (85% by default), the older turns are summarized into one message. The system prompt and recent turns are kept word for word.
+- `Config.MaxIterations` caps the model/tool rounds per `Process` call. Zero means no limit; reaching the cap returns `ErrMaxIterations`.
+- `Response.Metadata` reports token usage, stop reason, timing per phase, and the number of rounds and tool calls.
+- `StartSession` sets everything the model sees: the system prompt, the `ToolBox` it may call, and the `skills.Collection` it may load from. They last until `Close` or the next `StartSession`, so one agent can run differently equipped sessions.
+- The tools of a `SessionConfig.Skills` collection are registered in the session's `ToolBox`, and its catalog is appended to the prompt. `Close` removes those tools.
+- `Messages` returns a copy of the conversation as the model sees it: the system message (the prompt plus any skill catalog), then every turn, tool calls and results included. Turns folded by compaction show only as their summary. It returns nil when there is no session.
+- `SessionConfig.Messages` resumes a saved conversation. The messages follow the new system message, and any `llm.SystemMessage` among them is skipped, so the new prompt applies. Storing the messages in between is up to you. Provider-specific assistant data, such as Anthropic thinking blocks, doesn't survive the round trip; each assistant turn is sent as its text and tool calls.
+- Install a `Feedback` with `SetFeedback` to follow tool calls and session events; the default prints nothing. `ToolCalled(toolName, args)` fires just before a tool runs, with the model's arguments: JSON types, so numbers are `float64`, and nil when there are none. The tool runs with that map, so read it but don't modify it. `ToolReturned(toolName, result, err, elapsed)` fires just after, with the result (empty when `err` is set) and the time taken. Tools run one at a time, so each `ToolReturned` follows its `ToolCalled`. `InterimTextReceived(content)` fires when a response that asks for tools also has text, typically the model saying what it's about to do, before that response's `TokensUsed`. It never fires for empty text or the final answer, which is in `Response.Content`. `TokensUsed(totalTokens)` fires after each response that asks for tools, so usage can be tracked before the final answer, whose usage is in `Response.Metadata`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

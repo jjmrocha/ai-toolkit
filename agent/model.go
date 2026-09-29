@@ -6,48 +6,47 @@ import (
 	"github.com/jjmrocha/ai-toolkit/llm"
 )
 
-// Metadata reports how a single [Agent.Process] call was served. The token
-// counts come from the model's final reply, not the whole round.
+// Metadata describes how one [Agent.Process] call was served. The token counts
+// are the final reply's, not the whole round's.
 type Metadata struct {
-	// Iterations is the number of model/tool rounds taken before the final reply.
+	// Iterations is the number of model/tool rounds before the final reply.
 	Iterations int
-	// PromptTokens is the input-token count of the final reply.
+	// PromptTokens is the final reply's input tokens.
 	PromptTokens int
-	// OutputTokens is the generated-token count of the final reply.
+	// OutputTokens is the final reply's generated tokens.
 	OutputTokens int
-	// TotalTokens is the total tokens billed for the final reply.
+	// TotalTokens is the tokens billed for the final reply.
 	TotalTokens int
-	// ToolCalls is how many tools were executed across the round.
+	// ToolCalls is the number of tools run in the round.
 	ToolCalls int
-	// StopReason is the provider's native reason the model stopped generating
-	// the final reply (e.g. "end_turn", "max_tokens"); a truncated reply shows
-	// the provider's length-limit value here.
+	// StopReason is the provider's own reason the final reply stopped, such as
+	// "end_turn" or "max_tokens". A reply cut short shows the provider's length
+	// limit value.
 	StopReason string
-	// LLMDuration is the wall-clock time spent in model calls.
+	// LLMDuration is the time spent in model calls.
 	LLMDuration time.Duration
-	// ToolDuration is the wall-clock time spent executing tools.
+	// ToolDuration is the time spent running tools.
 	ToolDuration time.Duration
 }
 
-// Response is the result of an [Agent.Process] call: the model's final answer
-// and the [Metadata] describing how it was produced.
+// Response is what [Agent.Process] returns: the model's final answer and
+// [Metadata] on how it was produced.
 type Response struct {
-	// Content is the assistant's final reply text.
+	// Content is the final answer's text.
 	Content string
-	// Metadata reports token usage and timing for the round.
+	// Metadata is the round's token usage and timing.
 	Metadata Metadata
 }
 
-// ModelInfo describes the model an [Agent] is currently using: its provider,
-// name, context window, and the reasoning effort applied to each turn.
+// ModelInfo describes the model an [Agent] uses: provider, name, context
+// window and reasoning effort.
 type ModelInfo struct {
-	// Provider is the underlying llm.Provider used to serve the model.
+	// Provider is the model's provider.
 	Provider llm.Provider
-	// ModelName is the human-readable name of the active model.
+	// ModelName is the model's display name.
 	ModelName string
-	// ModelContextSize is the model's context window in tokens, or 0 if it
-	// could not be determined.
+	// ModelContextSize is the model's context window in tokens, or 0 if unknown.
 	ModelContextSize int
-	// Effort is the reasoning effort the underlying llm client applies.
+	// Effort is the reasoning effort applied to each turn.
 	Effort llm.Effort
 }

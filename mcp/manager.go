@@ -9,10 +9,10 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-// Manager registers MCP servers by name and runs them on demand against a
-// shared [tools.ToolBox]. Register a server with [Manager.Register], then start
-// and stop it by name with [Manager.Start] and [Manager.Stop];
-// [Manager.Status] reports which are running. It is safe for concurrent use.
+// Manager runs MCP servers by name against one [tools.ToolBox]. Add a server
+// with [Manager.Register], start and stop it with [Manager.Start] and
+// [Manager.Stop], and see which are running with [Manager.Status]. It is safe
+// for concurrent use.
 type Manager struct {
 	toolBox *tools.ToolBox
 	configs map[string]ClientConfig
@@ -20,7 +20,7 @@ type Manager struct {
 	mu      sync.Mutex
 }
 
-// NewManager returns an empty [Manager] that registers each MCP's tools into tb.
+// NewManager returns an empty [Manager] that registers each MCP's tools in tb.
 func NewManager(tb *tools.ToolBox) *Manager {
 	return &Manager{
 		toolBox: tb,
@@ -30,8 +30,8 @@ func NewManager(tb *tools.ToolBox) *Manager {
 }
 
 // Close stops every running MCP and removes its tools from the
-// [tools.ToolBox]. Registrations are kept, so the same [Manager] can bring a
-// server back up with [Manager.Start].
+// [tools.ToolBox]. Registrations are kept, so [Manager.Start] can start a
+// server again.
 func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -42,9 +42,8 @@ func (m *Manager) Close() {
 	}
 }
 
-// Register adds an MCP's configuration under cfg.Name so it can
-// later be started by name. Registering an existing name replaces its config.
-// It does not start the server.
+// Register stores cfg under cfg.Name, replacing any config with that name. It
+// does not start the server.
 func (m *Manager) Register(cfg ClientConfig) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -52,9 +51,9 @@ func (m *Manager) Register(cfg ClientConfig) {
 	m.configs[cfg.Name] = cfg
 }
 
-// Status reports the registered MCPs and whether each is currently running. A
-// client whose process has died is reported inactive and reaped, so the next
-// [Manager.Start] launches a fresh one.
+// Status returns each registered MCP and whether it is running. A client whose
+// process has died is reported inactive and discarded, so the next
+// [Manager.Start] launches a new one.
 func (m *Manager) Status() []Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -79,11 +78,10 @@ func (m *Manager) Status() []Status {
 	return statuses
 }
 
-// Instructions returns the usage instructions of the running MCPs, paired
-// with their registered names and sorted by name. An MCP that sent none is
-// left out rather than returned empty, and one that is not running is left
-// out too, its dead client reaped as [Manager.Status] does. It returns nil
-// when no running MCP sent instructions.
+// Instructions returns the handshake instructions of the running MCPs, sorted
+// by name. MCPs that sent none, or are not running, are left out; a dead
+// client is discarded as in [Manager.Status]. It returns nil when there are
+// none.
 func (m *Manager) Instructions() []Instruction {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -115,10 +113,10 @@ func (m *Manager) Instructions() []Instruction {
 }
 
 // Start launches the MCP registered under name and registers its tools in the
-// [tools.ToolBox]. A client that is already running is reused; one whose process
-// has died is discarded and replaced. It returns [ErrMCPNotRegistered] when no
-// MCP is registered under name, or the underlying launch or registration error.
-// ctx bounds the startup handshake and the tools/list request.
+// [tools.ToolBox]. A running client is reused; a dead one is replaced. ctx
+// bounds the handshake and the tools/list request. It returns
+// [ErrMCPNotRegistered] when nothing is registered under name, or the launch or
+// registration error.
 func (m *Manager) Start(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -152,9 +150,9 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 	return nil
 }
 
-// Stop shuts down the running MCP named name, removing its tools from the
-// [tools.ToolBox], and keeps its configuration so it can be started again. It
-// returns [ErrMCPNotRegistered] when no MCP is registered under name.
+// Stop shuts down the MCP named name and removes its tools from the
+// [tools.ToolBox]. Its config is kept, so it can be started again. It returns
+// [ErrMCPNotRegistered] when nothing is registered under name.
 func (m *Manager) Stop(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
