@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
@@ -18,6 +19,11 @@ type SessionConfig struct {
 	// are registered in ToolBox until the session ends, and their catalog is
 	// appended to Prompt. A nil or empty Collection means no skills.
 	Skills *skills.Collection
+	// Messages resumes a saved conversation, such as one returned by
+	// [Agent.Messages]: they follow the system message built from Prompt, in
+	// order. Any [llm.SystemMessage] among them is skipped, so the session runs
+	// under the new Prompt. Nil or empty starts a fresh conversation.
+	Messages []llm.Message
 }
 
 // Config tunes an [Agent]'s behavior. The zero value is usable: MaxIterations

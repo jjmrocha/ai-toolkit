@@ -350,6 +350,57 @@ func TestStartSession(t *testing.T) {
 		// then
 		assert.Empty(t, toolNames(tb))
 	})
+
+	t.Run("sends the restored messages after the system message", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "done"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		call := llm.ToolCall{ID: "c1", Name: "echo", Arguments: map[string]any{"text": "hi"}}
+		restored := []llm.Message{
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{ToolCalls: []llm.ToolCall{call}},
+			llm.ToolMessage{ToolCallID: "c1", ToolName: "echo", Content: "hi"},
+			llm.AssistantMessage{Content: "said hi"},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: restored})
+		// when
+		_, err := agt.Process(t.Context(), "again")
+		// then
+		require.NoError(t, err)
+		result := fake.calls[0]
+		expected := append([]llm.Message{llm.SystemMessage{Content: "sys"}}, restored...)
+		expected = append(expected, llm.UserMessage{Content: "again"})
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("replaces a restored system message with the new prompt", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "done"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		restored := []llm.Message{
+			llm.SystemMessage{Content: "old prompt"},
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{Content: "hello"},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "new prompt", Messages: restored})
+		// when
+		_, err := agt.Process(t.Context(), "")
+		// then
+		require.NoError(t, err)
+		result := fake.calls[0]
+		expected := []llm.Message{
+			llm.SystemMessage{Content: "new prompt"},
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{Content: "hello"},
+		}
+		assert.Equal(t, expected, result)
+	})
 }
 
 func TestResetSession(t *testing.T) {
@@ -375,6 +426,32 @@ func TestResetSession(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"SessionStarted", "SessionReset"}, fb.events)
 	})
+
+	t.Run("discards the restored messages", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "done"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		restored := []llm.Message{
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{Content: "hello"},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: restored})
+		// when
+		err := agt.ResetSession()
+		// then
+		require.NoError(t, err)
+		_, err = agt.Process(t.Context(), "again")
+		require.NoError(t, err)
+		result := fake.calls[0]
+		expected := []llm.Message{
+			llm.SystemMessage{Content: "sys"},
+			llm.UserMessage{Content: "again"},
+		}
+		assert.Equal(t, expected, result)
+	})
 }
 
 func TestClose(t *testing.T) {
@@ -398,6 +475,104 @@ func TestClose(t *testing.T) {
 		agt.Close()
 		// then
 		assert.Equal(t, []string{"SessionStarted", "SessionClosed"}, fb.events)
+	})
+}
+
+func TestMessages(t *testing.T) {
+	t.Run("returns nil before a session has started", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		// when
+		result := agt.Messages()
+		// then
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns the whole conversation after a round with a tool call", func(t *testing.T) {
+		// given
+		call := llm.ToolCall{ID: "c1", Name: "echo"}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{call}},
+				{Content: "done"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		_, err := agt.Process(t.Context(), "hi")
+		require.NoError(t, err)
+		// when
+		result := agt.Messages()
+		// then
+		expected := []llm.Message{
+			llm.SystemMessage{Content: "sys"},
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{ToolCalls: []llm.ToolCall{call}},
+			llm.ToolMessage{ToolCallID: "c1", ToolName: "echo", Content: "ok"},
+			llm.AssistantMessage{Content: "done"},
+		}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns a copy the caller can change freely", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "done"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		result := agt.Messages()
+		result[0] = llm.SystemMessage{Content: "changed"}
+		// then
+		_, err := agt.Process(t.Context(), "hi")
+		require.NoError(t, err)
+		assert.Equal(t, "sys", systemContent(t, fake.calls[0]))
+	})
+
+	t.Run("returns nil after Close", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		agt.Close()
+		// when
+		result := agt.Messages()
+		// then
+		assert.Nil(t, result)
+	})
+
+	t.Run("resumes in another agent under its own prompt", func(t *testing.T) {
+		// given
+		first := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hello"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		source := agentWithLLM(first, &recordingFeedback{}, Config{})
+		source.StartSession(SessionConfig{Prompt: "old prompt"})
+		_, err := source.Process(t.Context(), "hi")
+		require.NoError(t, err)
+		second := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "welcome back"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		target := agentWithLLM(second, &recordingFeedback{}, Config{})
+		// when
+		target.StartSession(SessionConfig{Prompt: "new prompt", Messages: source.Messages()})
+		// then
+		_, err = target.Process(t.Context(), "again")
+		require.NoError(t, err)
+		result := second.calls[0]
+		expected := []llm.Message{
+			llm.SystemMessage{Content: "new prompt"},
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{Content: "hello"},
+			llm.UserMessage{Content: "again"},
+		}
+		assert.Equal(t, expected, result)
 	})
 }
 

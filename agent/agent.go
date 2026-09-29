@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
+	"github.com/jjmrocha/go-algo/fn"
 )
 
 type modelInterface interface {
@@ -61,7 +63,8 @@ func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 // may call until the session ends. When SessionConfig.Skills carries at least
 // one skill, its tools are registered in that ToolBox and its catalog is
 // appended to the system message, both until [Agent.Close] or the next session.
-// It must be called before [Agent.Process].
+// SessionConfig.Messages, when set, resumes a saved conversation after that
+// system message. It must be called before [Agent.Process].
 func (a *Agent) StartSession(cfg SessionConfig) {
 	a.unregisterSkills()
 
@@ -86,6 +89,11 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 			Content: prompt,
 		},
 	}
+
+	restored := fn.Filter(cfg.Messages, func(m llm.Message) bool {
+		return m.Role() != llm.SystemRole
+	})
+	a.messages = append(a.messages, restored...)
 
 	a.fb.SessionStarted()
 }
@@ -120,6 +128,15 @@ func (a *Agent) Close() {
 	a.toolBox = nil
 	a.messages = nil
 	a.fb.SessionClosed()
+}
+
+// Messages returns a copy of the session's conversation as the model sees it:
+// the system message first — the prompt with any skill catalog appended — then
+// every later turn, with turns folded by [Agent.CompactContext] showing as their
+// summary. Pass it to SessionConfig.Messages to resume the conversation later.
+// It returns nil when no session has been started or after [Agent.Close].
+func (a *Agent) Messages() []llm.Message {
+	return slices.Clone(a.messages)
 }
 
 // SetFeedback replaces the agent's lifecycle event sink, letting a caller — such
