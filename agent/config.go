@@ -22,6 +22,9 @@ type SessionConfig struct {
 	// [llm.SystemMessage] among them is skipped, so the new Prompt applies. Nil or
 	// empty starts a new conversation.
 	Messages []llm.Message
+	// ID identifies the session and is used as given, so a resumed conversation
+	// keeps its id. Empty means [Agent.StartSession] creates a new one.
+	ID string
 }
 
 // Config tunes an [Agent]. The zero value works: no iteration limit and the

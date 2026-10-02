@@ -9,6 +9,7 @@ import (
 	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
 	"github.com/jjmrocha/go-algo/fn"
+	"github.com/jjmrocha/go-algo/token"
 )
 
 type modelInterface interface {
@@ -30,6 +31,7 @@ type Agent struct {
 	skills           *skills.Collection
 	fb               Feedback
 	messages         []llm.Message
+	sessionID        string
 	compactThreshold int
 	modelInfo        *llm.ModelInfo
 }
@@ -62,7 +64,8 @@ func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 // tools the model may call. Skills in SessionConfig.Skills register their tools
 // in that ToolBox and append their catalog to the system message, until
 // [Agent.Close] or the next session. SessionConfig.Messages, if set, resumes a
-// saved conversation after the system message.
+// saved conversation after the system message. The session gets a new id, or
+// SessionConfig.ID if set; see [Agent.SessionID].
 func (a *Agent) StartSession(cfg SessionConfig) {
 	a.unregisterSkills()
 
@@ -93,6 +96,11 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 	})
 	a.messages = append(a.messages, restored...)
 
+	a.sessionID = cfg.ID
+	if a.sessionID == "" {
+		a.sessionID = token.New()
+	}
+
 	a.fb.SessionStarted()
 }
 
@@ -105,14 +113,15 @@ func (a *Agent) unregisterSkills() {
 	a.skills = nil
 }
 
-// ResetSession drops every turn after the system message. It returns
-// [ErrNoSession] if no session has been started.
+// ResetSession drops every turn after the system message and gives the session
+// a new id. It returns [ErrNoSession] if no session has been started.
 func (a *Agent) ResetSession() error {
 	if len(a.messages) == 0 {
 		return ErrNoSession
 	}
 
 	a.messages = a.messages[:1]
+	a.sessionID = token.New()
 	a.fb.SessionReset()
 	return nil
 }
@@ -124,6 +133,7 @@ func (a *Agent) Close() {
 	a.unregisterSkills()
 	a.toolBox = nil
 	a.messages = nil
+	a.sessionID = ""
 	a.fb.SessionClosed()
 }
 
@@ -134,6 +144,13 @@ func (a *Agent) Close() {
 // there is no session.
 func (a *Agent) Messages() []llm.Message {
 	return slices.Clone(a.messages)
+}
+
+// SessionID returns the id of the current session. [Agent.StartSession] sets it,
+// to SessionConfig.ID or a new one, and [Agent.ResetSession] replaces it with a
+// new one. It returns "" when there is no session.
+func (a *Agent) SessionID() string {
+	return a.sessionID
 }
 
 // SetFeedback replaces the agent's [Feedback], for example with a chat UI's own.

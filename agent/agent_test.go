@@ -12,6 +12,7 @@ import (
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
+	"github.com/jjmrocha/go-algo/token"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -573,6 +574,83 @@ func TestMessages(t *testing.T) {
 			llm.UserMessage{Content: "again"},
 		}
 		assert.Equal(t, expected, result)
+	})
+}
+
+func TestSessionID(t *testing.T) {
+	t.Run("returns empty before a session has started", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		// when
+		result := agt.SessionID()
+		// then
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns a new token after StartSession", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		result := agt.SessionID()
+		// then
+		assert.True(t, token.Valid(result))
+	})
+
+	t.Run("returns SessionConfig.ID when it is set", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ID: "my-session"})
+		// when
+		result := agt.SessionID()
+		// then
+		assert.Equal(t, "my-session", result)
+	})
+
+	t.Run("returns a different id for each new session", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		previous := agt.SessionID()
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		result := agt.SessionID()
+		// then
+		assert.True(t, token.Valid(result))
+		assert.NotEqual(t, previous, result)
+	})
+
+	t.Run("returns a new token after ResetSession", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ID: "my-session"})
+		require.NoError(t, agt.ResetSession())
+		// when
+		result := agt.SessionID()
+		// then
+		assert.True(t, token.Valid(result))
+		assert.NotEqual(t, "my-session", result)
+	})
+
+	t.Run("stays empty when ResetSession has no session", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		require.ErrorIs(t, agt.ResetSession(), ErrNoSession)
+		// when
+		result := agt.SessionID()
+		// then
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns empty after Close", func(t *testing.T) {
+		// given
+		agt := mustNewTestAgent(t, Config{}, &recordingFeedback{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		agt.Close()
+		// when
+		result := agt.SessionID()
+		// then
+		assert.Empty(t, result)
 	})
 }
 
