@@ -42,8 +42,13 @@ type Feedback interface {
 	TokensUsed(totalTokens int)
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
-	// SessionStarted fires when [Agent.StartSession] begins a session.
+	// SessionStarted fires when [Agent.StartSession] begins a new conversation.
 	SessionStarted()
+	// SessionResumed fires instead of [Feedback.SessionStarted] when
+	// [Agent.StartSession] restores at least one message from
+	// SessionConfig.Messages. sessionID is the session's id; see
+	// [Agent.SessionID].
+	SessionResumed(sessionID string)
 	// SessionClosed fires when [Agent.Close] ends a session.
 	SessionClosed()
 }
@@ -114,6 +119,10 @@ func (s *writerFeedback) SessionStarted() {
 	_, _ = fmt.Fprintln(s.stdout, "New session started")
 }
 
+func (s *writerFeedback) SessionResumed(sessionID string) {
+	_, _ = fmt.Fprintln(s.stdout, "Session resumed:", sessionID)
+}
+
 func (s *writerFeedback) SessionClosed() {
 	_, _ = fmt.Fprintln(s.stdout, "Session closed")
 }
@@ -145,6 +154,9 @@ func (nullFeedback) SessionReset() {
 }
 
 func (nullFeedback) SessionStarted() {
+}
+
+func (nullFeedback) SessionResumed(_ string) {
 }
 
 func (nullFeedback) SessionClosed() {

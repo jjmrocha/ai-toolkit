@@ -65,7 +65,9 @@ func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 // in that ToolBox and append their catalog to the system message, until
 // [Agent.Close] or the next session. SessionConfig.Messages, if set, resumes a
 // saved conversation after the system message. The session gets a new id, or
-// SessionConfig.ID if set; see [Agent.SessionID].
+// SessionConfig.ID if set; see [Agent.SessionID]. It fires
+// [Feedback.SessionResumed] when it restores at least one message, and
+// [Feedback.SessionStarted] otherwise.
 func (a *Agent) StartSession(cfg SessionConfig) {
 	a.unregisterSkills()
 
@@ -99,6 +101,11 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 	a.sessionID = cfg.ID
 	if a.sessionID == "" {
 		a.sessionID = token.New()
+	}
+
+	if len(restored) > 0 {
+		a.fb.SessionResumed(a.sessionID)
+		return
 	}
 
 	a.fb.SessionStarted()

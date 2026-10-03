@@ -9,6 +9,7 @@ import (
 
 func exerciseAllEvents(fb Feedback) {
 	fb.SessionStarted()
+	fb.SessionResumed("abc")
 	fb.ToolCalled("echo", nil)
 	fb.InterimTextReceived("checking")
 	fb.ContextCompacted()
@@ -29,6 +30,11 @@ func TestNewWriterFeedback(t *testing.T) {
 			name:     "session started",
 			fire:     func(fb Feedback) { fb.SessionStarted() },
 			expected: "New session started\n",
+		},
+		{
+			name:     "session resumed",
+			fire:     func(fb Feedback) { fb.SessionResumed("abc") },
+			expected: "Session resumed: abc\n",
 		},
 		{
 			name:     "tool called",
@@ -101,6 +107,7 @@ func TestNewWriterFeedback(t *testing.T) {
 		// then
 		result := out.String()
 		expected := "New session started\n" +
+			"Session resumed: abc\n" +
 			"Tool called: echo\n" +
 			"Interim text received: checking\n" +
 			"Context was compacted\n" +

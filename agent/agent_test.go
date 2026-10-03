@@ -114,12 +114,13 @@ type toolReturn struct {
 }
 
 type recordingFeedback struct {
-	events   []string
-	tools    []string
-	toolArgs []map[string]any
-	returns  []toolReturn
-	stats    []int
-	interim  []string
+	events     []string
+	tools      []string
+	toolArgs   []map[string]any
+	returns    []toolReturn
+	stats      []int
+	interim    []string
+	resumedIDs []string
 }
 
 func (f *recordingFeedback) ToolCalled(toolName string, args map[string]any) {
@@ -150,6 +151,10 @@ func (f *recordingFeedback) ModelInfoUnavailable() {
 func (f *recordingFeedback) SessionReset()   { f.events = append(f.events, "SessionReset") }
 func (f *recordingFeedback) SessionStarted() { f.events = append(f.events, "SessionStarted") }
 func (f *recordingFeedback) SessionClosed()  { f.events = append(f.events, "SessionClosed") }
+func (f *recordingFeedback) SessionResumed(sessionID string) {
+	f.resumedIDs = append(f.resumedIDs, sessionID)
+	f.events = append(f.events, "SessionResumed")
+}
 
 func mustTestLLM(t testing.TB) *llm.LLM {
 	t.Helper()
@@ -218,6 +223,34 @@ func TestStartSession(t *testing.T) {
 		agt := mustNewTestAgent(t, Config{}, fb)
 		// when
 		agt.StartSession(SessionConfig{Prompt: "be terse"})
+		// then
+		assert.Equal(t, []string{"SessionStarted"}, fb.events)
+	})
+
+	t.Run("fires the SessionResumed event with the session id when it restores turns", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		agt := mustNewTestAgent(t, Config{}, fb)
+		restored := []llm.Message{
+			llm.UserMessage{Content: "hi"},
+			llm.AssistantMessage{Content: "hello"},
+		}
+		// when
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: restored, ID: "saved"})
+		// then
+		assert.Equal(t, []string{"SessionResumed"}, fb.events)
+		assert.Equal(t, []string{"saved"}, fb.resumedIDs)
+	})
+
+	t.Run("fires the SessionStarted event when the restored messages are all system messages", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		agt := mustNewTestAgent(t, Config{}, fb)
+		restored := []llm.Message{
+			llm.SystemMessage{Content: "old prompt"},
+		}
+		// when
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: restored})
 		// then
 		assert.Equal(t, []string{"SessionStarted"}, fb.events)
 	})
