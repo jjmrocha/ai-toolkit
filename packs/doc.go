@@ -2,9 +2,10 @@
 // constructor returns a [ToolPack] whose Close removes the tools again and stops
 // whatever serves them.
 //
-// [WebTools] (web search, page fetching, site crawling) and [CodingTools]
-// (symbol-aware code navigation and editing) are served by an MCP server the pack
-// launches and owns.
+// [WebTools] (web search, page fetching, site crawling), [CodingTools]
+// (symbol-aware code navigation and editing) and [ThinkingTools] (step-by-step
+// reasoning the model can revise and branch) are served by an MCP server the
+// pack launches and owns.
 //
 // [ShellTools], [FileTools] and [DateTools] run inside the program, so their Close
 // only unregisters. [ShellTools] is the shell the coding pack leaves out.

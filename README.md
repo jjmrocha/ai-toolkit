@@ -354,6 +354,32 @@ Worth knowing:
 - The pack is much wider than `WebTools`: 23 tools and about 27 KB of descriptions and schemas, nearly double, paid on every request while registered. Close the pack when a session is done with the code.
 - `packs.SerenaMCPConfig(project)` returns the `mcp.ClientConfig` the pack starts Serena with (the `desktop-app` context, the `query-projects` and `no-memories` modes, the exclusions above, and `--project` when the project is not empty), a new value each call, like `DonSeTchMCPConfig()`.
 
+### `ThinkingTools`
+
+`ThinkingTools` gives the model one tool, `thinking__sequentialthinking`, served
+by the reference
+[sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)
+MCP server. The model works a problem as numbered thoughts it can revise or
+branch from. It needs no API key, only the `npx` executable on `PATH`.
+
+```go
+pack, err := packs.ThinkingTools(ctx, toolBox)
+if err != nil {
+	log.Fatal(err)
+}
+
+defer pack.Close()
+```
+
+Worth knowing:
+
+- The server keeps the thought history in memory, so it lasts as long as the pack. Close the pack and start a new one for a fresh history.
+- The server is launched with `npx -y @modelcontextprotocol/server-sequential-thinking`, unpinned, so the first start downloads the package and later starts get whatever npm has cached or resolves as latest.
+- `ToolPack.Close` stops the server and removes its tool. Call it: nothing else owns the process, so a dropped `ToolPack` leaves the server running until the program exits.
+- If registration fails, the server is stopped before `ThinkingTools` returns. If the server dies later, its tool is removed.
+- `packs.SequentialThinkingMCPConfig()` returns the `mcp.ClientConfig` the pack starts the server with, a new value each call. To pin a version, append `@<version>` to the package argument and use `mcp.NewClient` and `RegisterTools` directly.
+- `ToolPack.Instructions` returns whatever the server sent in its handshake, never an error. Today that's nil: the server puts its guidance in the tool description.
+
 ### `ShellTools`
 
 `ShellTools` gives the model one tool, `shell_run`, which runs a command line
