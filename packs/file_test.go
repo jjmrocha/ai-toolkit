@@ -1,7 +1,6 @@
 package packs
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/tools"
+	"github.com/jjmrocha/go-algo/fn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,9 +22,8 @@ func TestFileToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		assert.Equal(t, "file", result.Name)
 		assert.Contains(t, result.Text, folder)
 	})
@@ -37,9 +36,8 @@ func TestFileToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		assert.Equal(t, "file", result.Name)
 		assert.Contains(t, result.Text, folder)
 	})
@@ -113,16 +111,25 @@ func TestFileTools(t *testing.T) {
 		assert.Empty(t, toolBox.Tools())
 	})
 
-	t.Run("closes more than once without failing", func(t *testing.T) {
+	t.Run("leaves a newer pack's tools in place on a second close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir())
+		oldPack, err := FileTools(toolBox, t.TempDir())
 		require.NoError(t, err)
-		require.NoError(t, pack.Close())
+		require.NoError(t, oldPack.Close())
+		newPack, err := FileTools(toolBox, t.TempDir())
+		require.NoError(t, err)
+		defer func() { _ = newPack.Close() }()
 		// when
-		err = pack.Close()
+		err = oldPack.Close()
 		// then
 		require.NoError(t, err)
+		expected := []string{
+			deleteToolName, editToolName, listToolName, readToolName,
+			searchToolName, workdirToolName, writeToolName,
+		}
+		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
+		assert.ElementsMatch(t, expected, result)
 	})
 
 	t.Run("rejects a root it cannot open", func(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 )
 
 // SequentialThinkingMCPConfig returns the [mcp.ClientConfig] [ThinkingTools]
-// starts the sequential-thinking server with. Each call returns a new value, so
-// it can be changed (to pin a version, say) and passed to [mcp.NewClient]
-// directly.
+// starts the sequential-thinking server with. npx fetches the latest published
+// version, unpinned. Each call returns a new value, so it can be changed (to pin
+// a version, say) and passed to [mcp.NewClient] directly.
 func SequentialThinkingMCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
 		Name:    "thinking",
@@ -36,22 +36,16 @@ type thinkingTools struct {
 // If registration fails, the server is stopped before ThinkingTools returns. If
 // the server dies later, its tool is removed from m.
 func ThinkingTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, SequentialThinkingMCPConfig())
+	client, err := mcp.NewClient(ctx, SequentialThinkingMCPConfig(), m)
 	if err != nil {
-		return nil, err
-	}
-
-	err = client.RegisterTools(ctx, m)
-	if err != nil {
-		_ = client.Close()
 		return nil, err
 	}
 
 	return &thinkingTools{mcp: client}, nil
 }
 
-func (t *thinkingTools) Instructions(_ context.Context) (*mcp.Instruction, error) {
-	return t.mcp.Instructions(), nil
+func (t *thinkingTools) Instructions(_ context.Context) *mcp.Instruction {
+	return t.mcp.Instructions()
 }
 
 func (t *thinkingTools) Close() error {

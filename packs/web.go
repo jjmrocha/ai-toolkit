@@ -32,22 +32,16 @@ type webTools struct {
 // If registration fails, the server is stopped before WebTools returns. If the
 // server dies later, its tools are removed from m.
 func WebTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, DonSeTchMCPConfig())
+	client, err := mcp.NewClient(ctx, DonSeTchMCPConfig(), m)
 	if err != nil {
-		return nil, err
-	}
-
-	err = client.RegisterTools(ctx, m)
-	if err != nil {
-		_ = client.Close()
 		return nil, err
 	}
 
 	return &webTools{mcp: client}, nil
 }
 
-func (w *webTools) Instructions(_ context.Context) (*mcp.Instruction, error) {
-	return w.mcp.Instructions(), nil
+func (w *webTools) Instructions(_ context.Context) *mcp.Instruction {
+	return w.mcp.Instructions()
 }
 
 func (w *webTools) Close() error {

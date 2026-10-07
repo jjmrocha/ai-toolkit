@@ -13,9 +13,10 @@ const serenaManualTool = "initial_instructions"
 // SerenaMCPConfig returns the [mcp.ClientConfig] [CodingTools] starts Serena
 // with: the desktop-app context, the query-projects and no-memories modes, and
 // Serena's shell, memory and onboarding tools excluded. A non-empty project (a
-// name or path Serena knows) is activated at startup. Each call returns a new
-// value, so it can be changed (to pin a revision or restore the shell, say) and
-// passed to [mcp.NewClient] directly.
+// name or path Serena knows) is activated at startup. Serena is installed from
+// its repository's default branch on every launch, unpinned. Each call returns a
+// new value, so it can be changed (to pin a revision or restore the shell, say)
+// and passed to [mcp.NewClient] directly.
 func SerenaMCPConfig(project string) mcp.ClientConfig {
 	args := []string{
 		"--from", "git+https://github.com/oraios/serena",
@@ -64,38 +65,31 @@ type codingTools struct {
 // [ToolPack.Instructions] returns Serena's manual, fetched from its
 // "initial_instructions" tool on every call, so the model does not have to call
 // that tool itself. If Serena fails to answer, it returns the handshake
-// instructions instead, and never an error.
+// instructions instead.
 //
 // If registration fails, the server is stopped before CodingTools returns. If
 // the server dies later, its tools are removed from m.
 func CodingTools(ctx context.Context, m *tools.ToolBox, project string) (ToolPack, error) {
 	cfg := SerenaMCPConfig(project)
 
-	client, err := mcp.NewClient(ctx, cfg)
+	client, err := mcp.NewClient(ctx, cfg, m)
 	if err != nil {
-		return nil, err
-	}
-
-	err = client.RegisterTools(ctx, m)
-	if err != nil {
-		_ = client.Close()
-
 		return nil, err
 	}
 
 	return &codingTools{mcp: client}, nil
 }
 
-func (c *codingTools) Instructions(ctx context.Context) (*mcp.Instruction, error) {
+func (c *codingTools) Instructions(ctx context.Context) *mcp.Instruction {
 	manual, err := c.mcp.CallTool(ctx, serenaManualTool, nil)
 	if err != nil {
-		return c.mcp.Instructions(), nil
+		return c.mcp.Instructions()
 	}
 
 	return &mcp.Instruction{
 		Name: c.mcp.Name(),
 		Text: manual,
-	}, nil
+	}
 }
 
 func (c *codingTools) Close() error {

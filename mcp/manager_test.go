@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -67,7 +66,7 @@ func TestManagerInstructions(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "zeta")
 		startTestMCPServer(t, []string{"fetch"}, &sdk.ServerOptions{Instructions: "Use fetch to read a page."}, "alpha")
-		ctx := context.Background()
+		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
 		m.Register(ClientConfig{Name: "zeta", Command: "npx"})
 		m.Register(ClientConfig{Name: "alpha", Command: "npx"})
@@ -88,7 +87,7 @@ func TestManagerInstructions(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "playwright")
 		startTestMCPServer(t, []string{"fetch"}, nil, "quiet")
-		ctx := context.Background()
+		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		m.Register(ClientConfig{Name: "quiet", Command: "npx"})
@@ -105,7 +104,7 @@ func TestManagerInstructions(t *testing.T) {
 	t.Run("leaves out an MCP that is not running", func(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
-		ctx := context.Background()
+		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		m.Register(ClientConfig{Name: "registered-only", Command: "npx"})
@@ -121,7 +120,7 @@ func TestManagerInstructions(t *testing.T) {
 	t.Run("reaps a dead client and leaves it out", func(t *testing.T) {
 		// given
 		server := startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "playwright")
-		ctx := context.Background()
+		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		m := NewManager(toolBox)
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
@@ -142,7 +141,7 @@ func TestManagerInstructions(t *testing.T) {
 	t.Run("nil when no running MCP sent instructions", func(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, nil)
-		ctx := context.Background()
+		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		t.Cleanup(m.Close)
@@ -168,7 +167,7 @@ func TestManagerStart(t *testing.T) {
 	t.Run("refuses a name that was never registered", func(t *testing.T) {
 		// given
 		m := NewManager(tools.NewToolBox())
-		ctx := context.Background()
+		ctx := t.Context()
 		// when
 		err := m.Start(ctx, "playwright")
 		// then
@@ -214,7 +213,7 @@ func TestManagerClose(t *testing.T) {
 	t.Run("keeps the registration of a server it started", func(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, nil)
-		ctx := context.Background()
+		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		require.NoError(t, m.Start(ctx, "playwright"))

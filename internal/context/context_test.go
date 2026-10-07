@@ -12,7 +12,7 @@ import (
 func TestWithTimeout(t *testing.T) {
 	t.Run("bounds a context that carries no deadline", func(t *testing.T) {
 		// given
-		ctx := context.Background()
+		ctx := t.Context()
 		// when
 		result, cancel := WithTimeout(ctx, time.Minute)
 		defer cancel()
@@ -24,7 +24,7 @@ func TestWithTimeout(t *testing.T) {
 
 	t.Run("leaves a shorter deadline alone", func(t *testing.T) {
 		// given
-		ctx, stop := context.WithTimeout(context.Background(), time.Second)
+		ctx, stop := context.WithTimeout(t.Context(), time.Second)
 		defer stop()
 		expected, _ := ctx.Deadline()
 		// when
@@ -38,7 +38,7 @@ func TestWithTimeout(t *testing.T) {
 
 	t.Run("leaves a longer deadline alone", func(t *testing.T) {
 		// given
-		ctx, stop := context.WithTimeout(context.Background(), time.Hour)
+		ctx, stop := context.WithTimeout(t.Context(), time.Hour)
 		defer stop()
 		expected, _ := ctx.Deadline()
 		// when
@@ -52,7 +52,7 @@ func TestWithTimeout(t *testing.T) {
 
 	t.Run("cancels a context it bounded", func(t *testing.T) {
 		// given
-		result, cancel := WithTimeout(context.Background(), time.Minute)
+		result, cancel := WithTimeout(t.Context(), time.Minute)
 		// when
 		cancel()
 		// then
@@ -61,7 +61,7 @@ func TestWithTimeout(t *testing.T) {
 
 	t.Run("does not cancel a context it left alone", func(t *testing.T) {
 		// given
-		ctx, stop := context.WithTimeout(context.Background(), time.Minute)
+		ctx, stop := context.WithTimeout(t.Context(), time.Minute)
 		defer stop()
 		result, cancel := WithTimeout(ctx, time.Second)
 		// when

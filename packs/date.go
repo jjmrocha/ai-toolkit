@@ -42,11 +42,11 @@ func (p *datePack) Close() error {
 	return nil
 }
 
-func (p *datePack) Instructions(_ context.Context) (*mcp.Instruction, error) {
+func (p *datePack) Instructions(_ context.Context) *mcp.Instruction {
 	return &mcp.Instruction{
 		Name: "date",
 		Text: dateInstruction,
-	}, nil
+	}
 }
 
 // DateTools registers three tools in m that tell the model when it is:

@@ -103,7 +103,10 @@ func TestToOllamaThink(t *testing.T) {
 
 func TestToOllamaTools(t *testing.T) {
 	t.Run("nil tools yields nil", func(t *testing.T) {
-		assert.Nil(t, toOllamaTools(nil))
+		// when
+		result := toOllamaTools(nil)
+		// then
+		assert.Nil(t, result)
 	})
 
 	t.Run("maps a tool onto a function definition", func(t *testing.T) {

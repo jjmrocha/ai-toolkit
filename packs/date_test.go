@@ -1,7 +1,6 @@
 package packs
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -21,9 +20,8 @@ func TestDateToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "date", Text: dateInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -35,9 +33,8 @@ func TestDateToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "date", Text: dateInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -80,6 +77,24 @@ func TestDateTools(t *testing.T) {
 
 		defer func() { _ = pack.Close() }()
 		// then
+		expected := []string{currentDateToolName, currentTimeToolName, timeZoneToolName}
+		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
+		assert.ElementsMatch(t, expected, result)
+	})
+
+	t.Run("leaves a newer pack's tools in place on a second close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		oldPack, err := DateTools(toolBox)
+		require.NoError(t, err)
+		require.NoError(t, oldPack.Close())
+		newPack, err := DateTools(toolBox)
+		require.NoError(t, err)
+		defer func() { _ = newPack.Close() }()
+		// when
+		err = oldPack.Close()
+		// then
+		require.NoError(t, err)
 		expected := []string{currentDateToolName, currentTimeToolName, timeZoneToolName}
 		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
 		assert.ElementsMatch(t, expected, result)

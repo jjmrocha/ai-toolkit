@@ -22,10 +22,23 @@ func TestRetryAfterWait(t *testing.T) {
 		assert.Equal(t, retryMaxWaitTime, result)
 	})
 
-	t.Run("returns zero for a missing or malformed header", func(t *testing.T) {
-		// then
-		assert.Zero(t, retryAfterWait(""))
-		assert.Zero(t, retryAfterWait("later"))
-		assert.Zero(t, retryAfterWait("-1"))
-	})
+	testCases := []struct {
+		name  string
+		input string
+	}{
+		{name: "returns zero for a missing header", input: ""},
+		{name: "returns zero for a header that is not a number", input: "later"},
+		{name: "returns zero for a negative number of seconds", input: "-1"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// given
+			input := tc.input
+			// when
+			result := retryAfterWait(input)
+			// then
+			assert.Zero(t, result)
+		})
+	}
 }

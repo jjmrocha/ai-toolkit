@@ -52,11 +52,11 @@ func (p *classifyPack) Close() error {
 	return nil
 }
 
-func (p *classifyPack) Instructions(_ context.Context) (*mcp.Instruction, error) {
+func (p *classifyPack) Instructions(_ context.Context) *mcp.Instruction {
 	return &mcp.Instruction{
 		Name: "classify",
 		Text: classifyInstruction,
-	}, nil
+	}
 }
 
 type yesNoResult struct {

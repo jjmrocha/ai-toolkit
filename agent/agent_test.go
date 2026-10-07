@@ -1141,14 +1141,15 @@ func TestChangeModel(t *testing.T) {
 		agt.StartSession(SessionConfig{Prompt: "sys"})
 		_, err := agt.Process(t.Context(), "hi")
 		require.NoError(t, err)
-		require.Equal(t, 1000, agt.modelInfo.ContextSize)
+		fake.info = &llm.ModelInfo{Name: "m2", ContextSize: 2000}
 		// when
 		err = agt.ChangeModel("m2")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "m2", fake.current)
-		assert.Nil(t, agt.modelInfo)
-		assert.Zero(t, agt.compactThreshold)
+		result := agt.ModelInfo(t.Context())
+		require.NotNil(t, result)
+		assert.Equal(t, 2000, result.ModelContextSize)
 	})
 
 	t.Run("propagates the client error and keeps the current model", func(t *testing.T) {

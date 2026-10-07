@@ -36,10 +36,12 @@ type Agent struct {
 	modelInfo        *llm.ModelInfo
 }
 
-// New creates an [Agent] for an [llm.LLM], with silent [Feedback]; use
+// New creates an [Agent] for an [llm.LLM], with [NopFeedback]; use
 // [Agent.SetFeedback] with [NewStdoutFeedback] to print events. It returns
 // [ErrNoLLM] when llm is nil and [ErrInvalidThreshold] when
-// Config.CompactionThresholdPercent is outside 0 to 100.
+// Config.CompactionThresholdPercent is outside 0 to 100. Change the model with
+// [Agent.ChangeModel], not on llm directly: the agent caches the model's
+// context window and only refreshes it there.
 func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 	if llm == nil {
 		return nil, ErrNoLLM
@@ -49,7 +51,7 @@ func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 		return nil, ErrInvalidThreshold
 	}
 
-	feedback := &nullFeedback{}
+	feedback := NopFeedback{}
 
 	return &Agent{
 		config: cfg,

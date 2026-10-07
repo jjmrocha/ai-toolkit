@@ -1,7 +1,6 @@
 package packs
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -26,9 +25,8 @@ func TestClassifyToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -41,9 +39,8 @@ func TestClassifyToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -124,6 +121,25 @@ func TestClassifyTools(t *testing.T) {
 		expected := []string{classifyChoiceToolName, classifyScoreToolName, classifyYesNoToolName}
 		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
 		assert.Equal(t, expected, result)
+	})
+
+	t.Run("leaves a newer pack's tools in place on a second close", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		oldPack, err := ClassifyTools(toolBox, client)
+		require.NoError(t, err)
+		require.NoError(t, oldPack.Close())
+		newPack, err := ClassifyTools(toolBox, client)
+		require.NoError(t, err)
+		defer func() { _ = newPack.Close() }()
+		// when
+		err = oldPack.Close()
+		// then
+		require.NoError(t, err)
+		expected := []string{classifyChoiceToolName, classifyScoreToolName, classifyYesNoToolName}
+		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
+		assert.ElementsMatch(t, expected, result)
 	})
 
 	t.Run("removes the three tools on close", func(t *testing.T) {

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -11,6 +12,7 @@ func exerciseAllEvents(fb Feedback) {
 	fb.SessionStarted()
 	fb.SessionResumed("abc")
 	fb.ToolCalled("echo", nil)
+	fb.ToolReturned("echo", "ok", nil, time.Millisecond)
 	fb.InterimTextReceived("checking")
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
@@ -109,6 +111,7 @@ func TestNewWriterFeedback(t *testing.T) {
 		expected := "New session started\n" +
 			"Session resumed: abc\n" +
 			"Tool called: echo\n" +
+			"Tool returned: echo ok 1ms\n" +
 			"Interim text received: checking\n" +
 			"Context was compacted\n" +
 			"Context compaction failed\n" +
@@ -117,5 +120,27 @@ func TestNewWriterFeedback(t *testing.T) {
 			"Session reset\n" +
 			"Session closed\n"
 		assert.Equal(t, expected, result)
+	})
+}
+
+type sessionStartCounter struct {
+	NopFeedback
+	started int
+}
+
+func (c *sessionStartCounter) SessionStarted() {
+	c.started++
+}
+
+func TestNopFeedback(t *testing.T) {
+	t.Run("an embedding type receives the events it overrides", func(t *testing.T) {
+		// given
+		counter := &sessionStartCounter{}
+		agt := agentWithLLM(&fakeLLM{}, counter, Config{})
+		// when
+		agt.StartSession(SessionConfig{Prompt: "p"})
+		agt.Close()
+		// then
+		assert.Equal(t, 1, counter.started)
 	})
 }

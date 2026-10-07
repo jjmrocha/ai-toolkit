@@ -16,10 +16,10 @@ type ToolPack interface {
 	Close() error
 	// Instructions returns usage guidance for the model, labeled by
 	// [mcp.Instruction.Name], or nil if the pack has none. It complements the tool
-	// descriptions. A pack served by an MCP server may ask the server under ctx
-	// and return its error, so call it before [ToolPack.Close]. The packs that
-	// serve their own tools return fixed text and never fail.
-	Instructions(context.Context) (*mcp.Instruction, error)
+	// descriptions. A pack served by an MCP server may ask the server under ctx,
+	// and falls back to the server's handshake instructions if it cannot. The
+	// packs that serve their own tools return fixed text.
+	Instructions(context.Context) *mcp.Instruction
 }
 
 type registration struct {

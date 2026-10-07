@@ -13,15 +13,7 @@ import (
 )
 
 func TestNewOllama(t *testing.T) {
-	t.Run("does not require an API key", func(t *testing.T) {
-		// when
-		result, err := newOllama(Config{Model: "llama3.2"})
-		// then
-		require.NoError(t, err)
-		require.NotNil(t, result)
-	})
-
-	t.Run("applies the default base URL", func(t *testing.T) {
+	t.Run("applies the default base URL and requires no API key", func(t *testing.T) {
 		// when
 		result, err := newOllama(Config{Model: "llama3.2"})
 		// then

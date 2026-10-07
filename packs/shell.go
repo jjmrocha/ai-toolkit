@@ -45,11 +45,11 @@ func (p *shellPack) Close() error {
 	return nil
 }
 
-func (p *shellPack) Instructions(_ context.Context) (*mcp.Instruction, error) {
+func (p *shellPack) Instructions(_ context.Context) *mcp.Instruction {
 	return &mcp.Instruction{
 		Name: "shell",
 		Text: shellInstruction,
-	}, nil
+	}
 }
 
 // ShellTools registers "shell_run" in m, which runs a command line with

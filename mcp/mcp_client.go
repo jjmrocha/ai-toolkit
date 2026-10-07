@@ -21,9 +21,8 @@ const (
 
 // Client registers one MCP server's tools in a [tools.ToolBox] and owns the
 // server's process. Create one with [NewClient] and always defer
-// [Client.Close]. After [Client.RegisterTools], a server that changes its tool
-// list gets its tools registered again automatically. It is safe for
-// concurrent use.
+// [Client.Close]. A server that changes its tool list gets its tools registered
+// again automatically. It is safe for concurrent use.
 type Client struct {
 	config ClientConfig
 
@@ -36,12 +35,23 @@ type Client struct {
 	tools     []string
 }
 
-// NewClient launches the MCP server described by cfg and completes the
-// handshake, which ctx bounds. The server runs until [Client.Close]. It returns
-// [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete, or an error
-// if the server fails to start or the handshake fails. Call
-// [Client.RegisterTools] to register its tools.
-func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
+// NewClient launches the MCP server described by cfg, completes the handshake
+// and registers the server's tools in tb, all bounded by ctx. Each tool is
+// registered as "<ClientConfig.Name>__<tool>", with a handler that forwards the
+// call to the server. A namespaced name the providers would reject is
+// rewritten, not dropped; the server is still called by its own name. Tools in
+// [ClientConfig.ExcludedTools] are skipped. A server whose handshake declared
+// no tools capability is not asked for a list: nothing is registered and the
+// server keeps running for whatever else it offers. A server that declared no
+// capabilities at all is asked anyway. A nil tb registers nothing, for a
+// client used only through [Client.CallTool].
+//
+// The server runs until [Client.Close], which removes its tools from tb again.
+// It returns [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete, or
+// an error if the server fails to start, the handshake fails or its tools
+// cannot be registered. On a registration error the server is stopped before
+// NewClient returns.
+func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Client, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameRequired
 	}
@@ -68,6 +78,15 @@ func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
 	}
 
 	c.session = s
+
+	if tb == nil {
+		return c, nil
+	}
+
+	if err := c.registerTools(ctx, tb); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
 
 	return c, nil
 }
@@ -101,7 +120,7 @@ func (c *Client) onToolsChange() {
 	ctx, cancel := context.WithTimeout(context.Background(), listToolsTimeout)
 	defer cancel()
 
-	_ = c.RegisterTools(ctx, tb)
+	_ = c.registerTools(ctx, tb)
 }
 
 func (c *Client) onProgress(token string) {
@@ -144,21 +163,7 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// RegisterTools lists the server's tools and registers each one in tb as
-// "<ClientConfig.Name>__<tool>", with a handler that forwards the call to the
-// server. A namespaced name the providers would reject is rewritten, not
-// dropped; the server is still called by its own name. Tools in
-// [ClientConfig.ExcludedTools] are skipped. ctx bounds the tools/list request.
-// [Client.Close] removes the tools again.
-//
-// Calling it again replaces the tools the previous call registered. That is how
-// the client refreshes when the server changes its tool list.
-//
-// A server whose handshake declared no tools capability is not asked for a
-// list: nothing is registered, the call succeeds, and the server keeps running
-// for whatever else it offers. A server that declared no capabilities at all is
-// asked anyway.
-func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
+func (c *Client) registerTools(ctx context.Context, tb *tools.ToolBox) error {
 	if !c.session.supportsTools() {
 		return nil
 	}
@@ -204,7 +209,7 @@ func (c *Client) RegisterTools(ctx context.Context, tb *tools.ToolBox) error {
 }
 
 // CallTool calls the server's tool named tool with args and returns its text
-// result, as a tool registered by [Client.RegisterTools] would: under
+// result, as a tool registered by [NewClient] would: under
 // [ClientConfig.ToolCallTimeout], with nil args sent as an empty object. tool
 // is the server's own name for it, not the namespaced one, and it is called
 // even if [ClientConfig.ExcludedTools] lists it. It returns an error when the

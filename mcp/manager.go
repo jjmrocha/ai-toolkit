@@ -135,13 +135,8 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 		delete(m.clients, name)
 	}
 
-	client, err := NewClient(ctx, cfg)
+	client, err := NewClient(ctx, cfg, m.toolBox)
 	if err != nil {
-		return err
-	}
-
-	if err := client.RegisterTools(ctx, m.toolBox); err != nil {
-		_ = client.Close()
 		return err
 	}
 

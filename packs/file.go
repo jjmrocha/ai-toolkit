@@ -58,11 +58,11 @@ type filePack struct {
 	once    sync.Once
 }
 
-func (p *filePack) Instructions(_ context.Context) (*mcp.Instruction, error) {
+func (p *filePack) Instructions(_ context.Context) *mcp.Instruction {
 	return &mcp.Instruction{
 		Name: "file",
 		Text: fmt.Sprintf(fileInstruction, p.path),
-	}, nil
+	}
 }
 
 func (p *filePack) Close() error {

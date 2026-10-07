@@ -20,7 +20,7 @@ func TestPendingRequestNewResettableTimeout(t *testing.T) {
 		// given
 		p := newPendingRequest()
 		// when
-		result := p.newResettableTimeout(context.Background(), "ait-1", testMargin)
+		result := p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		// then
 		require.NotNil(t, result)
 		assert.NoError(t, result.Err())
@@ -30,7 +30,7 @@ func TestPendingRequestNewResettableTimeout(t *testing.T) {
 		// given
 		p := newPendingRequest()
 		// when
-		ctx := p.newResettableTimeout(context.Background(), "ait-1", testTimeout)
+		ctx := p.newResettableTimeout(t.Context(), "ait-1", testTimeout)
 		// then
 		<-ctx.Done()
 		assert.ErrorIs(t, ctx.Err(), context.Canceled)
@@ -40,7 +40,7 @@ func TestPendingRequestNewResettableTimeout(t *testing.T) {
 	t.Run("cancels with the parent when the parent is cancelled", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		parent, cancel := context.WithCancel(context.Background())
+		parent, cancel := context.WithCancel(t.Context())
 		ctx := p.newResettableTimeout(parent, "ait-1", testMargin)
 		// when
 		cancel()
@@ -53,8 +53,8 @@ func TestPendingRequestNewResettableTimeout(t *testing.T) {
 		// given
 		p := newPendingRequest()
 		// when
-		first := p.newResettableTimeout(context.Background(), "ait-1", testTimeout)
-		second := p.newResettableTimeout(context.Background(), "ait-2", testMargin)
+		first := p.newResettableTimeout(t.Context(), "ait-1", testTimeout)
+		second := p.newResettableTimeout(t.Context(), "ait-2", testMargin)
 		// then
 		<-first.Done()
 		assert.NoError(t, second.Err())
@@ -65,7 +65,7 @@ func TestPendingRequestReset(t *testing.T) {
 	t.Run("extends the budget of a call still in flight", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		ctx := p.newResettableTimeout(context.Background(), "ait-1", testTimeout)
+		ctx := p.newResettableTimeout(t.Context(), "ait-1", testTimeout)
 		deadline := time.Now().Add(testTimeout)
 		// when: progress keeps arriving until the original budget would have expired
 		for time.Now().Before(deadline) {
@@ -79,7 +79,7 @@ func TestPendingRequestReset(t *testing.T) {
 	t.Run("ignores a token nobody is waiting on", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		ctx := p.newResettableTimeout(context.Background(), "ait-1", testMargin)
+		ctx := p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		// when: progress arrives for a call that is not in flight
 		p.reset("ait-99")
 		// then
@@ -89,7 +89,7 @@ func TestPendingRequestReset(t *testing.T) {
 	t.Run("ignores a token whose call already stopped", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		p.newResettableTimeout(context.Background(), "ait-1", testMargin)
+		p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		p.stop("ait-1")
 		// when: a late progress notification arrives
 		p.reset("ait-1")
@@ -102,7 +102,7 @@ func TestPendingRequestStop(t *testing.T) {
 	t.Run("cancels the context without the timeout cause", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		ctx := p.newResettableTimeout(context.Background(), "ait-1", testMargin)
+		ctx := p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		// when
 		p.stop("ait-1")
 		// then
@@ -115,8 +115,8 @@ func TestPendingRequestStop(t *testing.T) {
 	t.Run("forgets the token, so finished calls do not accumulate", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		p.newResettableTimeout(context.Background(), "ait-1", testMargin)
-		p.newResettableTimeout(context.Background(), "ait-2", testMargin)
+		p.newResettableTimeout(t.Context(), "ait-1", testMargin)
+		p.newResettableTimeout(t.Context(), "ait-2", testMargin)
 		// when
 		p.stop("ait-1")
 		p.stop("ait-2")
@@ -127,7 +127,7 @@ func TestPendingRequestStop(t *testing.T) {
 	t.Run("ignores a token nobody is waiting on", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		ctx := p.newResettableTimeout(context.Background(), "ait-1", testMargin)
+		ctx := p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		// when
 		p.stop("ait-99")
 		// then
@@ -137,7 +137,7 @@ func TestPendingRequestStop(t *testing.T) {
 	t.Run("is safe to call more than once", func(t *testing.T) {
 		// given
 		p := newPendingRequest()
-		ctx := p.newResettableTimeout(context.Background(), "ait-1", testMargin)
+		ctx := p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		p.stop("ait-1")
 		// when
 		p.stop("ait-1")

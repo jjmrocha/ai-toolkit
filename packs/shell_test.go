@@ -1,7 +1,6 @@
 package packs
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,18 +58,6 @@ func TestShellTools(t *testing.T) {
 		assert.Empty(t, toolBox.Tools())
 	})
 
-	t.Run("closes more than once without failing", func(t *testing.T) {
-		// given
-		toolBox := tools.NewToolBox()
-		pack, err := ShellTools(toolBox)
-		require.NoError(t, err)
-		require.NoError(t, pack.Close())
-		// when
-		err = pack.Close()
-		// then
-		require.NoError(t, err)
-	})
-
 	t.Run("leaves a newer pack's tool in place on a second close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
@@ -99,9 +86,8 @@ func TestShellToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
 		assert.Equal(t, expected, result)
 	})
@@ -113,9 +99,8 @@ func TestShellToolsInstructions(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
-		result, err := pack.Instructions(context.Background())
+		result := pack.Instructions(t.Context())
 		// then
-		require.NoError(t, err)
 		expected := &mcp.Instruction{Name: "shell", Text: shellInstruction}
 		assert.Equal(t, expected, result)
 	})

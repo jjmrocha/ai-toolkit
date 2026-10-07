@@ -9,7 +9,7 @@ import (
 
 // Feedback receives an [Agent]'s events as they happen, so a caller can follow
 // progress without affecting the conversation. Methods are called from inside
-// [Agent.Process] and must not block. [New] installs a silent Feedback; pass
+// [Agent.Process] and must not block. [New] installs [NopFeedback]; pass
 // [NewStdoutFeedback] to [Agent.SetFeedback] to print events.
 type Feedback interface {
 	// ToolCalled fires just before the agent runs the named tool, with the
@@ -127,37 +127,54 @@ func (s *writerFeedback) SessionClosed() {
 	_, _ = fmt.Fprintln(s.stdout, "Session closed")
 }
 
-type nullFeedback struct{}
+// NopFeedback is a [Feedback] that ignores every event. [New] installs it.
+// Embed it in your own type to handle only the events you care about:
+//
+//	type toolLogger struct{ agent.NopFeedback }
+//
+//	func (toolLogger) ToolCalled(name string, _ map[string]any) { log.Println(name) }
+type NopFeedback struct{}
 
-func (nullFeedback) ToolCalled(_ string, _ map[string]any) {
+// ToolCalled does nothing.
+func (NopFeedback) ToolCalled(_ string, _ map[string]any) {
 }
 
-func (nullFeedback) ToolReturned(_ string, _ string, _ error, _ time.Duration) {
+// ToolReturned does nothing.
+func (NopFeedback) ToolReturned(_ string, _ string, _ error, _ time.Duration) {
 }
 
-func (nullFeedback) InterimTextReceived(_ string) {
+// InterimTextReceived does nothing.
+func (NopFeedback) InterimTextReceived(_ string) {
 }
 
-func (nullFeedback) ContextCompacted() {
+// ContextCompacted does nothing.
+func (NopFeedback) ContextCompacted() {
 }
 
-func (nullFeedback) ContextCompactionFailed() {
+// ContextCompactionFailed does nothing.
+func (NopFeedback) ContextCompactionFailed() {
 }
 
-func (nullFeedback) ModelInfoUnavailable() {
+// ModelInfoUnavailable does nothing.
+func (NopFeedback) ModelInfoUnavailable() {
 }
 
-func (nullFeedback) TokensUsed(_ int) {
+// TokensUsed does nothing.
+func (NopFeedback) TokensUsed(_ int) {
 }
 
-func (nullFeedback) SessionReset() {
+// SessionReset does nothing.
+func (NopFeedback) SessionReset() {
 }
 
-func (nullFeedback) SessionStarted() {
+// SessionStarted does nothing.
+func (NopFeedback) SessionStarted() {
 }
 
-func (nullFeedback) SessionResumed(_ string) {
+// SessionResumed does nothing.
+func (NopFeedback) SessionResumed(_ string) {
 }
 
-func (nullFeedback) SessionClosed() {
+// SessionClosed does nothing.
+func (NopFeedback) SessionClosed() {
 }
