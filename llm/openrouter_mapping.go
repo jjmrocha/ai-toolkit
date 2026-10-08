@@ -98,9 +98,11 @@ func fromORToAssistantMessage(resp orChatResponse) (*AssistantMessage, error) {
 		Content:    choice.Content,
 		StopReason: resp.Choices[0].FinishReason,
 		Stats: Stats{
-			PromptTokens: resp.Usage.PromptTokens,
-			OutputTokens: resp.Usage.CompletionTokens,
-			TotalTokens:  resp.Usage.TotalTokens,
+			PromptTokens:     resp.Usage.PromptTokens,
+			OutputTokens:     resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+			CacheWriteTokens: resp.Usage.PromptTokensDetails.CacheWriteTokens,
+			CacheReadTokens:  resp.Usage.PromptTokensDetails.CachedTokens,
 		},
 	}
 

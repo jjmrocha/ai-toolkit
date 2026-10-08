@@ -139,6 +139,20 @@ func TestFromOllamaToAssistantMessage(t *testing.T) {
 		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
 	})
 
+	t.Run("maps cached prompt tokens to cache reads", func(t *testing.T) {
+		// given
+		resp := ollamaChatResponse{
+			PromptEvalCount:       10,
+			PromptEvalCachedCount: 6,
+			EvalCount:             5,
+		}
+		expected := Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15, CacheReadTokens: 6}
+		// when
+		result := fromOllamaToAssistantMessage(resp)
+		// then
+		assert.Equal(t, expected, result.Stats)
+	})
+
 	t.Run("maps the done reason", func(t *testing.T) {
 		// given
 		resp := ollamaChatResponse{Message: ollamaResponseMessage{Content: "x"}, DoneReason: "length"}

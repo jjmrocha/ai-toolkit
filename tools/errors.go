@@ -17,7 +17,7 @@ var (
 
 	// ErrFieldNotFound is returned by the [Arguments] accessors when the field is
 	// missing.
-	ErrFieldNotFound = errors.New("field not found")
+	ErrFieldNotFound = errors.New("missing required argument")
 
 	// ErrInvalidFieldType is returned by the [Arguments] accessors when the field,
 	// or for the array accessors one of its elements, has another type.

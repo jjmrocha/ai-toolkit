@@ -179,14 +179,20 @@ func TestFromORToAssistantMessage(t *testing.T) {
 		// given
 		resp := orChatResponse{
 			Choices: []orChoice{{Message: orResponseMessage{Content: "Hello there"}}},
-			Usage:   orUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: orUsage{
+				PromptTokens:        10,
+				CompletionTokens:    5,
+				TotalTokens:         15,
+				PromptTokensDetails: orPromptTokensDetails{CachedTokens: 6, CacheWriteTokens: 3},
+			},
 		}
+		expected := Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15, CacheReadTokens: 6, CacheWriteTokens: 3}
 		// when
 		result, err := fromORToAssistantMessage(resp)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "Hello there", result.Content)
-		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
+		assert.Equal(t, expected, result.Stats)
 	})
 
 	t.Run("maps the finish reason", func(t *testing.T) {

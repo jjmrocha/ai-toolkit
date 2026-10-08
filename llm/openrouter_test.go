@@ -174,6 +174,24 @@ func TestOpenRouterChat(t *testing.T) {
 		assert.Empty(t, result.ToolCalls)
 	})
 
+	t.Run("takes prompt cache usage from the stream", func(t *testing.T) {
+		// given
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			writeSSE(t, w,
+				`{"choices":[{"delta":{"role":"assistant","content":"Hello"},"finish_reason":"stop"}]}`,
+				`{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":6,"cache_write_tokens":3}}}`,
+				`[DONE]`,
+			)
+		})
+		expected := Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15, CacheReadTokens: 6, CacheWriteTokens: 3}
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, expected, result.Stats)
+	})
+
 	t.Run("assembles tool calls from fragments by index", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {

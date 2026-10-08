@@ -138,6 +138,21 @@ func TestOllamaChat(t *testing.T) {
 		assert.Equal(t, Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15}, result.Stats)
 	})
 
+	t.Run("takes cached prompt tokens from the final chunk", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"message":{"role":"assistant","content":"Hello"},"done":false}
+{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":10,"prompt_eval_cached_count":6,"eval_count":5}
+`)
+		})
+		expected := Stats{PromptTokens: 10, OutputTokens: 5, TotalTokens: 15, CacheReadTokens: 6}
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Stats)
+	})
+
 	t.Run("collects tool calls from every chunk", func(t *testing.T) {
 		// given
 		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {

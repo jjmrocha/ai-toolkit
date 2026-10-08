@@ -59,9 +59,15 @@ type orResponseMessage struct {
 }
 
 type orUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int                   `json:"prompt_tokens"`
+	CompletionTokens    int                   `json:"completion_tokens"`
+	TotalTokens         int                   `json:"total_tokens"`
+	PromptTokensDetails orPromptTokensDetails `json:"prompt_tokens_details"`
+}
+
+type orPromptTokensDetails struct {
+	CachedTokens     int `json:"cached_tokens"`
+	CacheWriteTokens int `json:"cache_write_tokens"`
 }
 
 type orStreamChunk struct {

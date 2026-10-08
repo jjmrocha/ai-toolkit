@@ -87,9 +87,10 @@ func fromOllamaToAssistantMessage(resp ollamaChatResponse) *AssistantMessage {
 		Content:    resp.Message.Content,
 		StopReason: resp.DoneReason,
 		Stats: Stats{
-			PromptTokens: resp.PromptEvalCount,
-			OutputTokens: resp.EvalCount,
-			TotalTokens:  resp.PromptEvalCount + resp.EvalCount,
+			PromptTokens:    resp.PromptEvalCount,
+			OutputTokens:    resp.EvalCount,
+			TotalTokens:     resp.PromptEvalCount + resp.EvalCount,
+			CacheReadTokens: resp.PromptEvalCachedCount,
 		},
 	}
 

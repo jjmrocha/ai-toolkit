@@ -41,12 +41,13 @@ type ollamaToolFunction struct {
 }
 
 type ollamaChatResponse struct {
-	Message         ollamaResponseMessage `json:"message"`
-	Done            bool                  `json:"done"`
-	DoneReason      string                `json:"done_reason"`
-	PromptEvalCount int                   `json:"prompt_eval_count"`
-	EvalCount       int                   `json:"eval_count"`
-	Error           string                `json:"error,omitempty"`
+	Message               ollamaResponseMessage `json:"message"`
+	Done                  bool                  `json:"done"`
+	DoneReason            string                `json:"done_reason"`
+	PromptEvalCount       int                   `json:"prompt_eval_count"`
+	PromptEvalCachedCount int                   `json:"prompt_eval_cached_count"`
+	EvalCount             int                   `json:"eval_count"`
+	Error                 string                `json:"error,omitempty"`
 }
 
 type ollamaResponseMessage struct {

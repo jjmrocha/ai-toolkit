@@ -72,6 +72,7 @@ func TestGetString(t *testing.T) {
 		_, err := args.GetString("city")
 		// then
 		assert.ErrorIs(t, err, ErrFieldNotFound)
+		assert.EqualError(t, err, "missing required argument: city")
 	})
 
 	t.Run("errors when the field is not a string", func(t *testing.T) {
