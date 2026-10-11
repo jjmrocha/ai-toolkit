@@ -156,8 +156,9 @@ fmt.Println(answer.Selected, answer.Confidence)
 ```
 
 - Three question types: `YesNo`, `Choice` and `Score`, each with a typed answer.
-- Answers carry calibrated probabilities. What threshold to apply is your call.
+- Answers carry probabilities. What threshold to apply is your call.
 - Several questions about one state are answered in parallel, in one request.
+- Any OpenRouter decision model works as `Model`. List them with `GET https://openrouter.ai/api/v1/models?output_modalities=decisions`; the default listing leaves them out.
 
 ### `tools`
 
@@ -277,7 +278,7 @@ defer pack.Close()
 | `ShellTools` | A `/bin/sh` command runner | — |
 | `FileTools` | The files under one folder it can't leave | — |
 | `DateTools` | The date, time of day and time zone | — |
-| `DecisionTools` | Judgement calls with calibrated probabilities | A `decision.Decision` |
+| `DecisionTools` | Judgement calls with probabilities | A `decision.Decision` |
 
 - `Close` removes the pack's tools and stops any server behind them. Always call it.
 - `Instructions` returns the pack's usage guidance for the system prompt.

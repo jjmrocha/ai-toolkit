@@ -73,8 +73,7 @@ type Response struct {
 
 // Stats is the usage of one request.
 type Stats struct {
-	// PromptTokens is the number of tokens in the request. Providers bill these;
-	// the answers are free.
+	// PromptTokens is the number of tokens in the request.
 	PromptTokens int
 	// Duration is how long the provider call took, timed by
 	// [Decision.Ask].

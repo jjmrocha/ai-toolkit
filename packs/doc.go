@@ -13,6 +13,6 @@
 // the model the date, the time of day and the host's zone.
 //
 // [DecisionTools] sends one judgement call at a time to a decision model
-// the caller supplies, and returns calibrated probabilities. Its Close also only
+// the caller supplies, and returns probabilities. Its Close also only
 // unregisters; the client stays the caller's.
 package packs

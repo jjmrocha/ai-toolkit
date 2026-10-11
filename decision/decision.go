@@ -43,8 +43,9 @@ func New(cfg Config) (*Decision, error) {
 
 // Ask sends req.Questions about req.State to the model and returns one answer
 // per question, keyed by the request's identifiers, with the call's usage in
-// [Stats]. It returns [ErrNoQuestions] when there are no questions and
-// [ErrMissingAnswer] when the provider leaves one unanswered.
+// [Stats]. It returns [ErrNoQuestions] when there are no questions,
+// [ErrInvalidQuestion] when one is malformed, and [ErrMissingAnswer] when the
+// provider leaves one unanswered.
 func (d *Decision) Ask(ctx context.Context, req Request) (*Response, error) {
 	if len(req.Questions) == 0 {
 		return nil, ErrNoQuestions
