@@ -17,6 +17,7 @@ go get github.com/jjmrocha/ai-toolkit
 ## Highlights
 
 - 🔌 **One API, three providers**: OpenRouter, Ollama and Anthropic.
+- 🎯 **Typed decisions**: yes/no, choice and score questions answered with probabilities, not text.
 - 🛠️ **Tools without the chores**: schema builder, typed argument access, one place to approve every call.
 - 🧩 **MCP servers as tools**: launch a stdio server and its tools join the rest.
 - 📚 **Skills on demand**: the model loads a skill's instructions only when it needs them.
@@ -192,6 +193,8 @@ if err != nil {
 	return err
 }
 
+messages = append(messages, *reply)
+
 for _, call := range reply.ToolCalls {
 	result, err := toolBox.Execute(ctx, call)
 	if err != nil {
@@ -281,7 +284,7 @@ defer pack.Close()
 | `DecisionTools` | Judgement calls with probabilities | A `decision.Decision` |
 
 - `Close` removes the pack's tools and stops any server behind them. Always call it.
-- `Instructions` returns the pack's usage guidance for the system prompt.
+- `Instructions` returns the pack's usage guidance for the system prompt, or nil when the pack has none.
 
 ### `agent`
 
@@ -316,10 +319,12 @@ fmt.Println(resp.Content)
 ## Security
 
 `ShellTools`, `CodingTools`, skill scripts and MCP server commands run with
-your program's authority: the whole filesystem, the environment and any
-credentials in it. Register them only for a model and conversation you'd trust
-with that, and take MCP commands and skill folders from your own
-configuration, never from untrusted input.
+your program's authority over the whole filesystem. `ShellTools` also inherits
+your environment and any credentials in it. MCP servers and skill scripts get a
+filtered environment, but they can still read credential files on disk. Register
+them only for a model and conversation you'd trust with that, and take MCP
+commands and skill folders from your own configuration, never from untrusted
+input.
 
 ## License
 
