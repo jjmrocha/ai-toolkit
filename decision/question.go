@@ -43,6 +43,7 @@ type Choice struct {
 	// Instructions is what the model should decide.
 	Instructions string
 	// Options maps each option to its description, which may be empty.
+	// [Decision.Ask] rejects a question with no options.
 	Options map[string]string
 }
 
@@ -58,7 +59,8 @@ func (Choice) isQuestion() {}
 type Score struct {
 	// Instructions is what the model should rate.
 	Instructions string
-	// Levels describes each level, lowest first.
+	// Levels describes each level, lowest first. [Decision.Ask] rejects a
+	// question with no levels.
 	Levels []string
 }
 

@@ -51,13 +51,8 @@ func (d *Decision) Ask(ctx context.Context, req Request) (*Response, error) {
 	}
 
 	for id, q := range req.Questions {
-		if q.Type() != YesNoType {
-			continue
-		}
-
-		question := questionValue[YesNo](q)
-		if (question.True == "") != (question.False == "") {
-			return nil, fmt.Errorf("%w: yes/no question %q describes one answer, expected both or neither", ErrInvalidQuestion, id)
+		if err := validateQuestion(id, q); err != nil {
+			return nil, err
 		}
 	}
 
@@ -71,6 +66,28 @@ func (d *Decision) Ask(ctx context.Context, req Request) (*Response, error) {
 	resp.Stats.Duration = time.Since(start)
 
 	return resp, nil
+}
+
+func validateQuestion(id string, q Question) error {
+	switch q.Type() {
+	case YesNoType:
+		question := questionValue[YesNo](q)
+		if (question.True == "") != (question.False == "") {
+			return fmt.Errorf("%w: yes/no question %q describes one answer, expected both or neither", ErrInvalidQuestion, id)
+		}
+	case ChoiceType:
+		question := questionValue[Choice](q)
+		if len(question.Options) == 0 {
+			return fmt.Errorf("%w: choice question %q has no options", ErrInvalidQuestion, id)
+		}
+	case ScoreType:
+		question := questionValue[Score](q)
+		if len(question.Levels) == 0 {
+			return fmt.Errorf("%w: score question %q has no levels", ErrInvalidQuestion, id)
+		}
+	}
+
+	return nil
 }
 
 // CurrentModel returns the model the client uses.

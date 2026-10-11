@@ -126,7 +126,7 @@ func TestDecisionAsk(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNoQuestions)
 	})
 
-	t.Run("rejects a yes/no question that describes only one answer", func(t *testing.T) {
+	t.Run("rejects an invalid question", func(t *testing.T) {
 		testCases := []struct {
 			name     string
 			question Question
@@ -134,6 +134,8 @@ func TestDecisionAsk(t *testing.T) {
 			{name: "only yes described", question: YesNo{Instructions: "Is it?", True: "It is"}},
 			{name: "only no described", question: YesNo{Instructions: "Is it?", False: "It is not"}},
 			{name: "only yes described by pointer", question: &YesNo{Instructions: "Is it?", True: "It is"}},
+			{name: "choice without options", question: Choice{Instructions: "Which one?"}},
+			{name: "score without levels", question: Score{Instructions: "How much?"}},
 		}
 
 		for _, testCase := range testCases {

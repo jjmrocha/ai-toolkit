@@ -106,20 +106,6 @@ func TestOpenRouterAsk(t *testing.T) {
 		assert.Contains(t, err.Error(), "422")
 	})
 
-	t.Run("returns the api error reported in a successful response", func(t *testing.T) {
-		// given
-		o := newTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(t, w, `{"error":{"message":"model is overloaded"}}`)
-		})
-		request := Request{Questions: map[string]Question{"q": YesNo{Instructions: "Is it?"}}}
-		// when
-		result, err := o.ask(t.Context(), request)
-		// then
-		assert.Nil(t, result)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "model is overloaded")
-	})
-
 	t.Run("returns ErrMissingAnswer when a question goes unanswered", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {

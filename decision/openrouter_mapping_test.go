@@ -115,7 +115,6 @@ func TestFromORToResponse(t *testing.T) {
 					Score:         1.99,
 					Confidence:    0.99,
 					Probabilities: map[string]float64{"0": 0, "1": 0.01, "2": 0.99},
-					Legend:        map[string]string{"0": "Later", "1": "This week", "2": "Now"},
 				},
 			},
 			Usage: orUsage{InputTokens: 476},
@@ -154,6 +153,50 @@ func TestFromORToResponse(t *testing.T) {
 		assert.ErrorIs(t, err, ErrMissingAnswer)
 	})
 
+	t.Run("a score answer without a legend takes it from the question", func(t *testing.T) {
+		// given
+		answer := orAnswer{
+			Type:          "score",
+			Score:         1.99,
+			Confidence:    0.99,
+			Probabilities: map[string]float64{"0": 0, "1": 0.01, "2": 0.99},
+		}
+		apiResp := orDecisionResponse{Answers: map[string]orAnswer{"urgency": answer}}
+		onlyScore := map[string]Question{"urgency": questions["urgency"]}
+		expected := ScoreAnswer{
+			Score:         1.99,
+			Legend:        []string{"Later", "This week", "Now"},
+			Probabilities: []float64{0, 0.01, 0.99},
+			Confidence:    0.99,
+		}
+		// when
+		result, err := fromORToResponse(apiResp, onlyScore)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Answers["urgency"])
+	})
+
+	t.Run("a score answer that skips a level reports it as zero", func(t *testing.T) {
+		// given
+		answer := orAnswer{
+			Type:          "score",
+			Score:         1.2,
+			Probabilities: map[string]float64{"0": 0.4, "2": 0.6},
+		}
+		apiResp := orDecisionResponse{Answers: map[string]orAnswer{"urgency": answer}}
+		onlyScore := map[string]Question{"urgency": questions["urgency"]}
+		expected := ScoreAnswer{
+			Score:         1.2,
+			Legend:        []string{"Later", "This week", "Now"},
+			Probabilities: []float64{0.4, 0, 0.6},
+		}
+		// when
+		result, err := fromORToResponse(apiResp, onlyScore)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Answers["urgency"])
+	})
+
 	malformedCases := []struct {
 		name   string
 		answer orAnswer
@@ -167,7 +210,6 @@ func TestFromORToResponse(t *testing.T) {
 			answer: orAnswer{
 				Type:          "score",
 				Probabilities: map[string]float64{"first": 1},
-				Legend:        map[string]string{"first": "Later"},
 			},
 		},
 		{
@@ -175,7 +217,6 @@ func TestFromORToResponse(t *testing.T) {
 			answer: orAnswer{
 				Type:          "score",
 				Probabilities: map[string]float64{"0": 0.5, "7": 0.5},
-				Legend:        map[string]string{"0": "Later", "7": "Now"},
 			},
 		},
 	}

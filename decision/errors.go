@@ -17,7 +17,8 @@ var (
 	// is empty.
 	ErrNoQuestions = errors.New("no questions")
 	// ErrInvalidQuestion is returned by [Decision.Ask], before calling the
-	// provider, when a [YesNo] describes one answer but not the other.
+	// provider, when a [YesNo] describes one answer but not the other, a [Choice]
+	// has no options or a [Score] has no levels.
 	ErrInvalidQuestion = errors.New("invalid question")
 	// ErrMissingAnswer is returned by [Decision.Ask] when the provider
 	// answers fewer questions than were asked.

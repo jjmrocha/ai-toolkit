@@ -2,6 +2,7 @@ package decision
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 )
 
@@ -97,7 +98,9 @@ func fromORToResponse(resp orDecisionResponse, questions map[string]Question) (*
 				Confidence:    apiAnswer.Confidence,
 			}
 		case ScoreType:
-			answer, err := fromORToScoreAnswer(apiAnswer)
+			question := questionValue[Score](q)
+
+			answer, err := fromORToScoreAnswer(apiAnswer, question)
 			if err != nil {
 				return nil, fmt.Errorf("openrouter: question %q: %w", id, err)
 			}
@@ -112,19 +115,8 @@ func fromORToResponse(resp orDecisionResponse, questions map[string]Question) (*
 	}, nil
 }
 
-func fromORToScoreAnswer(apiAnswer orAnswer) (ScoreAnswer, error) {
-	legend := make([]string, len(apiAnswer.Legend))
-
-	for key, description := range apiAnswer.Legend {
-		level, err := toLevel(key, len(legend))
-		if err != nil {
-			return ScoreAnswer{}, err
-		}
-
-		legend[level] = description
-	}
-
-	probabilities := make([]float64, len(apiAnswer.Probabilities))
+func fromORToScoreAnswer(apiAnswer orAnswer, question Score) (ScoreAnswer, error) {
+	probabilities := make([]float64, len(question.Levels))
 
 	for key, probability := range apiAnswer.Probabilities {
 		level, err := toLevel(key, len(probabilities))
@@ -137,7 +129,7 @@ func fromORToScoreAnswer(apiAnswer orAnswer) (ScoreAnswer, error) {
 
 	return ScoreAnswer{
 		Score:         apiAnswer.Score,
-		Legend:        legend,
+		Legend:        slices.Clone(question.Levels),
 		Probabilities: probabilities,
 		Confidence:    apiAnswer.Confidence,
 	}, nil
@@ -150,7 +142,7 @@ func toLevel(key string, levels int) (int, error) {
 	}
 
 	if level < 0 || level >= levels {
-		return 0, fmt.Errorf("level %d is outside the %d levels answered", level, levels)
+		return 0, fmt.Errorf("level %d is outside the %d levels asked", level, levels)
 	}
 
 	return level, nil

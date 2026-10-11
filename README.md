@@ -157,7 +157,7 @@ fmt.Println(answer.Selected, answer.Confidence)
 
 - Three question types: `YesNo`, `Choice` and `Score`, each with a typed answer.
 - Answers carry calibrated probabilities. What threshold to apply is your call.
-- Several questions about one input are answered in parallel, in one request.
+- Several questions about one state are answered in parallel, in one request.
 
 ### `tools`
 

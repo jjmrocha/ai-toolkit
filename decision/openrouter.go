@@ -57,10 +57,6 @@ func (o *openrouter) ask(ctx context.Context, req Request) (*Response, error) {
 		return nil, fmt.Errorf("openrouter: unexpected status %d: %s", resp.StatusCode(), resp.String())
 	}
 
-	if apiResp.Error != nil {
-		return nil, fmt.Errorf("openrouter: api error: %s", apiResp.Error.Message)
-	}
-
 	return fromORToResponse(apiResp, req.Questions)
 }
 

@@ -15,7 +15,6 @@ type orQuestion struct {
 type orDecisionResponse struct {
 	Answers map[string]orAnswer `json:"answers"`
 	Usage   orUsage             `json:"usage"`
-	Error   *orError            `json:"error"`
 }
 
 type orAnswer struct {
@@ -25,13 +24,8 @@ type orAnswer struct {
 	Score         float64            `json:"score"`
 	Confidence    float64            `json:"confidence"`
 	Probabilities map[string]float64 `json:"probabilities"`
-	Legend        map[string]string  `json:"legend"`
 }
 
 type orUsage struct {
 	InputTokens int `json:"input_tokens"`
-}
-
-type orError struct {
-	Message string `json:"message"`
 }
