@@ -14,8 +14,9 @@
 // caller's context already has a deadline, which is kept.
 //
 // A skill folder is trusted input, like an MCP server command: what
-// "skill_execute_file" runs has the program's authority and inherits its
-// environment, credentials included.
+// "skill_execute_file" runs has the program's authority over the filesystem. It
+// gets a filtered environment, without the credentials in the program's own,
+// but it can still read credential files on disk.
 //
 // Nothing is discovered automatically. A skill reaches a model only because the
 // caller added its folder.
