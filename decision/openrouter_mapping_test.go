@@ -1,4 +1,4 @@
-package classify
+package decision
 
 import (
 	"testing"
@@ -102,7 +102,6 @@ func TestFromORToResponse(t *testing.T) {
 	t.Run("maps every answer type and the usage", func(t *testing.T) {
 		// given
 		apiResp := orDecisionResponse{
-			Model: "typesafe/jev-1.13-20260917",
 			Answers: map[string]orAnswer{
 				"is_bug": {Type: "noul", Noul: 0.96},
 				"team": {
@@ -122,7 +121,6 @@ func TestFromORToResponse(t *testing.T) {
 			Usage: orUsage{InputTokens: 476},
 		}
 		expected := &Response{
-			Model: "typesafe/jev-1.13-20260917",
 			Answers: map[string]Answer{
 				"is_bug": YesNoAnswer{Value: 0.96},
 				"team": ChoiceAnswer{
@@ -137,7 +135,7 @@ func TestFromORToResponse(t *testing.T) {
 					Confidence:    0.99,
 				},
 			},
-			Stats: Stats{InputTokens: 476},
+			Stats: Stats{PromptTokens: 476},
 		}
 		// when
 		result, err := fromORToResponse(apiResp, questions)

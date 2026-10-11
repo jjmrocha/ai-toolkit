@@ -1,4 +1,4 @@
-package classify
+package decision
 
 // QuestionType is the kind of a [Question] and of the [Answer] it gets.
 type QuestionType string
@@ -12,7 +12,7 @@ const (
 	ScoreType QuestionType = "score"
 )
 
-// Question is a question to ask about an input. Only the question types in this
+// Question is a question to ask about a state. Only the question types in this
 // package implement it, so the set is closed. Type returns its kind.
 type Question interface {
 	Type() QuestionType
@@ -24,7 +24,7 @@ type YesNo struct {
 	// Instructions is the yes/no question.
 	Instructions string
 	// True describes what a yes means. Optional, but set it together with False:
-	// [Classifier.Classify] rejects a question that describes only one answer.
+	// [Decision.Ask] rejects a question that describes only one answer.
 	True string
 	// False describes what a no means. Optional, but set together with True.
 	False string
@@ -53,7 +53,7 @@ func (Choice) Type() QuestionType {
 
 func (Choice) isQuestion() {}
 
-// Score asks the model to rate the input on ordered levels. Its [ScoreAnswer]
+// Score asks the model to rate the state on ordered levels. Its [ScoreAnswer]
 // gives a probability-weighted position across them.
 type Score struct {
 	// Instructions is what the model should rate.
@@ -69,11 +69,11 @@ func (Score) Type() QuestionType {
 
 func (Score) isQuestion() {}
 
-// Request is an input and the questions to ask about it. The questions are
+// Request is a state and the questions to ask about it. The questions are
 // answered in parallel, and none sees another's answer.
 type Request struct {
-	// Input is the content to judge.
-	Input string
+	// State is the content to judge.
+	State string
 	// Questions maps an identifier of the caller's choosing to each question. The
 	// identifiers key [Response.Answers] and are not sent to the model.
 	Questions map[string]Question

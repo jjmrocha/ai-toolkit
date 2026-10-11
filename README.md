@@ -77,7 +77,7 @@ func run(ctx context.Context) error {
 | Package | What it does |
 | --- | --- |
 | [`llm`](#llm) | One chat API across three providers |
-| [`classify`](#classify) | Typed questions answered with probabilities, not text |
+| [`decision`](#decision) | Typed questions answered with probabilities, not text |
 | [`tools`](#tools) | Registers tools and runs the model's calls |
 | [`mcp`](#mcp) | Turns an MCP server's tools into `tools` entries |
 | [`skills`](#skills) | Instructions the model loads by name, when it needs them |
@@ -119,21 +119,21 @@ fmt.Println(reply.Content)
 - Switch effort mid-conversation with `ChangeEffort`, or the model with `ChangeModel` among those listed in `Config.Models`.
 - Every reply carries token usage, prompt-cache hits included, and the provider's stop reason.
 
-### `classify`
+### `decision`
 
 ```go
-cfg := classify.Config{
-	Provider: classify.ProviderOpenRouter,
+cfg := decision.Config{
+	Provider: decision.ProviderOpenRouter,
 	APIKey:   os.Getenv("OPENROUTER_API_KEY"),
 	Model:    "typesafe/jev-1.13",
 }
 
-classifier, err := classify.New(cfg)
+model, err := decision.New(cfg)
 if err != nil {
 	return err
 }
 
-team := classify.Choice{
+team := decision.Choice{
 	Instructions: "Which team should own this ticket?",
 	Options: map[string]string{
 		"payments": "Checkout, billing, or payment processing",
@@ -141,17 +141,17 @@ team := classify.Choice{
 	},
 }
 
-req := classify.Request{
-	Input:     "My checkout page shows a blank screen after I click Pay.",
-	Questions: map[string]classify.Question{"team": team},
+req := decision.Request{
+	State:     "My checkout page shows a blank screen after I click Pay.",
+	Questions: map[string]decision.Question{"team": team},
 }
 
-resp, err := classifier.Classify(ctx, req)
+resp, err := model.Ask(ctx, req)
 if err != nil {
 	return err
 }
 
-answer := resp.Answers["team"].(classify.ChoiceAnswer)
+answer := resp.Answers["team"].(decision.ChoiceAnswer)
 fmt.Println(answer.Selected, answer.Confidence)
 ```
 
@@ -277,7 +277,7 @@ defer pack.Close()
 | `ShellTools` | A `/bin/sh` command runner | — |
 | `FileTools` | The files under one folder it can't leave | — |
 | `DateTools` | The date, time of day and time zone | — |
-| `ClassifyTools` | Judgement calls with calibrated probabilities | A `classify.Classifier` |
+| `DecisionTools` | Judgement calls with calibrated probabilities | A `decision.Decision` |
 
 - `Close` removes the pack's tools and stops any server behind them. Always call it.
 - `Instructions` returns the pack's usage guidance for the system prompt.

@@ -1,4 +1,4 @@
-package classify
+package decision
 
 import (
 	"context"
@@ -36,10 +36,10 @@ func newOpenRouter(cfg Config) (*openrouter, error) {
 	}, nil
 }
 
-func (o *openrouter) classify(ctx context.Context, req Request) (*Response, error) {
+func (o *openrouter) ask(ctx context.Context, req Request) (*Response, error) {
 	request := orDecisionRequest{
 		Model:     o.config.Model,
-		State:     req.Input,
+		State:     req.State,
 		Questions: toORQuestions(req.Questions),
 	}
 

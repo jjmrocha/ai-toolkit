@@ -1,8 +1,8 @@
-package classify
+package decision
 
 import "errors"
 
-// Errors returned by the classify package.
+// Errors returned by the decision package.
 var (
 	// ErrMissingProvider is returned by [New] when Config.Provider is empty.
 	ErrMissingProvider = errors.New("missing provider")
@@ -13,13 +13,13 @@ var (
 	ErrMissingAPIKey = errors.New("missing api_key")
 	// ErrMissingModel is returned by [New] when Config.Model is empty.
 	ErrMissingModel = errors.New("missing model")
-	// ErrNoQuestions is returned by [Classifier.Classify] when Request.Questions
+	// ErrNoQuestions is returned by [Decision.Ask] when Request.Questions
 	// is empty.
 	ErrNoQuestions = errors.New("no questions")
-	// ErrInvalidQuestion is returned by [Classifier.Classify], before calling the
+	// ErrInvalidQuestion is returned by [Decision.Ask], before calling the
 	// provider, when a [YesNo] describes one answer but not the other.
 	ErrInvalidQuestion = errors.New("invalid question")
-	// ErrMissingAnswer is returned by [Classifier.Classify] when the provider
+	// ErrMissingAnswer is returned by [Decision.Ask] when the provider
 	// answers fewer questions than were asked.
 	ErrMissingAnswer = errors.New("missing answer")
 )

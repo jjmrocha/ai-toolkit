@@ -12,7 +12,7 @@
 // [FileTools] works on files under one folder it cannot leave. [DateTools] gives
 // the model the date, the time of day and the host's zone.
 //
-// [ClassifyTools] sends one judgement call at a time to a classification model
+// [DecisionTools] sends one judgement call at a time to a decision model
 // the caller supplies, and returns calibrated probabilities. Its Close also only
 // unregisters; the client stays the caller's.
 package packs

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jjmrocha/ai-toolkit/classify"
+	"github.com/jjmrocha/ai-toolkit/decision"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
@@ -16,45 +16,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClassifyToolsInstructions(t *testing.T) {
-	t.Run("returns the classify doctrine", func(t *testing.T) {
+func TestDecisionToolsInstructions(t *testing.T) {
+	t.Run("returns the decision doctrine", func(t *testing.T) {
 		// given
-		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		client, _ := newDecisionServer(t, http.StatusOK, `{}`)
 		toolBox := tools.NewToolBox()
-		pack, err := ClassifyTools(toolBox, client)
+		pack, err := DecisionTools(toolBox, client)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
 		result := pack.Instructions(t.Context())
 		// then
-		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
+		expected := &mcp.Instruction{Name: "decision", Text: decisionInstruction}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("still returns the classify doctrine after Close", func(t *testing.T) {
+	t.Run("still returns the decision doctrine after Close", func(t *testing.T) {
 		// given
-		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		client, _ := newDecisionServer(t, http.StatusOK, `{}`)
 		toolBox := tools.NewToolBox()
-		pack, err := ClassifyTools(toolBox, client)
+		pack, err := DecisionTools(toolBox, client)
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
 		result := pack.Instructions(t.Context())
 		// then
-		expected := &mcp.Instruction{Name: "classify", Text: classifyInstruction}
+		expected := &mcp.Instruction{Name: "decision", Text: decisionInstruction}
 		assert.Equal(t, expected, result)
 	})
 }
 
-type classifyServer struct {
+type decisionServer struct {
 	requests int
 	question map[string]any
 }
 
-func newClassifyServer(t *testing.T, status int, reply string) (*classify.Classifier, *classifyServer) {
+func newDecisionServer(t *testing.T, status int, reply string) (*decision.Decision, *decisionServer) {
 	t.Helper()
 
-	recorder := &classifyServer{}
+	recorder := &decisionServer{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		recorder.requests++
@@ -76,8 +76,8 @@ func newClassifyServer(t *testing.T, status int, reply string) (*classify.Classi
 	}))
 	t.Cleanup(server.Close)
 
-	client, err := classify.New(classify.Config{
-		Provider: classify.ProviderOpenRouter,
+	client, err := decision.New(decision.Config{
+		Provider: decision.ProviderOpenRouter,
 		APIKey:   "sk-test",
 		Model:    "typesafe/jev-1.13",
 		BaseURL:  server.URL,
@@ -87,12 +87,12 @@ func newClassifyServer(t *testing.T, status int, reply string) (*classify.Classi
 	return client, recorder
 }
 
-func runClassifyTool(t *testing.T, client *classify.Classifier, name string, args map[string]any) (string, error) {
+func runDecisionTool(t *testing.T, client *decision.Decision, name string, args map[string]any) (string, error) {
 	t.Helper()
 
 	toolBox := tools.NewToolBox()
 
-	pack, err := ClassifyTools(toolBox, client)
+	pack, err := DecisionTools(toolBox, client)
 	require.NoError(t, err)
 
 	defer func() { _ = pack.Close() }()
@@ -107,18 +107,18 @@ func runClassifyTool(t *testing.T, client *classify.Classifier, name string, arg
 	return message.Content, nil
 }
 
-func TestClassifyTools(t *testing.T) {
+func TestDecisionTools(t *testing.T) {
 	t.Run("registers the three tools", func(t *testing.T) {
 		// given
-		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		client, _ := newDecisionServer(t, http.StatusOK, `{}`)
 		toolBox := tools.NewToolBox()
 		// when
-		pack, err := ClassifyTools(toolBox, client)
+		pack, err := DecisionTools(toolBox, client)
 		require.NoError(t, err)
 
 		defer func() { _ = pack.Close() }()
 		// then
-		expected := []string{classifyChoiceToolName, classifyScoreToolName, classifyYesNoToolName}
+		expected := []string{decisionChoiceToolName, decisionScoreToolName, decisionYesNoToolName}
 		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
 		assert.Equal(t, expected, result)
 	})
@@ -126,28 +126,28 @@ func TestClassifyTools(t *testing.T) {
 	t.Run("leaves a newer pack's tools in place on a second close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
-		oldPack, err := ClassifyTools(toolBox, client)
+		client, _ := newDecisionServer(t, http.StatusOK, `{}`)
+		oldPack, err := DecisionTools(toolBox, client)
 		require.NoError(t, err)
 		require.NoError(t, oldPack.Close())
-		newPack, err := ClassifyTools(toolBox, client)
+		newPack, err := DecisionTools(toolBox, client)
 		require.NoError(t, err)
 		defer func() { _ = newPack.Close() }()
 		// when
 		err = oldPack.Close()
 		// then
 		require.NoError(t, err)
-		expected := []string{classifyChoiceToolName, classifyScoreToolName, classifyYesNoToolName}
+		expected := []string{decisionChoiceToolName, decisionScoreToolName, decisionYesNoToolName}
 		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
 		assert.ElementsMatch(t, expected, result)
 	})
 
 	t.Run("removes the three tools on close", func(t *testing.T) {
 		// given
-		client, _ := newClassifyServer(t, http.StatusOK, `{}`)
+		client, _ := newDecisionServer(t, http.StatusOK, `{}`)
 		toolBox := tools.NewToolBox()
 
-		pack, err := ClassifyTools(toolBox, client)
+		pack, err := DecisionTools(toolBox, client)
 		require.NoError(t, err)
 		// when
 		require.NoError(t, pack.Close())
@@ -158,7 +158,7 @@ func TestClassifyTools(t *testing.T) {
 
 	t.Run("yes_no answers with the probability of yes", func(t *testing.T) {
 		// given
-		client, server := newClassifyServer(t, http.StatusOK,
+		client, server := newDecisionServer(t, http.StatusOK,
 			`{"answers":{"question":{"type":"noul","noul":0.87}}}`)
 		args := map[string]any{
 			"input":        "My checkout page shows a blank screen after I click Pay.",
@@ -175,7 +175,7 @@ func TestClassifyTools(t *testing.T) {
 			},
 		}
 		// when
-		result, err := runClassifyTool(t, client, classifyYesNoToolName, args)
+		result, err := runDecisionTool(t, client, decisionYesNoToolName, args)
 		// then
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"yes_probability":0.87}`, result)
@@ -204,9 +204,9 @@ func TestClassifyTools(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				// given
-				client, server := newClassifyServer(t, http.StatusOK, `{}`)
+				client, server := newDecisionServer(t, http.StatusOK, `{}`)
 				// when
-				_, err := runClassifyTool(t, client, classifyYesNoToolName, testCase.args)
+				_, err := runDecisionTool(t, client, decisionYesNoToolName, testCase.args)
 				// then
 				require.ErrorIs(t, err, tools.ErrFieldNotFound)
 				assert.Zero(t, server.requests)
@@ -216,7 +216,7 @@ func TestClassifyTools(t *testing.T) {
 
 	t.Run("choice answers with the option picked and the probability of each", func(t *testing.T) {
 		// given
-		client, server := newClassifyServer(t, http.StatusOK,
+		client, server := newDecisionServer(t, http.StatusOK,
 			`{"answers":{"question":{"type":"choice","choice":"payments",`+
 				`"probabilities":{"payments":0.81,"frontend":0.19},"confidence":0.62}}}`)
 		args := map[string]any{
@@ -236,7 +236,7 @@ func TestClassifyTools(t *testing.T) {
 			},
 		}
 		// when
-		result, err := runClassifyTool(t, client, classifyChoiceToolName, args)
+		result, err := runDecisionTool(t, client, decisionChoiceToolName, args)
 		// then
 		require.NoError(t, err)
 		assert.JSONEq(t,
@@ -246,7 +246,7 @@ func TestClassifyTools(t *testing.T) {
 
 	t.Run("score answers with the position and the probability of each level", func(t *testing.T) {
 		// given
-		client, server := newClassifyServer(t, http.StatusOK,
+		client, server := newDecisionServer(t, http.StatusOK,
 			`{"answers":{"question":{"type":"score","score":1.4,`+
 				`"legend":{"0":"Next release","1":"This week","2":"Blocking revenue"},`+
 				`"probabilities":{"0":0.1,"1":0.4,"2":0.5},"confidence":0.3}}}`)
@@ -261,7 +261,7 @@ func TestClassifyTools(t *testing.T) {
 			"criteria":     []any{"Next release", "This week", "Blocking revenue"},
 		}
 		// when
-		result, err := runClassifyTool(t, client, classifyScoreToolName, args)
+		result, err := runDecisionTool(t, client, decisionScoreToolName, args)
 		// then
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"score":1.4,"probabilities":[`+
@@ -279,12 +279,12 @@ func TestClassifyTools(t *testing.T) {
 		}{
 			{
 				name: "choice without options",
-				tool: classifyChoiceToolName,
+				tool: decisionChoiceToolName,
 				args: map[string]any{"input": "s", "instructions": "i", "options": []any{}},
 			},
 			{
 				name: "choice with a single option",
-				tool: classifyChoiceToolName,
+				tool: decisionChoiceToolName,
 				args: map[string]any{
 					"input": "s", "instructions": "i",
 					"options": []any{map[string]any{"name": "payments"}},
@@ -292,7 +292,7 @@ func TestClassifyTools(t *testing.T) {
 			},
 			{
 				name: "choice with a repeated option",
-				tool: classifyChoiceToolName,
+				tool: decisionChoiceToolName,
 				args: map[string]any{
 					"input": "s", "instructions": "i",
 					"options": []any{map[string]any{"name": "payments"}, map[string]any{"name": "payments"}},
@@ -300,12 +300,12 @@ func TestClassifyTools(t *testing.T) {
 			},
 			{
 				name: "score without levels",
-				tool: classifyScoreToolName,
+				tool: decisionScoreToolName,
 				args: map[string]any{"input": "s", "instructions": "i", "levels": []any{}},
 			},
 			{
 				name: "score with a single level",
-				tool: classifyScoreToolName,
+				tool: decisionScoreToolName,
 				args: map[string]any{"input": "s", "instructions": "i", "levels": []any{"Low"}},
 			},
 		}
@@ -313,9 +313,9 @@ func TestClassifyTools(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				// given
-				client, server := newClassifyServer(t, http.StatusOK, `{}`)
+				client, server := newDecisionServer(t, http.StatusOK, `{}`)
 				// when
-				_, err := runClassifyTool(t, client, testCase.tool, testCase.args)
+				_, err := runDecisionTool(t, client, testCase.tool, testCase.args)
 				// then
 				require.ErrorIs(t, err, ErrInvalidQuestion)
 				assert.Zero(t, server.requests)
@@ -325,22 +325,22 @@ func TestClassifyTools(t *testing.T) {
 
 	t.Run("rejects a call without an input without asking the model", func(t *testing.T) {
 		// given
-		client, server := newClassifyServer(t, http.StatusOK, `{}`)
+		client, server := newDecisionServer(t, http.StatusOK, `{}`)
 		args := map[string]any{"instructions": "Is the customer reporting a defect?"}
 		// when
-		_, err := runClassifyTool(t, client, classifyYesNoToolName, args)
+		_, err := runDecisionTool(t, client, decisionYesNoToolName, args)
 		// then
 		require.ErrorIs(t, err, tools.ErrFieldNotFound)
 		assert.Zero(t, server.requests)
 	})
 
-	t.Run("returns the error the classification model reports", func(t *testing.T) {
+	t.Run("returns the error the decision model reports", func(t *testing.T) {
 		// given
-		client, _ := newClassifyServer(t, http.StatusBadRequest,
+		client, _ := newDecisionServer(t, http.StatusBadRequest,
 			`{"error":{"message":"instructions must not be empty"}}`)
 		args := map[string]any{"input": "s", "instructions": "i", "true": "t", "false": "f"}
 		// when
-		_, err := runClassifyTool(t, client, classifyYesNoToolName, args)
+		_, err := runDecisionTool(t, client, decisionYesNoToolName, args)
 		// then
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "400")

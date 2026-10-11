@@ -1,4 +1,4 @@
-package classify
+package decision
 
 import (
 	"context"
@@ -6,16 +6,16 @@ import (
 	"time"
 )
 
-// Classifier is a client for one classification model on one provider. Create
+// Decision is a client for one decision model on one provider. Create
 // one with [New]. It is safe for concurrent use.
-type Classifier struct {
-	provider classifierProvider
+type Decision struct {
+	provider decisionProvider
 }
 
-// New creates a [Classifier] for the provider named in cfg. It returns
+// New creates a [Decision] for the provider named in cfg. It returns
 // [ErrMissingProvider], [ErrMissingModel] or [ErrMissingAPIKey] when those
 // fields are empty, and [ErrUnsupportedProvider] for an unknown provider.
-func New(cfg Config) (*Classifier, error) {
+func New(cfg Config) (*Decision, error) {
 	if cfg.Provider == "" {
 		return nil, ErrMissingProvider
 	}
@@ -24,7 +24,7 @@ func New(cfg Config) (*Classifier, error) {
 		return nil, ErrMissingModel
 	}
 
-	var provider classifierProvider
+	var provider decisionProvider
 
 	switch cfg.Provider {
 	case ProviderOpenRouter:
@@ -38,14 +38,14 @@ func New(cfg Config) (*Classifier, error) {
 		return nil, ErrUnsupportedProvider
 	}
 
-	return &Classifier{provider: provider}, nil
+	return &Decision{provider: provider}, nil
 }
 
-// Classify asks req.Questions about req.Input and returns one answer per
-// question, keyed by the request's identifiers, with the call's usage in
+// Ask sends req.Questions about req.State to the model and returns one answer
+// per question, keyed by the request's identifiers, with the call's usage in
 // [Stats]. It returns [ErrNoQuestions] when there are no questions and
 // [ErrMissingAnswer] when the provider leaves one unanswered.
-func (c *Classifier) Classify(ctx context.Context, req Request) (*Response, error) {
+func (d *Decision) Ask(ctx context.Context, req Request) (*Response, error) {
 	if len(req.Questions) == 0 {
 		return nil, ErrNoQuestions
 	}
@@ -63,7 +63,7 @@ func (c *Classifier) Classify(ctx context.Context, req Request) (*Response, erro
 
 	start := time.Now()
 
-	resp, err := c.provider.classify(ctx, req)
+	resp, err := d.provider.ask(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +74,6 @@ func (c *Classifier) Classify(ctx context.Context, req Request) (*Response, erro
 }
 
 // CurrentModel returns the model the client uses.
-func (c *Classifier) CurrentModel() string {
-	return c.provider.currentModel()
+func (d *Decision) CurrentModel() string {
+	return d.provider.currentModel()
 }

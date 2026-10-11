@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jjmrocha/ai-toolkit/classify"
+	"github.com/jjmrocha/ai-toolkit/decision"
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
 const (
-	classifyYesNoToolName  = "classify_yes_no"
-	classifyChoiceToolName = "classify_choice"
-	classifyScoreToolName  = "classify_score"
+	decisionYesNoToolName  = "decision_yes_no"
+	decisionChoiceToolName = "decision_choice"
+	decisionScoreToolName  = "decision_score"
 	inputArg               = "input"
 	instructionsArg        = "instructions"
 	trueArg                = "true"
@@ -24,25 +24,25 @@ const (
 	optionNameArg          = "name"
 	optionDescriptionArg   = "description"
 	levelsArg              = "levels"
-	classifyQuestionID     = "question"
+	decisionQuestionID     = "question"
 )
 
-const classifyInstruction = `Hand a judgement call to these tools instead of
+const decisionInstruction = `Hand a judgement call to these tools instead of
 making it yourself when a labelled answer settles it — a yes or a no, a pick
 from named options, a rating on ordered levels. The classifier is calibrated:
 read a probability of 0.5 as undecided rather than a middle answer, and a
 confidence as how sure the model is, not how likely it is to be right. The
 classifier sees nothing of the conversation, so the input must carry everything
 the judgement needs, labelled and verbatim. The answer is advice, not a
-decision: weigh it against what you know, and say when you went against it.`
+verdict: weigh it against what you know, and say when you went against it.`
 
-type classifyPack struct {
+type decisionPack struct {
 	toolBox *tools.ToolBox
 	names   []string
 	once    sync.Once
 }
 
-func (p *classifyPack) Close() error {
+func (p *decisionPack) Close() error {
 	p.once.Do(func() {
 		for _, name := range p.names {
 			p.toolBox.Remove(name)
@@ -52,10 +52,10 @@ func (p *classifyPack) Close() error {
 	return nil
 }
 
-func (p *classifyPack) Instructions(_ context.Context) *mcp.Instruction {
+func (p *decisionPack) Instructions(_ context.Context) *mcp.Instruction {
 	return &mcp.Instruction{
-		Name: "classify",
-		Text: classifyInstruction,
+		Name: "decision",
+		Text: decisionInstruction,
 	}
 }
 
@@ -80,27 +80,27 @@ type levelProbability struct {
 	Probability float64 `json:"probability"`
 }
 
-// ClassifyTools registers three tools in m that send one judgement call at a
-// time to the classification model behind client: "classify_yes_no" asks a
-// [classify.YesNo], "classify_choice" a [classify.Choice] and "classify_score"
-// a [classify.Score]. Each takes the input to judge and the question's
+// DecisionTools registers three tools in m that send one judgement call at a
+// time to the decision model behind client: "decision_yes_no" asks a
+// [decision.YesNo], "decision_choice" a [decision.Choice] and "decision_score"
+// a [decision.Score]. Each takes the input to judge and the question's
 // instructions, and returns JSON: the probability of yes; the option picked and
 // each option's probability; or the position across the levels and each
 // level's probability.
 //
-// Everything the model puts in the input is sent to the classification
+// Everything the model puts in the input is sent to the decision
 // provider, and each call is billed on the whole input.
 //
 // A choice with fewer than two options or a repeated option, and a score with
 // fewer than two levels, fail with [ErrInvalidQuestion] before the provider is
-// called. Errors from [classify.Classifier.Classify] are returned unchanged.
+// called. Errors from [decision.Decision.Ask] are returned unchanged.
 //
 // The caller owns client, so [ToolPack.Close] only unregisters. If m rejects a
-// registration, ClassifyTools returns the error from [tools.ToolBox.Add] and
+// registration, DecisionTools returns the error from [tools.ToolBox.Add] and
 // leaves the tools it already registered in place.
-func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, error) {
+func DecisionTools(m *tools.ToolBox, client *decision.Decision) (ToolPack, error) {
 	yesNoTool := llm.Tool{
-		Name: classifyYesNoToolName,
+		Name: decisionYesNoToolName,
 		Description: "Ask a calibrated classifier a yes/no question about an input, instead of " +
 			"judging it yourself. Returns {\"yes_probability\": p}, the probability that the answer is " +
 			"yes: 0.5 means undecided, not a middle answer. The model sees only the input and the question, " +
@@ -114,7 +114,7 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 	}
 
 	choiceTool := llm.Tool{
-		Name: classifyChoiceToolName,
+		Name: decisionChoiceToolName,
 		Description: "Ask a calibrated classifier to pick one of several options for an input, " +
 			"instead of choosing yourself. Returns {\"selected\", \"probabilities\", \"confidence\"}: the " +
 			"most probable option, the probability of each, and how concentrated they are from 0 to 1 — " +
@@ -130,7 +130,7 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 	}
 
 	scoreTool := llm.Tool{
-		Name: classifyScoreToolName,
+		Name: decisionScoreToolName,
 		Description: "Ask a calibrated classifier to rate an input against ordered levels, instead of " +
 			"rating it yourself. Returns {\"score\", \"probabilities\", \"confidence\"}: a " +
 			"probability-weighted position from 0 to the last level's index, which can fall between two " +
@@ -158,10 +158,10 @@ func ClassifyTools(m *tools.ToolBox, client *classify.Classifier) (ToolPack, err
 		return nil, err
 	}
 
-	return &classifyPack{toolBox: m, names: names}, nil
+	return &decisionPack{toolBox: m, names: names}, nil
 }
 
-func askYesNo(ctx context.Context, client *classify.Classifier, args map[string]any) (string, error) {
+func askYesNo(ctx context.Context, client *decision.Decision, args map[string]any) (string, error) {
 	arguments := tools.NewArguments(args)
 
 	input, instructions, err := inputAndInstructions(arguments)
@@ -169,7 +169,7 @@ func askYesNo(ctx context.Context, client *classify.Classifier, args map[string]
 		return "", err
 	}
 
-	question := classify.YesNo{Instructions: instructions}
+	question := decision.YesNo{Instructions: instructions}
 
 	if question.True, err = arguments.GetString(trueArg); err != nil {
 		return "", err
@@ -179,7 +179,7 @@ func askYesNo(ctx context.Context, client *classify.Classifier, args map[string]
 		return "", err
 	}
 
-	answer, err := askOne[classify.YesNoAnswer](ctx, client, input, question)
+	answer, err := askOne[decision.YesNoAnswer](ctx, client, input, question)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +187,7 @@ func askYesNo(ctx context.Context, client *classify.Classifier, args map[string]
 	return toJSON(yesNoResult{YesProbability: answer.Value})
 }
 
-func askChoice(ctx context.Context, client *classify.Classifier, args map[string]any) (string, error) {
+func askChoice(ctx context.Context, client *decision.Decision, args map[string]any) (string, error) {
 	arguments := tools.NewArguments(args)
 
 	input, instructions, err := inputAndInstructions(arguments)
@@ -200,7 +200,7 @@ func askChoice(ctx context.Context, client *classify.Classifier, args map[string
 		return "", err
 	}
 
-	question := classify.Choice{Instructions: instructions, Options: make(map[string]string, len(options))}
+	question := decision.Choice{Instructions: instructions, Options: make(map[string]string, len(options))}
 
 	for _, option := range options {
 		var name, description string
@@ -224,7 +224,7 @@ func askChoice(ctx context.Context, client *classify.Classifier, args map[string
 		return "", fmt.Errorf("%w: %d options given, expected 2 or more", ErrInvalidQuestion, len(question.Options))
 	}
 
-	answer, err := askOne[classify.ChoiceAnswer](ctx, client, input, question)
+	answer, err := askOne[decision.ChoiceAnswer](ctx, client, input, question)
 	if err != nil {
 		return "", err
 	}
@@ -236,7 +236,7 @@ func askChoice(ctx context.Context, client *classify.Classifier, args map[string
 	})
 }
 
-func askScore(ctx context.Context, client *classify.Classifier, args map[string]any) (string, error) {
+func askScore(ctx context.Context, client *decision.Decision, args map[string]any) (string, error) {
 	arguments := tools.NewArguments(args)
 
 	input, instructions, err := inputAndInstructions(arguments)
@@ -253,9 +253,9 @@ func askScore(ctx context.Context, client *classify.Classifier, args map[string]
 		return "", fmt.Errorf("%w: %d levels given, expected 2 or more", ErrInvalidQuestion, len(levels))
 	}
 
-	question := classify.Score{Instructions: instructions, Levels: levels}
+	question := decision.Score{Instructions: instructions, Levels: levels}
 
-	answer, err := askOne[classify.ScoreAnswer](ctx, client, input, question)
+	answer, err := askOne[decision.ScoreAnswer](ctx, client, input, question)
 	if err != nil {
 		return "", err
 	}
@@ -289,20 +289,20 @@ func inputAndInstructions(arguments *tools.Arguments) (string, string, error) {
 	return input, instructions, nil
 }
 
-func askOne[T classify.Answer](ctx context.Context, client *classify.Classifier, input string, question classify.Question) (T, error) {
+func askOne[T decision.Answer](ctx context.Context, client *decision.Decision, input string, question decision.Question) (T, error) {
 	var zero T
 
-	resp, err := client.Classify(ctx, classify.Request{
-		Input:     input,
-		Questions: map[string]classify.Question{classifyQuestionID: question},
+	resp, err := client.Ask(ctx, decision.Request{
+		State:     input,
+		Questions: map[string]decision.Question{decisionQuestionID: question},
 	})
 	if err != nil {
 		return zero, err
 	}
 
-	answer, ok := resp.Answers[classifyQuestionID].(T)
+	answer, ok := resp.Answers[decisionQuestionID].(T)
 	if !ok {
-		return zero, classify.ErrMissingAnswer
+		return zero, decision.ErrMissingAnswer
 	}
 
 	return answer, nil

@@ -1,4 +1,4 @@
-package classify
+package decision
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ func TestNewOpenRouter(t *testing.T) {
 	})
 }
 
-func TestOpenRouterClassify(t *testing.T) {
+func TestOpenRouterAsk(t *testing.T) {
 	t.Run("sends a POST request carrying auth, model, state and questions", func(t *testing.T) {
 		// given
 		var (
@@ -45,7 +45,7 @@ func TestOpenRouterClassify(t *testing.T) {
 			writeJSON(t, w, `{"model":"typesafe/jev-1.13-20260917","answers":{"is_urgent":{"type":"noul","noul":0.95}},"usage":{"input_tokens":296,"output_tokens":20,"cost":0.0000124}}`)
 		})
 		request := Request{
-			Input:     "Help! My payouts have been failing for 3 days.",
+			State:     "Help! My payouts have been failing for 3 days.",
 			Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Does this convey urgency?"}},
 		}
 		expectedBody := map[string]any{
@@ -59,7 +59,7 @@ func TestOpenRouterClassify(t *testing.T) {
 			},
 		}
 		// when
-		_, err := o.classify(t.Context(), request)
+		_, err := o.ask(t.Context(), request)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, http.MethodPost, gotMethod)
@@ -77,16 +77,15 @@ func TestOpenRouterClassify(t *testing.T) {
 			writeJSON(t, w, `{"model":"typesafe/jev-1.13-20260917","answers":{"is_urgent":{"type":"noul","noul":0.95}},"usage":{"input_tokens":296,"output_tokens":20,"cost":0.0000124}}`)
 		})
 		request := Request{
-			Input:     "Help!",
+			State:     "Help!",
 			Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Does this convey urgency?"}},
 		}
 		expected := &Response{
-			Model:   "typesafe/jev-1.13-20260917",
 			Answers: map[string]Answer{"is_urgent": YesNoAnswer{Value: 0.95}},
-			Stats:   Stats{InputTokens: 296},
+			Stats:   Stats{PromptTokens: 296},
 		}
 		// when
-		result, err := o.classify(t.Context(), request)
+		result, err := o.ask(t.Context(), request)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, expected, result)
@@ -100,7 +99,7 @@ func TestOpenRouterClassify(t *testing.T) {
 		})
 		request := Request{Questions: map[string]Question{"q": YesNo{}}}
 		// when
-		result, err := o.classify(t.Context(), request)
+		result, err := o.ask(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		require.Error(t, err)
@@ -114,7 +113,7 @@ func TestOpenRouterClassify(t *testing.T) {
 		})
 		request := Request{Questions: map[string]Question{"q": YesNo{Instructions: "Is it?"}}}
 		// when
-		result, err := o.classify(t.Context(), request)
+		result, err := o.ask(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		require.Error(t, err)
@@ -128,7 +127,7 @@ func TestOpenRouterClassify(t *testing.T) {
 		})
 		request := Request{Questions: map[string]Question{"is_urgent": YesNo{Instructions: "Urgent?"}}}
 		// when
-		result, err := o.classify(t.Context(), request)
+		result, err := o.ask(t.Context(), request)
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrMissingAnswer)

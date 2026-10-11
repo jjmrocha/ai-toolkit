@@ -1,4 +1,4 @@
-package classify
+package decision
 
 import "time"
 
@@ -65,9 +65,6 @@ func (ScoreAnswer) isAnswer() {}
 
 // Response holds the answers to a [Request].
 type Response struct {
-	// Model is the model that answered. For an alias, it names the release the
-	// alias resolved to.
-	Model string
 	// Answers maps each identifier from Request.Questions to its answer.
 	Answers map[string]Answer
 	// Stats is the usage of the request.
@@ -76,10 +73,10 @@ type Response struct {
 
 // Stats is the usage of one request.
 type Stats struct {
-	// InputTokens is the number of tokens in the request. Providers bill these;
+	// PromptTokens is the number of tokens in the request. Providers bill these;
 	// the answers are free.
-	InputTokens int
+	PromptTokens int
 	// Duration is how long the provider call took, timed by
-	// [Classifier.Classify].
+	// [Decision.Ask].
 	Duration time.Duration
 }
