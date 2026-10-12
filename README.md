@@ -23,6 +23,7 @@ go get github.com/jjmrocha/ai-toolkit
 - 📚 **Skills on demand**: the model loads a skill's instructions only when it needs them.
 - 📦 **Ready-made tool packs**: web, code, shell, files, dates and more, in one call each.
 - 🔁 **An agent loop you don't write**: tool calls, context compaction and resumable sessions.
+- 👥 **Sub-agents with their own context**: hand a task to a second agent and get back only the answer.
 
 ## Quick start
 
@@ -84,6 +85,7 @@ func run(ctx context.Context) error {
 | [`skills`](#skills) | Instructions the model loads by name, when it needs them |
 | [`packs`](#packs) | Ready-made tool bundles, registered in one call |
 | [`agent`](#agent) | The call-tool-feed-back loop, done for you |
+| [`subagent`](#subagent) | Named sub-agents a model can hand tasks to |
 
 The full API reference is on
 [pkg.go.dev](https://pkg.go.dev/github.com/jjmrocha/ai-toolkit).
@@ -282,6 +284,7 @@ defer pack.Close()
 | `FileTools` | The files under one folder it can't leave | — |
 | `DateTools` | The date, time of day and time zone | — |
 | `DecisionTools` | Judgement calls with probabilities | A `decision.Decision` |
+| `SubAgentTools` | A `subagent` tool that hands a task to another agent | A `subagent.Manager` |
 
 - `Close` removes the pack's tools and stops any server behind them. Always call it.
 - `Instructions` returns the pack's usage guidance for the system prompt, or nil when the pack has none.
@@ -316,6 +319,38 @@ fmt.Println(resp.Content)
 - Sessions can be saved with `Messages` and resumed through `SessionConfig`.
 - `Feedback` follows tool calls and session events. Embed `NopFeedback` to handle only the ones you need.
 
+### `subagent`
+
+```go
+explorerAgent, err := agent.New(agent.Config{MaxIterations: 20}, model)
+if err != nil {
+	return err
+}
+
+manager := subagent.NewManager()
+
+explorer := subagent.Config{
+	Name:        "explore",
+	Description: "Finds code and answers questions about the codebase",
+	Prompt:      "You explore a codebase and report what you find.",
+}
+
+if err := manager.Register(explorer, explorerAgent, readOnlyTools, nil); err != nil {
+	return err
+}
+
+pack, err := packs.SubAgentTools(toolBox, manager)
+if err != nil {
+	return err
+}
+defer pack.Close()
+```
+
+- Each sub-agent has its own `agent.Agent`, prompt, tools and skills. Nothing is inherited from the agent that calls it.
+- Every run starts a fresh conversation on that agent and closes it at the final answer, so the caller's context grows only by the answer.
+- The model picks a sub-agent by name from the list in the `subagent` tool's description. Register every sub-agent before calling `SubAgentTools`.
+- `Run` starts a child directly, without a tool.
+
 ## Security
 
 `ShellTools`, `CodingTools`, skill scripts and MCP server commands run with
@@ -325,6 +360,9 @@ filtered environment, but they can still read credential files on disk. Register
 them only for a model and conversation you'd trust with that, and take MCP
 commands and skill folders from your own configuration, never from untrusted
 input.
+
+A sub-agent's `ToolBox` is its own: an interceptor set on the main one does not
+cover a child's calls, so set one on each `ToolBox` that needs a policy.
 
 ## License
 

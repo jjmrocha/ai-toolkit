@@ -15,4 +15,8 @@
 // [DecisionTools] sends one judgement call at a time to a decision model
 // the caller supplies, and returns probabilities. Its Close also only
 // unregisters; the client stays the caller's.
+//
+// [SubAgentTools] hands a task to one of the agents in a [subagent.Manager] the
+// caller supplies, and returns the child's final answer. Its Close only
+// unregisters too; the manager stays the caller's.
 package packs

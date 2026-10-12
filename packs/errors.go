@@ -28,3 +28,7 @@ var ErrInvalidPattern = errors.New("invalid pattern")
 // option twice, or "decision_score" fewer than two levels. The decision
 // model is not asked.
 var ErrInvalidQuestion = errors.New("invalid question")
+
+// ErrNoAgents is returned by [SubAgentTools] when the [subagent.Manager] it is
+// given has no agent registered.
+var ErrNoAgents = errors.New("no agents registered")
