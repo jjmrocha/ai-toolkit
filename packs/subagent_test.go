@@ -251,7 +251,7 @@ func TestSubAgentTools(t *testing.T) {
 		}
 	})
 
-	t.Run("names the registered agents when the agent is unknown", func(t *testing.T) {
+	t.Run("names the missing agent when the agent is unknown", func(t *testing.T) {
 		// given
 		manager := newSubAgentManager(t, subagentAnswerReply)
 		args := map[string]any{"agent": "plan", "prompt": "find the parser"}
@@ -259,7 +259,7 @@ func TestSubAgentTools(t *testing.T) {
 		result, err := runSubAgentTool(t, manager, args)
 		// then
 		require.ErrorIs(t, err, subagent.ErrAgentNotFound)
-		assert.ErrorContains(t, err, "explore, plain, review")
+		assert.ErrorContains(t, err, "agent not found: plan")
 		assert.Empty(t, result)
 	})
 

@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	answerReply   = `{"message":{"content":"the answer"},"done":true}`
-	toolCallReply = `{"message":{"content":"","tool_calls":[{"function":{"name":"echo","arguments":{"text":"hi"}}}]},"done":true}`
+	answerReply   = `{"message":{"content":"the answer"},"done":true,"prompt_eval_count":20,"eval_count":10}`
+	toolCallReply = `{"message":{"content":"","tool_calls":[{"function":{"name":"echo","arguments":{"text":"hi"}}}]},"done":true,"prompt_eval_count":10,"eval_count":5}`
 	errorReply    = `{"error":"boom"}`
 	modelInfo     = `{"model_info":{"general.architecture":"test","test.context_length":8192}}`
 	notesSkill    = "---\nname: notes\ndescription: Takes notes\n---\nWrite it down.\n"
@@ -75,6 +75,43 @@ func (s *modelServer) chatRequests() []chatRequest {
 	defer s.mu.Unlock()
 
 	return slices.Clone(s.requests)
+}
+
+type recordingFeedback struct {
+	mu         sync.Mutex
+	events     []string
+	finishErrs []error
+}
+
+func (f *recordingFeedback) record(event string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, event)
+}
+
+func (f *recordingFeedback) SubagentStarted(agentName string) {
+	f.record("started " + agentName)
+}
+
+func (f *recordingFeedback) SubagentFinished(agentName string, err error) {
+	f.record("finished " + agentName)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.finishErrs = append(f.finishErrs, err)
+}
+
+func (f *recordingFeedback) ToolCalled(agentName string, toolName string) {
+	f.record("tool " + agentName + " " + toolName)
+}
+
+func (f *recordingFeedback) TokensUsed(agentName string, totalTokens int) {
+	f.record(fmt.Sprintf("tokens %s %d", agentName, totalTokens))
+}
+
+func (f *recordingFeedback) recorded() ([]string, []error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.events), slices.Clone(f.finishErrs)
 }
 
 func newModelServer(t *testing.T, replies ...string) (*llm.LLM, *modelServer) {
@@ -384,7 +421,7 @@ func TestManagerRun(t *testing.T) {
 		assert.Empty(t, server.chatRequests())
 	})
 
-	t.Run("names the registered agents when the agent is unknown", func(t *testing.T) {
+	t.Run("names the missing agent when the agent is unknown", func(t *testing.T) {
 		// given
 		child, server := newChild(t, answerReply)
 		manager := NewManager()
@@ -394,8 +431,8 @@ func TestManagerRun(t *testing.T) {
 		result, err := manager.Run(t.Context(), "plan", "find the parser")
 		// then
 		require.ErrorIs(t, err, ErrAgentNotFound)
-		assert.ErrorContains(t, err, `"plan"`)
-		assert.ErrorContains(t, err, "explore, review")
+		expected := "subagent: agent not found: plan"
+		assert.EqualError(t, err, expected)
 		assert.Empty(t, result)
 		assert.Empty(t, server.chatRequests())
 	})
@@ -443,10 +480,136 @@ func TestManagerRun(t *testing.T) {
 		assert.ErrorIs(t, err, context.Canceled)
 		assert.Empty(t, result)
 	})
+
+	t.Run("reports the run's start, tool calls, token usage and end to the feedback", func(t *testing.T) {
+		// given
+		var calls []map[string]any
+		child, _ := newChild(t, toolCallReply, answerReply)
+		feedback := &recordingFeedback{}
+		manager := NewManager()
+		manager.SetFeedback(feedback)
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, newEchoToolBox(t, &calls), nil))
+		// when
+		_, err := manager.Run(t.Context(), "explore", "say hi")
+		// then
+		require.NoError(t, err)
+		events, finishErrs := feedback.recorded()
+		expected := []string{
+			"started explore",
+			"tokens explore 15",
+			"tool explore echo",
+			"tokens explore 30",
+			"finished explore",
+		}
+		assert.Equal(t, expected, events)
+		assert.Equal(t, []error{nil}, finishErrs)
+	})
+
+	t.Run("reports the child's error as the end of a failed run", func(t *testing.T) {
+		// given
+		child, _ := newChild(t, errorReply)
+		feedback := &recordingFeedback{}
+		manager := NewManager()
+		manager.SetFeedback(feedback)
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
+		// when
+		_, err := manager.Run(t.Context(), "explore", "find the parser")
+		// then
+		require.Error(t, err)
+		events, finishErrs := feedback.recorded()
+		expected := []string{"started explore", "finished explore"}
+		assert.Equal(t, expected, events)
+		require.Len(t, finishErrs, 1)
+		assert.ErrorContains(t, finishErrs[0], "boom")
+	})
+
+	t.Run("reports nothing when the run is rejected", func(t *testing.T) {
+		tests := map[string]struct {
+			name   string
+			prompt string
+		}{
+			"empty prompt": {
+				name: "explore",
+			},
+			"unknown agent": {
+				name:   "plan",
+				prompt: "find the parser",
+			},
+		}
+
+		for name, tt := range tests {
+			t.Run(name, func(t *testing.T) {
+				// given
+				child, _ := newChild(t, answerReply)
+				feedback := &recordingFeedback{}
+				manager := NewManager()
+				manager.SetFeedback(feedback)
+				require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
+				// when
+				_, err := manager.Run(t.Context(), tt.name, tt.prompt)
+				// then
+				require.Error(t, err)
+				events, finishErrs := feedback.recorded()
+				assert.Empty(t, events)
+				assert.Empty(t, finishErrs)
+			})
+		}
+	})
+
+	t.Run("tags the events with the name the run was started with", func(t *testing.T) {
+		// given
+		var calls []map[string]any
+		child, _ := newChild(t, toolCallReply, answerReply, toolCallReply, answerReply)
+		toolBox := newEchoToolBox(t, &calls)
+		feedback := &recordingFeedback{}
+		manager := NewManager()
+		manager.SetFeedback(feedback)
+		require.NoError(t, manager.Register(Config{Name: "review"}, child, toolBox, nil))
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, toolBox, nil))
+		_, err := manager.Run(t.Context(), "review", "say hi")
+		require.NoError(t, err)
+		// when
+		_, err = manager.Run(t.Context(), "explore", "say hi")
+		// then
+		require.NoError(t, err)
+		events, _ := feedback.recorded()
+		expected := []string{
+			"started review",
+			"tokens review 15",
+			"tool review echo",
+			"tokens review 30",
+			"finished review",
+			"started explore",
+			"tokens explore 15",
+			"tool explore echo",
+			"tokens explore 30",
+			"finished explore",
+		}
+		assert.Equal(t, expected, events)
+	})
+}
+
+func TestManagerSetFeedback(t *testing.T) {
+	t.Run("ignores a nil feedback and keeps the previous one", func(t *testing.T) {
+		// given
+		child, _ := newChild(t, answerReply)
+		feedback := &recordingFeedback{}
+		manager := NewManager()
+		manager.SetFeedback(feedback)
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
+		// when
+		manager.SetFeedback(nil)
+		// then
+		_, err := manager.Run(t.Context(), "explore", "find the parser")
+		require.NoError(t, err)
+		events, _ := feedback.recorded()
+		expected := []string{"started explore", "tokens explore 30", "finished explore"}
+		assert.Equal(t, expected, events)
+	})
 }
 
 func TestManagerConcurrentUse(t *testing.T) {
-	t.Run("registers, lists and runs from several goroutines", func(t *testing.T) {
+	t.Run("registers, lists, sets feedback and runs from several goroutines", func(t *testing.T) {
 		// given
 		model, _ := newModelServer(t, answerReply)
 		manager := NewManager()
@@ -462,11 +625,16 @@ func TestManagerConcurrentUse(t *testing.T) {
 		// when
 		var group sync.WaitGroup
 		for _, name := range names {
-			group.Add(3)
+			group.Add(4)
 
 			go func() {
 				defer group.Done()
 				assert.NoError(t, manager.Register(Config{Name: name}, children[name], nil, nil))
+			}()
+
+			go func() {
+				defer group.Done()
+				manager.SetFeedback(&recordingFeedback{})
 			}()
 
 			go func() {

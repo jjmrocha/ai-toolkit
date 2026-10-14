@@ -4,11 +4,11 @@
 ![Go](https://img.shields.io/badge/go-1.27.1%2B-00ADD8?logo=go)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Go building blocks for LLM apps: one chat API, tools, MCP, skills, and an
-agent loop that ties them together.**
+**Go packages for LLM applications: one chat API, tools, MCP, skills, and an
+agent loop that uses them.**
 
-A personal, opinionated toolkit built for my own projects. More mature
-libraries exist, but if this one fits, feel free to use it.
+I built this toolkit for my own projects, and it follows my own preferences.
+More mature libraries exist. If this one fits your needs, use it.
 
 ```bash
 go get github.com/jjmrocha/ai-toolkit
@@ -17,12 +17,12 @@ go get github.com/jjmrocha/ai-toolkit
 ## Highlights
 
 - 🔌 **One API, three providers**: OpenRouter, Ollama and Anthropic.
-- 🎯 **Typed decisions**: yes/no, choice and score questions answered with probabilities, not text.
-- 🛠️ **Tools without the chores**: schema builder, typed argument access, one place to approve every call.
-- 🧩 **MCP servers as tools**: launch a stdio server and its tools join the rest.
+- 🎯 **Typed decisions**: a model answers yes/no, choice and score questions with probabilities, not text.
+- 🛠️ **Tools**: a schema builder, typed argument access, and one place to approve every call.
+- 🧩 **MCP servers as tools**: start a stdio server, and its tools join your other tools.
 - 📚 **Skills on demand**: the model loads a skill's instructions only when it needs them.
 - 📦 **Ready-made tool packs**: web, code, shell, files, dates and more, in one call each.
-- 🔁 **An agent loop you don't write**: tool calls, context compaction and resumable sessions.
+- 🔁 **An agent loop**: it runs tool calls, compacts the context and resumes saved sessions.
 - 👥 **Sub-agents with their own context**: hand a task to a second agent and get back only the answer.
 
 ## Quick start
@@ -84,7 +84,7 @@ func run(ctx context.Context) error {
 | [`mcp`](#mcp) | Turns an MCP server's tools into `tools` entries |
 | [`skills`](#skills) | Instructions the model loads by name, when it needs them |
 | [`packs`](#packs) | Ready-made tool bundles, registered in one call |
-| [`agent`](#agent) | The call-tool-feed-back loop, done for you |
+| [`agent`](#agent) | Runs the model's tool calls until the model answers |
 | [`subagent`](#subagent) | Named sub-agents a model can hand tasks to |
 
 The full API reference is on
@@ -117,10 +117,10 @@ if err != nil {
 fmt.Println(reply.Content)
 ```
 
-- Switch backends by changing `Provider` and `Model`. Ollama needs no API key.
-- `Effort` sets how much the model reasons, from `EffortOff` to `EffortMax`, translated for each provider.
-- Switch effort mid-conversation with `ChangeEffort`, or the model with `ChangeModel` among those listed in `Config.Models`.
-- Every reply carries token usage, prompt-cache hits included, and the provider's stop reason.
+- To use a different provider, change `Provider` and `Model`. Ollama needs no API key.
+- `Effort` sets how much the model reasons, from `EffortOff` to `EffortMax`. Each provider gets its equivalent setting.
+- To change the effort during a conversation, call `ChangeEffort`. To change the model, call `ChangeModel` with a model from `Config.Models`.
+- Each reply contains the token usage, the prompt-cache hits and the provider's stop reason.
 
 ### `decision`
 
@@ -158,10 +158,10 @@ answer := resp.Answers["team"].(decision.ChoiceAnswer)
 fmt.Println(answer.Selected, answer.Confidence)
 ```
 
-- Three question types: `YesNo`, `Choice` and `Score`, each with a typed answer.
-- Answers carry probabilities. What threshold to apply is your call.
-- Several questions about one state are answered in parallel, in one request.
-- Any OpenRouter decision model works as `Model`. List them with `GET https://openrouter.ai/api/v1/models?output_modalities=decisions`; the default listing leaves them out.
+- There are three question types: `YesNo`, `Choice` and `Score`. Each one has its own answer type.
+- Each answer contains probabilities. You decide which threshold to apply.
+- One request can ask several questions about the same state. The model answers them in parallel.
+- You can use any OpenRouter decision model as `Model`. To list these models, send `GET https://openrouter.ai/api/v1/models?output_modalities=decisions`. The default model list does not include them.
 
 ### `tools`
 
@@ -207,10 +207,10 @@ for _, call := range reply.ToolCalls {
 }
 ```
 
-- `ObjectBuilder` writes JSON Schemas of any depth.
-- `Arguments` reads a call's arguments with typed accessors that return errors, never panic.
-- `SetInterceptor` runs before every tool call, however the tool was registered: the one place to ask for approval or keep an audit trail.
-- `Tools` is sorted by name, so the prompt stays cache-friendly.
+- `ObjectBuilder` builds JSON Schemas of any depth.
+- `Arguments` reads a call's arguments with typed accessors. The accessors return errors and never panic.
+- `SetInterceptor` sets a function that runs before every tool call, MCP and pack tools included. Use it to ask for approval or to keep an audit trail.
+- `Tools` returns the tools sorted by name. The tool list is then the same on each request, so the provider can cache the prompt.
 
 ### `mcp`
 
@@ -228,14 +228,14 @@ if err != nil {
 defer client.Close()
 ```
 
-- The server's tools are registered as `<Name>__<tool>` and follow the server's tool list as it changes.
-- `Close` stops the process and removes its tools; a server that dies removes them too.
-- The server gets a filtered environment. Pass anything else it needs with `InheritEnv`.
-- `Manager` starts and stops several servers by name against one `ToolBox`.
+- The client registers each server tool as `<Name>__<tool>`. When the server's tool list changes, the client updates the registered tools.
+- `Close` stops the server process and removes its tools. If the server disconnects, the client also removes its tools.
+- The server gets a filtered set of environment variables. To give it other variables, name them in `InheritEnv`.
+- `Manager` starts and stops several servers by name. All their tools go into one `ToolBox`.
 
 ### `skills`
 
-A skill is a folder with a `SKILL.md`:
+A skill is a folder that contains a `SKILL.md` file:
 
 ```markdown
 ---
@@ -261,8 +261,8 @@ session := agent.SessionConfig{
 agt.StartSession(session)
 ```
 
-- Only names and descriptions reach the model up front. A skill's body costs nothing until it's loaded.
-- Skills can ship files and scripts the model reads or runs.
+- At the start, the model gets only the name and description of each skill. A skill's body adds no tokens until the model loads it.
+- A skill can include files and scripts. The model can read the files and run the scripts.
 - `AddClaudeSkill` adds a skill by name from `~/.claude/skills`.
 
 ### `packs`
@@ -281,13 +281,13 @@ defer pack.Close()
 | `CodingTools` | Symbol-aware code navigation and editing, via [Serena](https://github.com/oraios/serena) | `uvx` on `PATH` |
 | `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH` |
 | `ShellTools` | A `/bin/sh` command runner | — |
-| `FileTools` | The files under one folder it can't leave | — |
+| `FileTools` | The files in one folder, and no files outside it | — |
 | `DateTools` | The date, time of day and time zone | — |
-| `DecisionTools` | Judgement calls with probabilities | A `decision.Decision` |
+| `DecisionTools` | Typed questions to a decision model, answered with probabilities | A `decision.Decision` |
 | `SubAgentTools` | A `subagent` tool that hands a task to another agent | A `subagent.Manager` |
 
-- `Close` removes the pack's tools and stops any server behind them. Always call it.
-- `Instructions` returns the pack's usage guidance for the system prompt, or nil when the pack has none.
+- Always call `Close` when you no longer need a pack. It removes the pack's tools and stops the server the pack started, if any.
+- `Instructions` returns the pack's usage instructions for the system prompt. It returns nil when the pack has none.
 
 ### `agent`
 
@@ -314,10 +314,11 @@ if err != nil {
 fmt.Println(resp.Content)
 ```
 
-- Runs the model's tool calls and feeds the results back until it answers. A failing tool becomes error text the model can recover from.
-- Summarizes older turns automatically before the context window fills up.
-- Sessions can be saved with `Messages` and resumed through `SessionConfig`.
-- `Feedback` follows tool calls and session events. Embed `NopFeedback` to handle only the ones you need.
+- The agent runs the model's tool calls and sends the results back to the model. It continues until the model gives a final answer.
+- When a tool fails, the agent sends the error text to the model, so the model can recover.
+- Before the context window is full, the agent summarizes the older turns.
+- To save a session, call `Messages`. To resume it, pass those messages in `SessionConfig.Messages`.
+- `Feedback` reports tool calls and session events. To handle only some events, embed `NopFeedback` in your type.
 
 ### `subagent`
 
@@ -346,23 +347,28 @@ if err != nil {
 defer pack.Close()
 ```
 
-- Each sub-agent has its own `agent.Agent`, prompt, tools and skills. Nothing is inherited from the agent that calls it.
-- Every run starts a fresh conversation on that agent and closes it at the final answer, so the caller's context grows only by the answer.
-- The model picks a sub-agent by name from the list in the `subagent` tool's description. Register every sub-agent before calling `SubAgentTools`.
-- `Run` starts a child directly, without a tool.
+- Each sub-agent has its own `agent.Agent`, prompt, tools and skills. It inherits nothing from the agent that calls it.
+- Each run starts a new conversation and closes it after the final answer. The calling agent gets only the answer, so its context stays small.
+- The `subagent` tool's description lists the sub-agents, and the model picks one by name. Register every sub-agent before you call `SubAgentTools`.
+- To start a sub-agent from your own code, call `Run`.
+- `SetFeedback` installs a `Feedback` that reports the start, end, tool calls and token usage of each run. Each event includes the sub-agent's name.
+- `Run` replaces the `agent.Feedback` of the sub-agent's agent.
 
 ## Security
 
 `ShellTools`, `CodingTools`, skill scripts and MCP server commands run with
 your program's authority over the whole filesystem. `ShellTools` also inherits
 your environment and any credentials in it. MCP servers and skill scripts get a
-filtered environment, but they can still read credential files on disk. Register
-them only for a model and conversation you'd trust with that, and take MCP
-commands and skill folders from your own configuration, never from untrusted
-input.
+filtered environment, but they can still read credential files on disk.
 
-A sub-agent's `ToolBox` is its own: an interceptor set on the main one does not
-cover a child's calls, so set one on each `ToolBox` that needs a policy.
+Register these tools only for a model and a conversation that you trust with
+this access. Take MCP commands and skill folders from your own configuration.
+Never take them from untrusted input.
+
+Each sub-agent uses its own `ToolBox`. An interceptor on the main `ToolBox`
+does not see the sub-agent's tool calls. If a sub-agent needs a policy, set an
+interceptor on that sub-agent's `ToolBox`. The sub-agent `Feedback` does not
+report tool arguments, so use that interceptor to audit them.
 
 ## License
 

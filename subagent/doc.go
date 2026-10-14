@@ -11,6 +11,11 @@
 // the child sees the task it was given and nothing of the conversation that
 // asked for it, or of earlier runs. Run blocks until the child answers.
 //
+// To follow runs while they block, install a [Feedback] with
+// [Manager.SetFeedback]. It receives the start, end, tool calls and token usage
+// of every run, tagged with the sub-agent's name. For this, Run replaces the
+// child agent's [agent.Feedback].
+//
 // The program supplies everything a child uses, the agent and its model
 // included, and nothing is inherited from the agent that asked. That has three
 // consequences. A [tools.Interceptor] set on another ToolBox does not cover a

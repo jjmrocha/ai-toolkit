@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/jjmrocha/ai-toolkit/agent"
@@ -21,6 +20,20 @@ type subAgent struct {
 	skills  *skills.Collection
 }
 
+type childFeedback struct {
+	agent.NopFeedback
+	name string
+	fb   Feedback
+}
+
+func (c *childFeedback) ToolCalled(toolName string, _ map[string]any) {
+	c.fb.ToolCalled(c.name, toolName)
+}
+
+func (c *childFeedback) TokensUsed(totalTokens int) {
+	c.fb.TokensUsed(c.name, totalTokens)
+}
+
 // Manager holds the sub-agents a program offers, by name. Add one with
 // [Manager.Register], list them with [Manager.Agents] and run a child of one
 // with [Manager.Run]. It is safe for concurrent use, within the limit
@@ -28,20 +41,37 @@ type subAgent struct {
 type Manager struct {
 	mu     sync.RWMutex
 	agents map[string]subAgent
+	fb     Feedback
 }
 
 // NewManager returns an empty [Manager].
 func NewManager() *Manager {
 	return &Manager{
 		agents: make(map[string]subAgent),
+		fb:     NopFeedback{},
 	}
+}
+
+// SetFeedback replaces the [Feedback] that receives the events of every run,
+// for example with a chat UI's own. A nil fb is ignored. A run in progress keeps
+// the Feedback it started with.
+func (m *Manager) SetFeedback(fb Feedback) {
+	if fb == nil {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.fb = fb
 }
 
 // Register stores a sub-agent under cfg.Name, replacing any with that name.
 //
 // agent runs the tasks: every [Manager.Run] starts a new session on it and
-// closes it afterwards. It brings its own model, iteration cap and
-// [agent.Feedback]. It must not be the agent that asks for the sub-agent, whose
+// closes it afterwards. It brings its own model and iteration cap. [Manager.Run]
+// replaces its [agent.Feedback] with one that reports to the manager's
+// [Feedback]. It must not be the agent that asks for the sub-agent, whose
 // conversation the run would replace.
 //
 // toolBox holds the tools the child may call; nil means no tools. Its
@@ -96,6 +126,8 @@ func (m *Manager) Agents() []Info {
 // [agent.Agent] with the sub-agent's prompt, tools and skills, sends prompt as
 // the first user message under ctx, and closes the session before returning.
 // So the agent sees nothing but prompt, and no conversation outlives the call.
+// Run reports the run's events to the manager's [Feedback]; see
+// [Manager.SetFeedback].
 //
 // Run returns [ErrNoPrompt] when prompt is empty and [ErrAgentNotFound] when no
 // agent is registered under name, in both cases without calling the model. An
@@ -109,13 +141,20 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 		return "", ErrNoPrompt
 	}
 
-	registered, err := m.lookup(name)
-	if err != nil {
-		return "", err
+	m.mu.RLock()
+	fb := m.fb
+	registered, ok := m.agents[name]
+	m.mu.RUnlock()
+
+	if !ok {
+		return "", fmt.Errorf("subagent: %w: %s", ErrAgentNotFound, name)
 	}
 
 	child := registered.agent
 	defer child.Close()
+
+	child.SetFeedback(&childFeedback{name: name, fb: fb})
+	fb.SubagentStarted(name)
 
 	session := agent.SessionConfig{
 		Prompt:  registered.config.Prompt,
@@ -126,23 +165,14 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 
 	response, err := child.Process(ctx, prompt)
 	if err != nil {
+		fb.SubagentFinished(name, err)
 		return "", err
 	}
 
+	fb.TokensUsed(name, response.Metadata.TotalTokens)
+	fb.SubagentFinished(name, nil)
+
 	return response.Content, nil
-}
-
-func (m *Manager) lookup(name string) (subAgent, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	registered, ok := m.agents[name]
-	if !ok {
-		return subAgent{}, fmt.Errorf("%w: %q; registered agents: %s",
-			ErrAgentNotFound, name, strings.Join(m.names(), ", "))
-	}
-
-	return registered, nil
 }
 
 func (m *Manager) names() []string {

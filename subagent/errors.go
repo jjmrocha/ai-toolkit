@@ -6,7 +6,8 @@ import "errors"
 var (
 	// ErrNoName is returned by [Manager.Register] when Config.Name is empty.
 	ErrNoName = errors.New("no agent name provided")
-	// ErrNoAgent is returned by [Manager.Register] when Config.Agent is nil.
+	// ErrNoAgent is returned by [Manager.Register] when the agent it is given is
+	// nil.
 	ErrNoAgent = errors.New("no agent provided")
 	// ErrAgentNotFound is returned by [Manager.Run] when no agent is registered
 	// under the name it was given.
