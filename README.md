@@ -278,10 +278,10 @@ defer pack.Close()
 | Pack | Gives the model | Needs |
 | --- | --- | --- |
 | `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `donsetch` on `PATH` |
-| `CodingTools` | Symbol-aware code navigation and editing, via [Serena](https://github.com/oraios/serena) | `uvx` on `PATH` |
+| `CodingTools` | Symbol-aware code navigation and editing, via [Serena](https://github.com/oraios/serena). Read-only mode registers only the navigation tools | `uvx` on `PATH` |
 | `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH` |
 | `ShellTools` | A `/bin/sh` command runner | — |
-| `FileTools` | The files in one folder, and no files outside it | — |
+| `FileTools` | The files in one folder, and no files outside it. Read-only mode registers only reading, listing and searching | — |
 | `DateTools` | The date, time of day and time zone | — |
 | `DecisionTools` | Typed questions to a decision model, answered with probabilities | A `decision.Decision` |
 | `SubAgentTools` | A `subagent` tool that hands a task to another agent | A `subagent.Manager` |
