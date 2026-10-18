@@ -12,8 +12,9 @@ const serenaManualTool = "initial_instructions"
 
 // SerenaMCPConfig returns the [mcp.ClientConfig] [CodingTools] starts Serena
 // with: the desktop-app context, the query-projects and no-memories modes, and
-// Serena's shell, memory and onboarding tools excluded. A non-empty project (a
-// name or path Serena knows) is activated at startup. Serena is installed from
+// Serena's shell, memory, onboarding and project switching tools excluded.
+// project (a name or path Serena knows) is required and activated at startup,
+// and it stays the active project. Serena is installed from
 // its repository's default branch on every launch, unpinned. Each call returns a
 // new value, so it can be changed (to pin a revision or restore the shell, say)
 // and passed to [mcp.NewClient] directly.
@@ -22,9 +23,9 @@ const serenaManualTool = "initial_instructions"
 // register: "read_file", "list_dir", "find_file", "search_for_pattern",
 // "get_symbols_overview", "find_symbol", "find_referencing_symbols",
 // "find_implementations", "find_declaration", "get_diagnostics_for_file",
-// "list_queryable_projects", "query_project", "get_current_config",
-// "initial_instructions" and "activate_project". A tool Serena adds later stays
-// out, so an unpinned launch cannot bring in a new editing tool.
+// "list_queryable_projects", "query_project" and "initial_instructions". A tool
+// Serena adds later stays out, so an unpinned launch cannot bring in a new
+// editing tool.
 func SerenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 	args := []string{
 		"--from", "git+https://github.com/oraios/serena",
@@ -32,9 +33,7 @@ func SerenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 		"--context", "desktop-app",
 		"--add-mode", "query-projects",
 		"--add-mode", "no-memories",
-	}
-	if project != "" {
-		args = append(args, "--project", project)
+		"--project", project,
 	}
 
 	cfg := mcp.ClientConfig{
@@ -46,6 +45,7 @@ func SerenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 			"write_memory", "read_memory", "list_memories",
 			"edit_memory", "delete_memory", "rename_memory",
 			"onboarding",
+			"activate_project", "get_current_config",
 		},
 		ToolCallTimeout: 360 * time.Second,
 	}
@@ -55,7 +55,7 @@ func SerenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 			"get_symbols_overview", "find_symbol", "find_referencing_symbols",
 			"find_implementations", "find_declaration", "get_diagnostics_for_file",
 			"list_queryable_projects", "query_project",
-			"get_current_config", "initial_instructions", "activate_project",
+			"initial_instructions",
 		}
 	}
 
@@ -78,12 +78,11 @@ type codingTools struct {
 // the tools that are. "serena__query_project" stays, and Serena runs only its
 // read tools through it.
 //
-// A non-empty project is activated at startup. With an empty one, the model has
-// to call "serena__activate_project" before it can reach any code. One project
-// is active at a time, and activating another stops the previous one's language
-// servers. "serena__query_project" runs a read-only tool against another
-// project Serena knows, without switching; its symbolic tools need Serena's
-// project server running, its file and search tools do not.
+// project is activated at startup and stays the active project; the model
+// cannot switch to another. It returns [ErrNoProject] when project is empty.
+// "serena__query_project" runs a read-only tool against another project Serena
+// knows; its symbolic tools need Serena's project server running, its file and
+// search tools do not.
 //
 // [ToolPack.Instructions] returns Serena's manual, fetched from its
 // "initial_instructions" tool on every call, so the model does not have to call
@@ -93,6 +92,10 @@ type codingTools struct {
 // If registration fails, the server is stopped before CodingTools returns. If
 // the server dies later, its tools are removed from m.
 func CodingTools(ctx context.Context, m *tools.ToolBox, project string, readOnly bool) (ToolPack, error) {
+	if project == "" {
+		return nil, ErrNoProject
+	}
+
 	cfg := SerenaMCPConfig(project, readOnly)
 
 	client, err := mcp.NewClient(ctx, cfg, m)

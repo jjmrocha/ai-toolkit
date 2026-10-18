@@ -32,3 +32,6 @@ var ErrInvalidQuestion = errors.New("invalid question")
 // ErrNoAgents is returned by [SubAgentTools] when the [subagent.Manager] it is
 // given has no agent registered.
 var ErrNoAgents = errors.New("no agents registered")
+
+// ErrNoProject is returned by [CodingTools] when it is given an empty project.
+var ErrNoProject = errors.New("no project")
