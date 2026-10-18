@@ -3,8 +3,9 @@
 // whatever serves them.
 //
 // [WebTools] (web search, page fetching, site crawling), [CodingTools]
-// (symbol-aware code navigation and editing) and [ThinkingTools] (step-by-step
-// reasoning the model can revise and branch) are served by an MCP server the
+// (symbol-aware code navigation and editing), [ThinkingTools] (step-by-step
+// reasoning the model can revise and branch) and [LibraryTools] (current
+// documentation for libraries and frameworks) are served by an MCP server the
 // pack launches and owns.
 //
 // [ShellTools], [FileTools] and [DateTools] run inside the program, so their Close

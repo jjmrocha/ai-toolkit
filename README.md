@@ -280,6 +280,7 @@ defer pack.Close()
 | `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `donsetch` on `PATH` |
 | `CodingTools` | Symbol-aware code navigation and editing, via [Serena](https://github.com/oraios/serena). Read-only mode registers only the navigation tools | `uvx` on `PATH` |
 | `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH` |
+| `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7) | `npx` on `PATH`; `CONTEXT7_API_KEY` optional |
 | `ShellTools` | A `/bin/sh` command runner | — |
 | `FileTools` | The files in one folder, and no files outside it. Read-only mode registers only reading, listing and searching | — |
 | `DateTools` | The date, time of day and time zone | — |
