@@ -117,6 +117,26 @@ func TestNewClient(t *testing.T) {
 			return slices.Equal([]string{"playwright__search"}, registeredToolNames(toolBox))
 		}, time.Second, 10*time.Millisecond)
 	})
+
+	t.Run("registers only the included tools, also when the server's list changes", func(t *testing.T) {
+		// given
+		server := startTestMCPServer(t, []string{"search", "fetch"}, nil)
+		ctx := t.Context()
+		toolBox := tools.NewToolBox()
+		config := ClientConfig{Name: "playwright", Command: "npx", IncludedTools: []string{"search", "crawl"}}
+		client, err := NewClient(ctx, config, toolBox)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		require.Equal(t, []string{"playwright__search"}, registeredToolNames(toolBox))
+		// when
+		server.server.AddTool(testTool("extra"), testToolHandler)
+		server.server.AddTool(testTool("crawl"), testToolHandler)
+		// then
+		expected := []string{"playwright__crawl", "playwright__search"}
+		assert.Eventually(t, func() bool {
+			return slices.Equal(expected, registeredToolNames(toolBox))
+		}, time.Second, 10*time.Millisecond)
+	})
 }
 
 func TestClientToolName(t *testing.T) {
@@ -218,6 +238,67 @@ func TestClientExcluded(t *testing.T) {
 		result := c.excluded("execute_shell_command")
 		// then
 		assert.False(t, result)
+	})
+
+	t.Run("drops a tool the include list does not name", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			IncludedTools: []string{"find_symbol"},
+		}}
+		// when
+		result := c.excluded("replace_content")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("keeps a tool the include list names", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			IncludedTools: []string{"find_symbol"},
+		}}
+		// when
+		result := c.excluded("find_symbol")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("keeps every tool when the include list is empty", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			IncludedTools: []string{},
+		}}
+		// when
+		result := c.excluded("replace_content")
+		// then
+		assert.False(t, result)
+	})
+
+	t.Run("drops a tool both lists name", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			IncludedTools: []string{"execute_shell_command"},
+			ExcludedTools: []string{"execute_shell_command"},
+		}}
+		// when
+		result := c.excluded("execute_shell_command")
+		// then
+		assert.True(t, result)
+	})
+
+	t.Run("includes by the name the server published, not the namespaced one", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{
+			Name:          "serena",
+			IncludedTools: []string{"serena__find_symbol"},
+		}}
+		// when
+		result := c.excluded("find_symbol")
+		// then
+		assert.True(t, result)
 	})
 }
 

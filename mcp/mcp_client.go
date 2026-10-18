@@ -40,7 +40,8 @@ type Client struct {
 // registered as "<ClientConfig.Name>__<tool>", with a handler that forwards the
 // call to the server. A namespaced name the providers would reject is
 // rewritten, not dropped; the server is still called by its own name. Tools in
-// [ClientConfig.ExcludedTools] are skipped. A server whose handshake declared
+// [ClientConfig.ExcludedTools] are skipped, and so are tools missing from a
+// non-empty [ClientConfig.IncludedTools]. A server whose handshake declared
 // no tools capability is not asked for a list: nothing is registered and the
 // server keeps running for whatever else it offers. A server that declared no
 // capabilities at all is asked anyway. A nil tb registers nothing, for a
@@ -212,7 +213,8 @@ func (c *Client) registerTools(ctx context.Context, tb *tools.ToolBox) error {
 // result, as a tool registered by [NewClient] would: under
 // [ClientConfig.ToolCallTimeout], with nil args sent as an empty object. tool
 // is the server's own name for it, not the namespaced one, and it is called
-// even if [ClientConfig.ExcludedTools] lists it. It returns an error when the
+// even if [ClientConfig.ExcludedTools] lists it or [ClientConfig.IncludedTools]
+// leaves it out. It returns an error when the
 // call fails or the server reports one.
 func (c *Client) CallTool(ctx context.Context, tool string, args map[string]any) (string, error) {
 	return c.makeHandler(tool)(ctx, args)
@@ -227,6 +229,10 @@ func (c *Client) removeTools() {
 }
 
 func (c *Client) excluded(tool string) bool {
+	if len(c.config.IncludedTools) > 0 && !slices.Contains(c.config.IncludedTools, tool) {
+		return true
+	}
+
 	return slices.Contains(c.config.ExcludedTools, tool)
 }
 

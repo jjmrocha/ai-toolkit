@@ -17,7 +17,15 @@ const serenaManualTool = "initial_instructions"
 // its repository's default branch on every launch, unpinned. Each call returns a
 // new value, so it can be changed (to pin a revision or restore the shell, say)
 // and passed to [mcp.NewClient] directly.
-func SerenaMCPConfig(project string) mcp.ClientConfig {
+//
+// With readOnly, [mcp.ClientConfig.IncludedTools] names the only tools to
+// register: "read_file", "list_dir", "find_file", "search_for_pattern",
+// "get_symbols_overview", "find_symbol", "find_referencing_symbols",
+// "find_implementations", "find_declaration", "get_diagnostics_for_file",
+// "list_queryable_projects", "query_project", "get_current_config",
+// "initial_instructions" and "activate_project". A tool Serena adds later stays
+// out, so an unpinned launch cannot bring in a new editing tool.
+func SerenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 	args := []string{
 		"--from", "git+https://github.com/oraios/serena",
 		"serena", "start-mcp-server",
@@ -29,7 +37,7 @@ func SerenaMCPConfig(project string) mcp.ClientConfig {
 		args = append(args, "--project", project)
 	}
 
-	return mcp.ClientConfig{
+	cfg := mcp.ClientConfig{
 		Name:    "serena",
 		Command: "uvx",
 		Args:    args,
@@ -41,6 +49,17 @@ func SerenaMCPConfig(project string) mcp.ClientConfig {
 		},
 		ToolCallTimeout: 360 * time.Second,
 	}
+	if readOnly {
+		cfg.IncludedTools = []string{
+			"read_file", "list_dir", "find_file", "search_for_pattern",
+			"get_symbols_overview", "find_symbol", "find_referencing_symbols",
+			"find_implementations", "find_declaration", "get_diagnostics_for_file",
+			"list_queryable_projects", "query_project",
+			"get_current_config", "initial_instructions", "activate_project",
+		}
+	}
+
+	return cfg
 }
 
 type codingTools struct {
@@ -54,6 +73,10 @@ type codingTools struct {
 //
 // There is no shell. Serena's own is excluded, so a model that builds or runs
 // code also needs [ShellTools].
+//
+// With readOnly, the editing tools are not registered; [SerenaMCPConfig] lists
+// the tools that are. "serena__query_project" stays, and Serena runs only its
+// read tools through it.
 //
 // A non-empty project is activated at startup. With an empty one, the model has
 // to call "serena__activate_project" before it can reach any code. One project
@@ -69,8 +92,8 @@ type codingTools struct {
 //
 // If registration fails, the server is stopped before CodingTools returns. If
 // the server dies later, its tools are removed from m.
-func CodingTools(ctx context.Context, m *tools.ToolBox, project string) (ToolPack, error) {
-	cfg := SerenaMCPConfig(project)
+func CodingTools(ctx context.Context, m *tools.ToolBox, project string, readOnly bool) (ToolPack, error) {
+	cfg := SerenaMCPConfig(project, readOnly)
 
 	client, err := mcp.NewClient(ctx, cfg, m)
 	if err != nil {

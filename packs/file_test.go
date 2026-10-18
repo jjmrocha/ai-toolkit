@@ -18,7 +18,7 @@ func TestFileToolsInstructions(t *testing.T) {
 		// given
 		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, folder)
+		pack, err := FileTools(toolBox, folder, false)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
@@ -32,7 +32,7 @@ func TestFileToolsInstructions(t *testing.T) {
 		// given
 		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, folder)
+		pack, err := FileTools(toolBox, folder, false)
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
@@ -40,6 +40,35 @@ func TestFileToolsInstructions(t *testing.T) {
 		// then
 		assert.Equal(t, "file", result.Name)
 		assert.Contains(t, result.Text, folder)
+	})
+
+	t.Run("covers editing and deleting when not read-only", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := FileTools(toolBox, t.TempDir(), false)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = pack.Close() })
+		// when
+		result := pack.Instructions(t.Context())
+		// then
+		assert.Contains(t, result.Text, editToolName)
+		assert.Contains(t, result.Text, "delete")
+	})
+
+	t.Run("leaves out editing and deleting when read-only", func(t *testing.T) {
+		// given
+		folder := t.TempDir()
+		toolBox := tools.NewToolBox()
+		pack, err := FileTools(toolBox, folder, true)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = pack.Close() })
+		// when
+		result := pack.Instructions(t.Context())
+		// then
+		assert.Contains(t, result.Text, folder)
+		assert.Contains(t, result.Text, searchToolName)
+		assert.NotContains(t, result.Text, editToolName)
+		assert.NotContains(t, result.Text, "delete")
 	})
 }
 
@@ -62,7 +91,7 @@ func runFileTool(t *testing.T, root string, name string, args map[string]any) (s
 
 	toolBox := tools.NewToolBox()
 
-	pack, err := FileTools(toolBox, root)
+	pack, err := FileTools(toolBox, root, false)
 	require.NoError(t, err)
 
 	defer func() { _ = pack.Close() }()
@@ -82,7 +111,7 @@ func TestFileTools(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		// when
-		pack, err := FileTools(toolBox, t.TempDir())
+		pack, err := FileTools(toolBox, t.TempDir(), false)
 		require.NoError(t, err)
 
 		defer func() { _ = pack.Close() }()
@@ -99,10 +128,36 @@ func TestFileTools(t *testing.T) {
 		assert.Equal(t, expected, names)
 	})
 
+	t.Run("registers only the read tools when read-only", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		// when
+		pack, err := FileTools(toolBox, t.TempDir(), true)
+		require.NoError(t, err)
+
+		defer func() { _ = pack.Close() }()
+		// then
+		expected := []string{listToolName, readToolName, searchToolName, workdirToolName}
+		result := fn.Map(toolBox.Tools(), func(tool llm.Tool) string { return tool.Name })
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("removes the read tools on close when read-only", func(t *testing.T) {
+		// given
+		toolBox := tools.NewToolBox()
+		pack, err := FileTools(toolBox, t.TempDir(), true)
+		require.NoError(t, err)
+		// when
+		err = pack.Close()
+		// then
+		require.NoError(t, err)
+		assert.Empty(t, toolBox.Tools())
+	})
+
 	t.Run("removes the tools on close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir())
+		pack, err := FileTools(toolBox, t.TempDir(), false)
 		require.NoError(t, err)
 		// when
 		err = pack.Close()
@@ -114,10 +169,10 @@ func TestFileTools(t *testing.T) {
 	t.Run("leaves a newer pack's tools in place on a second close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		oldPack, err := FileTools(toolBox, t.TempDir())
+		oldPack, err := FileTools(toolBox, t.TempDir(), false)
 		require.NoError(t, err)
 		require.NoError(t, oldPack.Close())
-		newPack, err := FileTools(toolBox, t.TempDir())
+		newPack, err := FileTools(toolBox, t.TempDir(), false)
 		require.NoError(t, err)
 		defer func() { _ = newPack.Close() }()
 		// when
@@ -137,7 +192,7 @@ func TestFileTools(t *testing.T) {
 		root := filepath.Join(t.TempDir(), "missing")
 		toolBox := tools.NewToolBox()
 		// when
-		pack, err := FileTools(toolBox, root)
+		pack, err := FileTools(toolBox, root, false)
 		// then
 		require.Error(t, err)
 		assert.Nil(t, pack)

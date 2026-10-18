@@ -17,6 +17,12 @@ type ClientConfig struct {
 	// tool list is read, so an excluded tool stays out when the server changes its
 	// list. Names the server never publishes are ignored.
 	ExcludedTools []string
+	// IncludedTools, when not empty, names the only server tools to register, by
+	// the name the server publishes, not the namespaced one. Empty registers every
+	// tool. A tool named here and in ExcludedTools stays out. Like ExcludedTools,
+	// the filter applies every time the tool list is read, so a tool the server
+	// adds later stays out unless it is named here.
+	IncludedTools []string
 	// InheritEnv names environment variables to copy from the calling process to
 	// the server. Every server already gets HOME, LOGNAME, PATH, SHELL, TERM, USER,
 	// TMPDIR, LANG, TZ, SSL_CERT_DIR, SSL_CERT_FILE, the proxy variables in either

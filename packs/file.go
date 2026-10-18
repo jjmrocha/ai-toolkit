@@ -46,22 +46,30 @@ const fileInstruction = `These tools reach only the folder %s and nothing
 outside it; name every file relative to that folder and never absolute. Find
 which file says something with file_search rather than reading the folder
 through, and when a search ends exactly on its limit it reported the whole
-answer. file_edit changes one chosen place: include enough of the surroundings
-to make the target text unambiguous. Never delete work you did not make, and
-never discard a whole folder's content behind a single call.`
+answer.`
+
+const fileWriteInstruction = `file_edit changes one chosen place: include enough
+of the surroundings to make the target text unambiguous. Never delete work you
+did not make, and never discard a whole folder's content behind a single call.`
 
 type filePack struct {
-	toolBox *tools.ToolBox
-	root    *os.Root
-	path    string
-	names   []string
-	once    sync.Once
+	toolBox  *tools.ToolBox
+	root     *os.Root
+	path     string
+	readOnly bool
+	names    []string
+	once     sync.Once
 }
 
 func (p *filePack) Instructions(_ context.Context) *mcp.Instruction {
+	text := fmt.Sprintf(fileInstruction, p.path)
+	if !p.readOnly {
+		text += " " + fileWriteInstruction
+	}
+
 	return &mcp.Instruction{
 		Name: "file",
-		Text: fmt.Sprintf(fileInstruction, p.path),
+		Text: text,
 	}
 }
 
@@ -91,6 +99,10 @@ func (p *filePack) Close() error {
 //   - "file_workdir" returns the folder's absolute path, for naming a file to a
 //     tool outside the pack
 //
+// With readOnly, only "file_read", "file_list", "file_search" and
+// "file_workdir" are registered, and [ToolPack.Instructions] leaves out editing
+// and deleting.
+//
 // [ToolPack.Close] removes the tools and closes the folder. FileTools returns an
 // error, and registers nothing, if path cannot be opened.
 //
@@ -106,7 +118,7 @@ func (p *filePack) Close() error {
 // "file_search" returns paths relative to the folder, ready for "file_read",
 // skips binary files, and returns at most 100 matches unless the call asks for
 // more, marking a result it cut short.
-func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
+func FileTools(m *tools.ToolBox, path string, readOnly bool) (ToolPack, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening root: %w", err)
@@ -118,9 +130,10 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 	}
 
 	pack := filePack{
-		toolBox: m,
-		root:    opened,
-		path:    absPath,
+		toolBox:  m,
+		root:     opened,
+		path:     absPath,
+		readOnly: readOnly,
 	}
 
 	readTool := llm.Tool{
@@ -203,15 +216,20 @@ func FileTools(m *tools.ToolBox, path string) (ToolPack, error) {
 			"outside this folder.",
 		Schema: tools.NewObjectBuilder().Build(),
 	}
-	pack.names, err = register(m, []registration{
+	registrations := []registration{
 		{tool: readTool, handler: pack.readFile},
-		{tool: writeTool, handler: pack.writeFile},
-		{tool: editTool, handler: pack.editFile},
 		{tool: listTool, handler: pack.listDir},
 		{tool: searchTool, handler: pack.searchFiles},
-		{tool: deleteTool, handler: pack.deleteFile},
 		{tool: workdirTool, handler: pack.workdir},
-	})
+	}
+	if !readOnly {
+		writeRegistration := registration{tool: writeTool, handler: pack.writeFile}
+		editRegistration := registration{tool: editTool, handler: pack.editFile}
+		deleteRegistration := registration{tool: deleteTool, handler: pack.deleteFile}
+		registrations = append(registrations, writeRegistration, editRegistration, deleteRegistration)
+	}
+
+	pack.names, err = register(m, registrations)
 	if err != nil {
 		return nil, err
 	}
