@@ -120,7 +120,7 @@ fmt.Println(reply.Content)
 - To use a different provider, change `Provider` and `Model`. Ollama needs no API key.
 - `Effort` sets how much the model reasons, from `EffortOff` to `EffortMax`. Each provider gets its equivalent setting.
 - To change the effort during a conversation, call `ChangeEffort`. To change the model, call `ChangeModel` with a model from `Config.Models`.
-- Each reply contains the token usage, the prompt-cache hits and the provider's stop reason.
+- Each reply contains the token usage, the prompt-cache reads and writes, and the provider's stop reason.
 
 ### `decision`
 
@@ -278,7 +278,7 @@ defer pack.Close()
 | Pack | Gives the model | Needs |
 | --- | --- | --- |
 | `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `npx` on `PATH` |
-| `CodingTools` | Symbol-aware code navigation and editing, via [Serena](https://github.com/oraios/serena). Read-only mode registers only the navigation tools | `uvx` on `PATH` |
+| `CodingTools` | Symbol-aware code navigation and editing in one project, via [Serena](https://github.com/oraios/serena). The model cannot switch to another project. Read-only mode registers only the reading and navigation tools | `uvx` on `PATH`; a project folder |
 | `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH`; Node.js 24 or newer |
 | `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7) | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |
 | `ShellTools` | A `/bin/sh` command runner | — |
