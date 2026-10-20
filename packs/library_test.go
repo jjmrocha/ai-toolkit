@@ -11,7 +11,7 @@ var _ ToolPack = (*libraryTools)(nil)
 func TestContext7MCPConfig(t *testing.T) {
 	t.Run("starts the context7 server with npx", func(t *testing.T) {
 		// given
-		expected := []string{"-y", "@upstash/context7-mcp"}
+		expected := []string{"-y", "@upstash/context7-mcp@4.4.4"}
 		// when
 		result := Context7MCPConfig()
 		// then

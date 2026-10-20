@@ -11,7 +11,7 @@ var _ ToolPack = (*thinkingTools)(nil)
 func TestSequentialThinkingMCPConfig(t *testing.T) {
 	t.Run("starts the sequential-thinking server with npx", func(t *testing.T) {
 		// given
-		expected := []string{"-y", "@modelcontextprotocol/server-sequential-thinking"}
+		expected := []string{"-y", "@modelcontextprotocol/server-sequential-thinking@2.0.0"}
 		// when
 		result := SequentialThinkingMCPConfig()
 		// then

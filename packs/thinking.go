@@ -7,15 +7,17 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
+const sequentialThinkingVersion = "2.0.0"
+
 // SequentialThinkingMCPConfig returns the [mcp.ClientConfig] [ThinkingTools]
-// starts the sequential-thinking server with. npx fetches the latest published
-// version, unpinned. Each call returns a new value, so it can be changed (to pin
-// a version, say) and passed to [mcp.NewClient] directly.
+// starts the sequential-thinking server with. npx runs a fixed release of the
+// package, not the latest. Each call returns a new value, so it can be changed
+// (to use another version, say) and passed to [mcp.NewClient] directly.
 func SequentialThinkingMCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
 		Name:    "thinking",
 		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-sequential-thinking"},
+		Args:    []string{"-y", "@modelcontextprotocol/server-sequential-thinking@" + sequentialThinkingVersion},
 	}
 }
 
@@ -26,8 +28,8 @@ type thinkingTools struct {
 // ThinkingTools registers the sequential-thinking tool in m, served by the
 // reference MCP server
 // (https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking).
-// It needs the npx executable on PATH and no API key. The tool is
-// "thinking__sequentialthinking": the model works a problem as numbered
+// It needs the npx executable on PATH, Node.js 24 or newer and no API key. The
+// tool is "thinking__sequentialthinking": the model works a problem as numbered
 // thoughts it can revise or branch from.
 //
 // The server keeps the thought history in memory, so it lasts as long as the
