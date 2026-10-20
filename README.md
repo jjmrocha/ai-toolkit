@@ -277,7 +277,7 @@ defer pack.Close()
 
 | Pack | Gives the model | Needs |
 | --- | --- | --- |
-| `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `donsetch` on `PATH` |
+| `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `npx` on `PATH` |
 | `CodingTools` | Symbol-aware code navigation and editing, via [Serena](https://github.com/oraios/serena). Read-only mode registers only the navigation tools | `uvx` on `PATH` |
 | `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH`; Node.js 24 or newer |
 | `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7) | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |

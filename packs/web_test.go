@@ -10,15 +10,24 @@ import (
 var _ ToolPack = (*webTools)(nil)
 
 func TestDonSeTchMCPConfig(t *testing.T) {
-	t.Run("starts DonSeTch's supervised MCP server", func(t *testing.T) {
+	t.Run("starts DonSeTch's supervised MCP server with npx", func(t *testing.T) {
 		// given
-		expected := []string{"mcp", "--supervised"}
+		expected := []string{"-y", "donsetch@4.10.1", "mcp", "--supervised"}
 		// when
 		result := DonSeTchMCPConfig()
 		// then
 		assert.Equal(t, "donsetch", result.Name)
-		assert.Equal(t, "donsetch", result.Command)
+		assert.Equal(t, "npx", result.Command)
 		assert.Equal(t, expected, result.Args)
+	})
+
+	t.Run("excludes the screenshot tool", func(t *testing.T) {
+		// given
+		expected := []string{"web_screenshot"}
+		// when
+		result := DonSeTchMCPConfig()
+		// then
+		assert.Equal(t, expected, result.ExcludedTools)
 	})
 
 	t.Run("gives tool calls fifteen minutes", func(t *testing.T) {
