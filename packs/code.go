@@ -74,6 +74,7 @@ func serenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 		"--context", "desktop-app",
 		"--add-mode", "query-projects",
 		"--add-mode", "no-memories",
+		"--enable-web-dashboard", "false",
 		"--project", project,
 	}
 

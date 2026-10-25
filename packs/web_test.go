@@ -12,7 +12,7 @@ var _ ToolPack = (*webTools)(nil)
 func TestDonSeTchMCPConfig(t *testing.T) {
 	t.Run("starts DonSeTch's supervised MCP server with npx", func(t *testing.T) {
 		// given
-		expected := []string{"-y", "donsetch@4.10.1", "mcp", "--supervised"}
+		expected := []string{"-y", "donsetch@4.10.2", "mcp", "--supervised"}
 		// when
 		result := DonSeTchMCPConfig()
 		// then

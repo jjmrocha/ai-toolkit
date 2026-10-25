@@ -14,7 +14,7 @@ var (
 )
 
 func Test_serenaMCPConfig(t *testing.T) {
-	t.Run("starts Serena on the given project with the query-projects and no-memories modes", func(t *testing.T) {
+	t.Run("starts Serena on the given project with the query-projects and no-memories modes and no web dashboard", func(t *testing.T) {
 		// given
 		expected := []string{
 			"--from", "serena-agent==2.1.0",
@@ -22,6 +22,7 @@ func Test_serenaMCPConfig(t *testing.T) {
 			"--context", "desktop-app",
 			"--add-mode", "query-projects",
 			"--add-mode", "no-memories",
+			"--enable-web-dashboard", "false",
 			"--project", "ai-toolkit",
 		}
 		// when

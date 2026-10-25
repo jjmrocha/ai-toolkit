@@ -8,7 +8,7 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
-const donsetchVersion = "4.10.1"
+const donsetchVersion = "4.10.2"
 
 // DonSeTchMCPConfig returns the [mcp.ClientConfig] [WebTools] starts DonSeTch
 // with. npx runs a fixed release of the package, not the latest. Its
