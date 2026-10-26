@@ -8,6 +8,8 @@ import (
 	"github.com/jjmrocha/ai-toolkit/tools"
 )
 
+const npxCommand = "npx"
+
 // ToolPack owns the tools one constructor registered, and whatever serves them.
 type ToolPack interface {
 	// Close removes the pack's tools and stops the server behind them, if any.

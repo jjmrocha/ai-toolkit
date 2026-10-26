@@ -16,7 +16,7 @@ const sequentialThinkingVersion = "2.0.0"
 func SequentialThinkingMCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
 		Name:    "thinking",
-		Command: "npx",
+		Command: npxCommand,
 		Args:    []string{"-y", "@modelcontextprotocol/server-sequential-thinking@" + sequentialThinkingVersion},
 	}
 }

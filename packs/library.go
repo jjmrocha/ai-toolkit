@@ -18,7 +18,7 @@ const context7Version = "4.4.4"
 func Context7MCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
 		Name:       "context7",
-		Command:    "npx",
+		Command:    npxCommand,
 		Args:       []string{"-y", "@upstash/context7-mcp@" + context7Version},
 		InheritEnv: []string{"CONTEXT7_API_KEY"},
 	}

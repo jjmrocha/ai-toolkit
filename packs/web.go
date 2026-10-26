@@ -18,7 +18,7 @@ const donsetchVersion = "4.10.2"
 func DonSeTchMCPConfig() mcp.ClientConfig {
 	return mcp.ClientConfig{
 		Name:            "donsetch",
-		Command:         "npx",
+		Command:         npxCommand,
 		Args:            []string{"-y", "donsetch@" + donsetchVersion, "mcp", "--supervised"},
 		ExcludedTools:   []string{"web_screenshot"},
 		ToolCallTimeout: 15 * time.Minute,
