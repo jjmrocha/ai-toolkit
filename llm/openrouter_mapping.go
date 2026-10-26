@@ -7,6 +7,8 @@ import (
 	"github.com/jjmrocha/go-algo/fn"
 )
 
+var orCacheEphemeral = &orCacheControl{Type: "ephemeral"}
+
 func toORMessages(messages []Message) ([]orMessage, error) {
 	convertedMessages := make([]orMessage, 0, len(messages))
 

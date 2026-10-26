@@ -1,12 +1,17 @@
 package llm
 
 type orChatRequest struct {
-	Model     string       `json:"model"`
-	Messages  []orMessage  `json:"messages"`
-	Tools     []orTool     `json:"tools,omitempty"`
-	MaxTokens int          `json:"max_tokens,omitempty"`
-	Reasoning *orReasoning `json:"reasoning,omitempty"`
-	Stream    bool         `json:"stream"`
+	Model        string          `json:"model"`
+	Messages     []orMessage     `json:"messages"`
+	Tools        []orTool        `json:"tools,omitempty"`
+	MaxTokens    int             `json:"max_tokens,omitempty"`
+	Reasoning    *orReasoning    `json:"reasoning,omitempty"`
+	CacheControl *orCacheControl `json:"cache_control,omitempty"`
+	Stream       bool            `json:"stream"`
+}
+
+type orCacheControl struct {
+	Type string `json:"type"`
 }
 
 type orReasoning struct {

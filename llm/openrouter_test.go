@@ -153,6 +153,21 @@ func TestOpenRouterChat(t *testing.T) {
 		assert.Equal(t, "high", sent.Reasoning.Effort)
 	})
 
+	t.Run("asks for automatic prompt caching", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+		})
+		expected := `"cache_control":{"type":"ephemeral"}`
+		// when
+		_, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, string(gotBody), expected)
+	})
+
 	t.Run("joins streamed content and takes usage and finish reason from the stream", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {

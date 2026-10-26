@@ -48,12 +48,13 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 	}
 
 	request := orChatRequest{
-		Model:     o.config.Model,
-		Messages:  convertedMessages,
-		Tools:     toORTools(tools),
-		MaxTokens: o.config.MaxTokens,
-		Reasoning: toORReasoning(o.config.Effort),
-		Stream:    true,
+		Model:        o.config.Model,
+		Messages:     convertedMessages,
+		Tools:        toORTools(tools),
+		MaxTokens:    o.config.MaxTokens,
+		Reasoning:    toORReasoning(o.config.Effort),
+		CacheControl: orCacheEphemeral,
+		Stream:       true,
 	}
 
 	resp, err := o.client.R().

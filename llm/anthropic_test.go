@@ -95,6 +95,23 @@ func TestAnthropicChat(t *testing.T) {
 		assert.NotContains(t, string(gotBody), "tools")
 	})
 
+	t.Run("asks for automatic prompt caching", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeSSE(t, w, anthropicTextStream("ok")...)
+		})
+		expected := &anthropicCacheControl{Type: "ephemeral"}
+		// when
+		_, err := a.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		var sent anthropicChatRequest
+		require.NoError(t, json.Unmarshal(gotBody, &sent))
+		assert.Equal(t, expected, sent.CacheControl)
+	})
+
 	t.Run("joins streamed text and takes usage from the start and end of the message", func(t *testing.T) {
 		// given
 		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {

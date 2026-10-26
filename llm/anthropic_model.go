@@ -8,6 +8,7 @@ type anthropicChatRequest struct {
 	Tools        []anthropicTool        `json:"tools,omitempty"`
 	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
 	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 	Stream       bool                   `json:"stream"`
 }
 

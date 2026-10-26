@@ -58,6 +58,7 @@ func (a *anthropic) chat(ctx context.Context, messages []Message, tools []Tool) 
 		Tools:        toAnthropicTools(tools),
 		Thinking:     thinkingAdaptive,
 		OutputConfig: toAnthropicOutputConfig(a.config.Effort),
+		CacheControl: cacheEphemeral,
 		Stream:       true,
 	}
 
