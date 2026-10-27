@@ -81,6 +81,7 @@ type recordingFeedback struct {
 	mu         sync.Mutex
 	events     []string
 	finishErrs []error
+	cached     []int
 }
 
 func (f *recordingFeedback) record(event string) {
@@ -104,8 +105,17 @@ func (f *recordingFeedback) ToolCalled(agentName string, toolName string) {
 	f.record("tool " + agentName + " " + toolName)
 }
 
-func (f *recordingFeedback) TokensUsed(agentName string, totalTokens int) {
+func (f *recordingFeedback) TokensUsed(agentName string, totalTokens, cacheReadTokens int) {
 	f.record(fmt.Sprintf("tokens %s %d", agentName, totalTokens))
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cached = append(f.cached, cacheReadTokens)
+}
+
+func (f *recordingFeedback) recordedCached() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.cached)
 }
 
 func (f *recordingFeedback) recorded() ([]string, []error) {
@@ -503,6 +513,24 @@ func TestManagerRun(t *testing.T) {
 		}
 		assert.Equal(t, expected, events)
 		assert.Equal(t, []error{nil}, finishErrs)
+	})
+
+	t.Run("reports the cached tokens of each reply to the feedback", func(t *testing.T) {
+		// given
+		cachedToolCallReply := `{"message":{"content":"","tool_calls":[{"function":{"name":"echo","arguments":{"text":"hi"}}}]},"done":true,"prompt_eval_count":10,"prompt_eval_cached_count":4,"eval_count":5}`
+		cachedAnswerReply := `{"message":{"content":"the answer"},"done":true,"prompt_eval_count":20,"prompt_eval_cached_count":8,"eval_count":10}`
+		var calls []map[string]any
+		child, _ := newChild(t, cachedToolCallReply, cachedAnswerReply)
+		feedback := &recordingFeedback{}
+		manager := NewManager()
+		manager.SetFeedback(feedback)
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, newEchoToolBox(t, &calls), nil))
+		expected := []int{4, 8}
+		// when
+		_, err := manager.Run(t.Context(), "explore", "say hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, feedback.recordedCached())
 	})
 
 	t.Run("reports the child's error as the end of a failed run", func(t *testing.T) {

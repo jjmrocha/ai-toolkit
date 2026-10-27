@@ -247,7 +247,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			a.fb.InterimTextReceived(response.Content)
 		}
 
-		a.fb.TokensUsed(response.Stats.TotalTokens)
+		a.fb.TokensUsed(response.Stats.TotalTokens, response.Stats.CacheReadTokens)
 
 		for _, call := range response.ToolCalls {
 			a.fb.ToolCalled(call.Name, call.Arguments)

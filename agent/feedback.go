@@ -38,8 +38,9 @@ type Feedback interface {
 	ModelInfoUnavailable()
 	// TokensUsed fires after each response that asks for tools, so token usage can
 	// be tracked before the final answer. The final answer's usage is in
-	// [Response.Metadata].
-	TokensUsed(totalTokens int)
+	// [Response.Metadata]. cacheReadTokens is the part of that response's prompt
+	// read from the prompt cache.
+	TokensUsed(totalTokens, cacheReadTokens int)
 	// SessionReset fires when [Agent.ResetSession] clears a session.
 	SessionReset()
 	// SessionStarted fires when [Agent.StartSession] begins a new conversation.
@@ -107,7 +108,7 @@ func (s *writerFeedback) ModelInfoUnavailable() {
 	_, _ = fmt.Fprintln(s.stdout, "Model info unavailable; automatic context compaction is disabled")
 }
 
-func (s *writerFeedback) TokensUsed(totalTokens int) {
+func (s *writerFeedback) TokensUsed(totalTokens, _ int) {
 	_, _ = fmt.Fprintln(s.stdout, "Tokens used:", totalTokens)
 }
 
@@ -160,7 +161,7 @@ func (NopFeedback) ModelInfoUnavailable() {
 }
 
 // TokensUsed does nothing.
-func (NopFeedback) TokensUsed(_ int) {
+func (NopFeedback) TokensUsed(_, _ int) {
 }
 
 // SessionReset does nothing.

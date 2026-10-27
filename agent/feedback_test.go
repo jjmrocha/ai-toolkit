@@ -17,7 +17,7 @@ func exerciseAllEvents(fb Feedback) {
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
 	fb.ModelInfoUnavailable()
-	fb.TokensUsed(5)
+	fb.TokensUsed(5, 0)
 	fb.SessionReset()
 	fb.SessionClosed()
 }
@@ -71,7 +71,7 @@ func TestNewWriterFeedback(t *testing.T) {
 		{
 			name: "tokens used",
 			fire: func(fb Feedback) {
-				fb.TokensUsed(115)
+				fb.TokensUsed(115, 0)
 			},
 			expected: "Tokens used: 115\n",
 		},

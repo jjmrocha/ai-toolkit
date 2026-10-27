@@ -30,8 +30,8 @@ func (c *childFeedback) ToolCalled(toolName string, _ map[string]any) {
 	c.fb.ToolCalled(c.name, toolName)
 }
 
-func (c *childFeedback) TokensUsed(totalTokens int) {
-	c.fb.TokensUsed(c.name, totalTokens)
+func (c *childFeedback) TokensUsed(totalTokens, cacheReadTokens int) {
+	c.fb.TokensUsed(c.name, totalTokens, cacheReadTokens)
 }
 
 // Manager holds the sub-agents a program offers, by name. Add one with
@@ -169,7 +169,7 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 		return "", err
 	}
 
-	fb.TokensUsed(name, response.Metadata.TotalTokens)
+	fb.TokensUsed(name, response.Metadata.TotalTokens, response.Metadata.CacheReadTokens)
 	fb.SubagentFinished(name, nil)
 
 	return response.Content, nil

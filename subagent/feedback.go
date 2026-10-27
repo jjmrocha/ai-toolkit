@@ -15,8 +15,9 @@ type Feedback interface {
 	// ToolCalled fires just before the sub-agent runs the named tool.
 	ToolCalled(agentName string, toolName string)
 	// TokensUsed fires after each response of the sub-agent, the final answer
-	// included. totalTokens is that response's total.
-	TokensUsed(agentName string, totalTokens int)
+	// included. totalTokens is that response's total. cacheReadTokens is the part
+	// of that response's prompt read from the prompt cache.
+	TokensUsed(agentName string, totalTokens, cacheReadTokens int)
 }
 
 // NopFeedback is a [Feedback] that ignores every event. [NewManager] installs
@@ -40,5 +41,5 @@ func (NopFeedback) ToolCalled(_ string, _ string) {
 }
 
 // TokensUsed does nothing.
-func (NopFeedback) TokensUsed(_ string, _ int) {
+func (NopFeedback) TokensUsed(_ string, _, _ int) {
 }

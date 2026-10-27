@@ -119,6 +119,7 @@ type recordingFeedback struct {
 	toolArgs   []map[string]any
 	returns    []toolReturn
 	stats      []int
+	cached     []int
 	interim    []string
 	resumedIDs []string
 }
@@ -137,8 +138,9 @@ func (f *recordingFeedback) InterimTextReceived(content string) {
 	f.interim = append(f.interim, content)
 	f.events = append(f.events, "InterimTextReceived")
 }
-func (f *recordingFeedback) TokensUsed(totalTokens int) {
+func (f *recordingFeedback) TokensUsed(totalTokens, cacheReadTokens int) {
 	f.stats = append(f.stats, totalTokens)
+	f.cached = append(f.cached, cacheReadTokens)
 	f.events = append(f.events, "TokensUsed")
 }
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
@@ -834,6 +836,29 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []int{15, 30}, fb.stats)
 		assert.Equal(t, []string{"SessionStarted", "TokensUsed", "ToolCalled", "ToolReturned", "TokensUsed", "ToolCalled", "ToolReturned"}, fb.events)
+	})
+
+	t.Run("passes each intermediate response's cache-read tokens to TokensUsed", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}, Stats: llm.Stats{PromptTokens: 10, CacheReadTokens: 4, TotalTokens: 15}},
+				{ToolCalls: []llm.ToolCall{{ID: "c2", Name: "echo"}}, Stats: llm.Stats{PromptTokens: 20, CacheReadTokens: 8, TotalTokens: 30}},
+				{Content: "done", Stats: llm.Stats{TotalTokens: 20}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		expected := []int{4, 8}
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, fb.cached)
 	})
 
 	t.Run("fires InterimTextReceived before TokensUsed for text sent with tool calls", func(t *testing.T) {
