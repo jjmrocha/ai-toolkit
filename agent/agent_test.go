@@ -770,6 +770,24 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, "max_tokens", result.Metadata.StopReason)
 	})
 
+	t.Run("copies the cache-read tokens into the metadata", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "hello", Stats: llm.Stats{PromptTokens: 100, CacheReadTokens: 80, TotalTokens: 110}},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		expected := 80
+		// when
+		result, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Metadata.CacheReadTokens)
+	})
+
 	t.Run("runs requested tools and feeds the results back", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}

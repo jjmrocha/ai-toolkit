@@ -13,6 +13,9 @@ type Metadata struct {
 	Iterations int
 	// PromptTokens is the final reply's input tokens.
 	PromptTokens int
+	// CacheReadTokens is the part of PromptTokens read from the prompt cache. It
+	// is zero for providers without prompt caching.
+	CacheReadTokens int
 	// OutputTokens is the final reply's generated tokens.
 	OutputTokens int
 	// TotalTokens is the tokens billed for the final reply.

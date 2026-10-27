@@ -230,14 +230,15 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			return &Response{
 				Content: response.Content,
 				Metadata: Metadata{
-					Iterations:   iteration,
-					PromptTokens: response.Stats.PromptTokens,
-					OutputTokens: response.Stats.OutputTokens,
-					TotalTokens:  response.Stats.TotalTokens,
-					ToolCalls:    callCount,
-					StopReason:   response.StopReason,
-					LLMDuration:  llmDuration,
-					ToolDuration: toolDuration,
+					Iterations:      iteration,
+					PromptTokens:    response.Stats.PromptTokens,
+					CacheReadTokens: response.Stats.CacheReadTokens,
+					OutputTokens:    response.Stats.OutputTokens,
+					TotalTokens:     response.Stats.TotalTokens,
+					ToolCalls:       callCount,
+					StopReason:      response.StopReason,
+					LLMDuration:     llmDuration,
+					ToolDuration:    toolDuration,
 				},
 			}, nil
 		}
