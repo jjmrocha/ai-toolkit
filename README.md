@@ -281,6 +281,7 @@ defer pack.Close()
 | `CodingTools` | Symbol-aware code navigation and editing in one project, via [Serena](https://github.com/oraios/serena). The model cannot switch to another project. Read-only mode registers only the reading and navigation tools | `uvx` on `PATH`; a project folder |
 | `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH`; Node.js 24 or newer |
 | `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7) | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |
+| `FinanceTools` | Market data from Yahoo Finance: quotes, price history, financial statements, analyst estimates, news, holders, funds, options and screeners, via [yfmcp](https://github.com/narumiruna/yfinance-mcp) | `uvx` on `PATH` |
 | `ShellTools` | A `/bin/sh` command runner | — |
 | `FileTools` | The files in one folder, and no files outside it. Read-only mode registers only reading, listing and searching | — |
 | `DateTools` | The date, time of day and time zone | — |
