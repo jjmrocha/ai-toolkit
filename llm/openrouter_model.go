@@ -98,8 +98,17 @@ type orStreamToolCall struct {
 	Function orToolCallFunction `json:"function"`
 }
 
+type orErrorResponse struct {
+	Error orError `json:"error"`
+}
+
 type orError struct {
-	Message string `json:"message"`
+	Message  string          `json:"message"`
+	Metadata orErrorMetadata `json:"metadata"`
+}
+
+type orErrorMetadata struct {
+	Reason string `json:"reason"`
 }
 
 type orModelsResponse struct {

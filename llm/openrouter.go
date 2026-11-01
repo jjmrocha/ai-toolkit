@@ -1,11 +1,13 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/go-resty/resty/v2"
@@ -16,6 +18,8 @@ const (
 	openrouterBaseURL        = "https://openrouter.ai/api/v1"
 	openrouterChatEndpoint   = "/chat/completions"
 	openrouterModelsEndpoint = "/models"
+
+	openrouterInFlightBudgetExhausted = "in_flight_budget_exhausted"
 )
 
 type openrouter struct {
@@ -61,6 +65,7 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 		SetContext(ctx).
 		SetBody(request).
 		SetDoNotParseResponse(true).
+		AddRetryCondition(isORInFlightBudgetExhausted).
 		Post(openrouterChatEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("openrouter: sending request: %w", err)
@@ -84,6 +89,21 @@ func (o *openrouter) chat(ctx context.Context, messages []Message, tools []Tool)
 	}
 
 	return fromORToAssistantMessage(apiResp)
+}
+
+func isORInFlightBudgetExhausted(resp *resty.Response, _ error) bool {
+	if resp == nil || resp.StatusCode() != http.StatusPaymentRequired {
+		return false
+	}
+
+	raw := resp.RawBody()
+	message, _ := io.ReadAll(raw)
+	_ = raw.Close()
+	resp.RawResponse.Body = io.NopCloser(bytes.NewReader(message))
+
+	var apiErr orErrorResponse
+	_ = json.Unmarshal(message, &apiErr)
+	return apiErr.Error.Metadata.Reason == openrouterInFlightBudgetExhausted
 }
 
 func readORStream(body io.Reader) (orChatResponse, error) {

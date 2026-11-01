@@ -1,12 +1,14 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -292,6 +294,77 @@ func TestOpenRouterChat(t *testing.T) {
 		assert.Equal(t, int32(2), calls.Load())
 	})
 
+	t.Run("retries on 402 in-flight budget exhausted and then succeeds", func(t *testing.T) {
+		// given
+		var calls atomic.Int32
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			if calls.Add(1) == 1 {
+				writeORPaymentRequired(t, w, "in_flight_budget_exhausted", "1")
+				return
+			}
+			writeSSE(t, w, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`, `[DONE]`)
+		})
+		o.client.SetRetryMaxWaitTime(time.Millisecond)
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "ok", result.Content)
+		assert.Equal(t, int32(2), calls.Load())
+	})
+
+	t.Run("returns the 402 error when the in-flight budget stays exhausted", func(t *testing.T) {
+		// given
+		var calls atomic.Int32
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			writeORPaymentRequired(t, w, "in_flight_budget_exhausted", "1")
+		})
+		o.client.SetRetryMaxWaitTime(time.Millisecond)
+		expected := int32(o.client.RetryCount + 1)
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "unexpected status 402")
+		assert.ErrorContains(t, err, "in_flight_budget_exhausted")
+		assert.Equal(t, expected, calls.Load())
+	})
+
+	t.Run("does not retry any other 402", func(t *testing.T) {
+		// given
+		var calls atomic.Int32
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			writeORPaymentRequired(t, w, "weight_exceeds_budget", "1")
+		})
+		o.client.SetRetryMaxWaitTime(time.Millisecond)
+		// when
+		result, err := o.chat(t.Context(), []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorContains(t, err, "unexpected status 402")
+		assert.ErrorContains(t, err, "weight_exceeds_budget")
+		assert.Equal(t, int32(1), calls.Load())
+	})
+
+	t.Run("stops waiting to retry a 402 when the context is cancelled", func(t *testing.T) {
+		// given
+		ctx, cancel := context.WithCancel(t.Context())
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			writeORPaymentRequired(t, w, "in_flight_budget_exhausted", "30")
+			time.AfterFunc(50*time.Millisecond, cancel)
+		})
+		start := time.Now()
+		// when
+		result, err := o.chat(ctx, []Message{UserMessage{Content: "Hi"}}, nil)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Less(t, time.Since(start), time.Second)
+	})
+
 	t.Run("returns an error when a chunk mid-stream carries an error", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
@@ -435,6 +508,17 @@ func newTestProvider(t testing.TB, handler http.HandlerFunc) *openrouter {
 func writeJSON(t testing.TB, w http.ResponseWriter, body string) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
+	if _, err := io.WriteString(w, body); err != nil {
+		t.Fatalf("writing response body: %v", err)
+	}
+}
+
+func writeORPaymentRequired(t testing.TB, w http.ResponseWriter, reason, retryAfter string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", retryAfter)
+	w.WriteHeader(http.StatusPaymentRequired)
+	body := `{"error":{"message":"payment required","code":402,"metadata":{"reason":"` + reason + `"}}}`
 	if _, err := io.WriteString(w, body); err != nil {
 		t.Fatalf("writing response body: %v", err)
 	}
