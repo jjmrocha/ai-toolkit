@@ -385,13 +385,15 @@ func TestManagerRun(t *testing.T) {
 			calls         []map[string]any
 			debuggedAgent string
 			debugged      []llm.Message
+			debuggedErr   error
 		)
 
 		child, _ := newChild(t, toolCallReply, answerReply)
 		manager := NewManager()
-		manager.SetDebugger(func(agentName string, messages []llm.Message) {
+		manager.SetDebugger(func(agentName string, messages []llm.Message, err error) {
 			debuggedAgent = agentName
 			debugged = messages
+			debuggedErr = err
 		})
 		require.NoError(t, manager.Register(Config{Name: "explore", Prompt: "You explore code."}, child, newEchoToolBox(t, &calls), nil))
 		// when
@@ -407,6 +409,7 @@ func TestManagerRun(t *testing.T) {
 			{Role: "assistant", Content: "the answer"},
 		}
 		assert.Equal(t, expected, toChatMessages(debugged))
+		assert.NoError(t, debuggedErr)
 	})
 
 	t.Run("offers the child no tools when the agent has no ToolBox", func(t *testing.T) {
@@ -522,6 +525,64 @@ func TestManagerRun(t *testing.T) {
 		assert.ErrorIs(t, err, agent.ErrMaxIterations)
 		assert.Empty(t, result)
 		assert.Len(t, calls, 2)
+	})
+
+	t.Run("gives the debugger the partial conversation and ErrMaxIterations when the child reaches the iteration cap", func(t *testing.T) {
+		// given
+		var (
+			calls       []map[string]any
+			debugged    []llm.Message
+			debuggedErr error
+		)
+
+		model, _ := newModelServer(t, toolCallReply)
+		child, err := agent.New(agent.Config{MaxIterations: 1}, model)
+		require.NoError(t, err)
+
+		manager := NewManager()
+		manager.SetDebugger(func(_ string, messages []llm.Message, err error) {
+			debugged = messages
+			debuggedErr = err
+		})
+		require.NoError(t, manager.Register(Config{Name: "explore", Prompt: "You explore code."}, child, newEchoToolBox(t, &calls), nil))
+		// when
+		_, err = manager.Run(t.Context(), "explore", "say hi")
+		// then
+		require.ErrorIs(t, err, agent.ErrMaxIterations)
+		expected := []chatMessage{
+			{Role: "system", Content: "You explore code."},
+			{Role: "user", Content: "say hi"},
+			{Role: "assistant"},
+			{Role: "tool", Content: "echoed"},
+		}
+		assert.Equal(t, expected, toChatMessages(debugged))
+		assert.ErrorIs(t, debuggedErr, agent.ErrMaxIterations)
+	})
+
+	t.Run("gives the debugger the conversation and the model's error", func(t *testing.T) {
+		// given
+		var (
+			debugged    []llm.Message
+			debuggedErr error
+		)
+
+		child, _ := newChild(t, errorReply)
+		manager := NewManager()
+		manager.SetDebugger(func(_ string, messages []llm.Message, err error) {
+			debugged = messages
+			debuggedErr = err
+		})
+		require.NoError(t, manager.Register(Config{Name: "explore", Prompt: "You explore code."}, child, nil, nil))
+		// when
+		_, err := manager.Run(t.Context(), "explore", "find the parser")
+		// then
+		require.Error(t, err)
+		expected := []chatMessage{
+			{Role: "system", Content: "You explore code."},
+			{Role: "user", Content: "find the parser"},
+		}
+		assert.Equal(t, expected, toChatMessages(debugged))
+		assert.ErrorContains(t, debuggedErr, "boom")
 	})
 
 	t.Run("stops the child when the context is cancelled", func(t *testing.T) {
@@ -652,7 +713,7 @@ func TestManagerRun(t *testing.T) {
 
 				child, _ := newChild(t, answerReply)
 				manager := NewManager()
-				manager.SetDebugger(func(agentName string, _ []llm.Message) {
+				manager.SetDebugger(func(agentName string, _ []llm.Message, _ error) {
 					debugged = append(debugged, agentName)
 				})
 				require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
@@ -724,7 +785,7 @@ func TestManagerSetDebugger(t *testing.T) {
 
 		child, _ := newChild(t, answerReply)
 		manager := NewManager()
-		manager.SetDebugger(func(agentName string, _ []llm.Message) {
+		manager.SetDebugger(func(agentName string, _ []llm.Message, _ error) {
 			debugged = append(debugged, agentName)
 		})
 		require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
@@ -768,7 +829,7 @@ func TestManagerConcurrentUse(t *testing.T) {
 
 			go func() {
 				defer group.Done()
-				manager.SetDebugger(func(_ string, _ []llm.Message) {})
+				manager.SetDebugger(func(_ string, _ []llm.Message, _ error) {})
 			}()
 
 			go func() {

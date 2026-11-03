@@ -67,8 +67,8 @@ func (m *Manager) SetFeedback(fb Feedback) {
 	m.fb = fb
 }
 
-// SetDebugger sets d as the [Debugger] that receives the conversation of every
-// successful run, replacing the previous one. A nil d removes it, which is the
+// SetDebugger sets d as the [Debugger] that receives the conversation and error
+// of every run, replacing the previous one. A nil d removes it, which is the
 // default. A run in progress keeps the Debugger it started with.
 func (m *Manager) SetDebugger(d Debugger) {
 	m.mu.Lock()
@@ -138,8 +138,9 @@ func (m *Manager) Agents() []Info {
 // the first user message under ctx, and closes the session before returning.
 // So the agent sees nothing but prompt, and no conversation outlives the call.
 // Run reports the run's events to the manager's [Feedback]; see
-// [Manager.SetFeedback]. A successful run also gives its conversation to the
-// manager's [Debugger], if one is set; see [Manager.SetDebugger].
+// [Manager.SetFeedback]. Run also gives the conversation and the error, on
+// success or failure, to the manager's [Debugger], if one is set; see
+// [Manager.SetDebugger].
 //
 // Run returns [ErrNoPrompt] when prompt is empty and [ErrAgentNotFound] when no
 // agent is registered under name, in both cases without calling the model. An
@@ -177,18 +178,19 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 	child.StartSession(session)
 
 	response, err := child.Process(ctx, prompt)
-	if err != nil {
-		fb.SubagentFinished(name, err)
-		return "", err
+	if err == nil {
+		fb.TokensUsed(name, response.Metadata.TotalTokens, response.Metadata.CacheReadTokens)
 	}
-
-	fb.TokensUsed(name, response.Metadata.TotalTokens, response.Metadata.CacheReadTokens)
 
 	if debugger != nil {
-		debugger(name, child.Messages())
+		debugger(name, child.Messages(), err)
 	}
 
-	fb.SubagentFinished(name, nil)
+	fb.SubagentFinished(name, err)
+
+	if err != nil {
+		return "", err
+	}
 
 	return response.Content, nil
 }

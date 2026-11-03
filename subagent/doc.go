@@ -17,10 +17,11 @@
 // child agent's [agent.Feedback].
 //
 // To review what a child did, install a [Debugger] with [Manager.SetDebugger].
-// It receives the child's whole conversation when a run succeeds: the system
-// message, the task, and every reply, tool call and tool result. It is separate
-// from the Feedback, so a UI that follows runs and a host that saves them for
-// review do not replace each other.
+// It receives the child's whole conversation when a run ends: the system
+// message, the task, and every reply, tool call and tool result. A failed run
+// gives the conversation up to where the child stopped, with the error. It is
+// separate from the Feedback, so a UI that follows runs and a host that saves
+// them for review do not replace each other.
 //
 // The program supplies everything a child uses, the agent and its model
 // included, and nothing is inherited from the agent that asked. That has three

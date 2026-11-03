@@ -355,7 +355,7 @@ defer pack.Close()
 - To start a sub-agent from your own code, call `Run`.
 - `SetFeedback` installs a `Feedback` that reports the start, end, tool calls and token usage of each run. Each event includes the sub-agent's name.
 - `Run` replaces the `agent.Feedback` of the sub-agent's agent.
-- `SetDebugger` installs a `Debugger` that receives the full conversation of each successful run, so you can save it and review how the sub-agent followed its instructions.
+- `SetDebugger` installs a `Debugger` that receives the full conversation and the error of each run, so you can save it and review how the sub-agent followed its instructions. A failed run gives the conversation up to where the child stopped.
 
 ## Security
 
