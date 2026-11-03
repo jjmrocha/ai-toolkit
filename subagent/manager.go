@@ -39,9 +39,10 @@ func (c *childFeedback) TokensUsed(totalTokens, cacheReadTokens int) {
 // with [Manager.Run]. It is safe for concurrent use, within the limit
 // [Manager.Run] states.
 type Manager struct {
-	mu     sync.RWMutex
-	agents map[string]subAgent
-	fb     Feedback
+	mu       sync.RWMutex
+	agents   map[string]subAgent
+	fb       Feedback
+	debugger Debugger
 }
 
 // NewManager returns an empty [Manager].
@@ -64,6 +65,16 @@ func (m *Manager) SetFeedback(fb Feedback) {
 	defer m.mu.Unlock()
 
 	m.fb = fb
+}
+
+// SetDebugger sets d as the [Debugger] that receives the conversation of every
+// successful run, replacing the previous one. A nil d removes it, which is the
+// default. A run in progress keeps the Debugger it started with.
+func (m *Manager) SetDebugger(d Debugger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.debugger = d
 }
 
 // Register stores a sub-agent under cfg.Name, replacing any with that name.
@@ -127,7 +138,8 @@ func (m *Manager) Agents() []Info {
 // the first user message under ctx, and closes the session before returning.
 // So the agent sees nothing but prompt, and no conversation outlives the call.
 // Run reports the run's events to the manager's [Feedback]; see
-// [Manager.SetFeedback].
+// [Manager.SetFeedback]. A successful run also gives its conversation to the
+// manager's [Debugger], if one is set; see [Manager.SetDebugger].
 //
 // Run returns [ErrNoPrompt] when prompt is empty and [ErrAgentNotFound] when no
 // agent is registered under name, in both cases without calling the model. An
@@ -143,6 +155,7 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 
 	m.mu.RLock()
 	fb := m.fb
+	debugger := m.debugger
 	registered, ok := m.agents[name]
 	m.mu.RUnlock()
 
@@ -170,6 +183,11 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 	}
 
 	fb.TokensUsed(name, response.Metadata.TotalTokens, response.Metadata.CacheReadTokens)
+
+	if debugger != nil {
+		debugger(name, child.Messages())
+	}
+
 	fb.SubagentFinished(name, nil)
 
 	return response.Content, nil

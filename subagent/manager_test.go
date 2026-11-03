@@ -124,6 +124,23 @@ func (f *recordingFeedback) recorded() ([]string, []error) {
 	return slices.Clone(f.events), slices.Clone(f.finishErrs)
 }
 
+func toChatMessages(messages []llm.Message) []chatMessage {
+	return fn.Map(messages, func(m llm.Message) chatMessage {
+		switch v := m.(type) {
+		case llm.SystemMessage:
+			return chatMessage{Role: string(v.Role()), Content: v.Content}
+		case llm.UserMessage:
+			return chatMessage{Role: string(v.Role()), Content: v.Content}
+		case llm.AssistantMessage:
+			return chatMessage{Role: string(v.Role()), Content: v.Content}
+		case llm.ToolMessage:
+			return chatMessage{Role: string(v.Role()), Content: v.Content}
+		default:
+			return chatMessage{Role: string(m.Role())}
+		}
+	})
+}
+
 func newModelServer(t *testing.T, replies ...string) (*llm.LLM, *modelServer) {
 	t.Helper()
 
@@ -362,6 +379,36 @@ func TestManagerRun(t *testing.T) {
 		assert.Contains(t, requests[1].Messages, expected)
 	})
 
+	t.Run("gives the debugger the child's full conversation", func(t *testing.T) {
+		// given
+		var (
+			calls         []map[string]any
+			debuggedAgent string
+			debugged      []llm.Message
+		)
+
+		child, _ := newChild(t, toolCallReply, answerReply)
+		manager := NewManager()
+		manager.SetDebugger(func(agentName string, messages []llm.Message) {
+			debuggedAgent = agentName
+			debugged = messages
+		})
+		require.NoError(t, manager.Register(Config{Name: "explore", Prompt: "You explore code."}, child, newEchoToolBox(t, &calls), nil))
+		// when
+		_, err := manager.Run(t.Context(), "explore", "say hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "explore", debuggedAgent)
+		expected := []chatMessage{
+			{Role: "system", Content: "You explore code."},
+			{Role: "user", Content: "say hi"},
+			{Role: "assistant"},
+			{Role: "tool", Content: "echoed"},
+			{Role: "assistant", Content: "the answer"},
+		}
+		assert.Equal(t, expected, toChatMessages(debugged))
+	})
+
 	t.Run("offers the child no tools when the agent has no ToolBox", func(t *testing.T) {
 		// given
 		child, server := newChild(t, answerReply)
@@ -584,6 +631,40 @@ func TestManagerRun(t *testing.T) {
 		}
 	})
 
+	t.Run("does not call the debugger when the run is rejected", func(t *testing.T) {
+		tests := map[string]struct {
+			name   string
+			prompt string
+		}{
+			"empty prompt": {
+				name: "explore",
+			},
+			"unknown agent": {
+				name:   "plan",
+				prompt: "find the parser",
+			},
+		}
+
+		for name, tt := range tests {
+			t.Run(name, func(t *testing.T) {
+				// given
+				var debugged []string
+
+				child, _ := newChild(t, answerReply)
+				manager := NewManager()
+				manager.SetDebugger(func(agentName string, _ []llm.Message) {
+					debugged = append(debugged, agentName)
+				})
+				require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
+				// when
+				_, err := manager.Run(t.Context(), tt.name, tt.prompt)
+				// then
+				require.Error(t, err)
+				assert.Empty(t, debugged)
+			})
+		}
+	})
+
 	t.Run("tags the events with the name the run was started with", func(t *testing.T) {
 		// given
 		var calls []map[string]any
@@ -636,8 +717,28 @@ func TestManagerSetFeedback(t *testing.T) {
 	})
 }
 
+func TestManagerSetDebugger(t *testing.T) {
+	t.Run("removes the debugger when given nil", func(t *testing.T) {
+		// given
+		var debugged []string
+
+		child, _ := newChild(t, answerReply)
+		manager := NewManager()
+		manager.SetDebugger(func(agentName string, _ []llm.Message) {
+			debugged = append(debugged, agentName)
+		})
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, nil, nil))
+		// when
+		manager.SetDebugger(nil)
+		// then
+		_, err := manager.Run(t.Context(), "explore", "find the parser")
+		require.NoError(t, err)
+		assert.Empty(t, debugged)
+	})
+}
+
 func TestManagerConcurrentUse(t *testing.T) {
-	t.Run("registers, lists, sets feedback and runs from several goroutines", func(t *testing.T) {
+	t.Run("registers, lists, sets feedback and debugger, and runs from several goroutines", func(t *testing.T) {
 		// given
 		model, _ := newModelServer(t, answerReply)
 		manager := NewManager()
@@ -653,7 +754,7 @@ func TestManagerConcurrentUse(t *testing.T) {
 		// when
 		var group sync.WaitGroup
 		for _, name := range names {
-			group.Add(4)
+			group.Add(5)
 
 			go func() {
 				defer group.Done()
@@ -663,6 +764,11 @@ func TestManagerConcurrentUse(t *testing.T) {
 			go func() {
 				defer group.Done()
 				manager.SetFeedback(&recordingFeedback{})
+			}()
+
+			go func() {
+				defer group.Done()
+				manager.SetDebugger(func(_ string, _ []llm.Message) {})
 			}()
 
 			go func() {

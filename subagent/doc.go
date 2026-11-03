@@ -16,6 +16,12 @@
 // of every run, tagged with the sub-agent's name. For this, Run replaces the
 // child agent's [agent.Feedback].
 //
+// To review what a child did, install a [Debugger] with [Manager.SetDebugger].
+// It receives the child's whole conversation when a run succeeds: the system
+// message, the task, and every reply, tool call and tool result. It is separate
+// from the Feedback, so a UI that follows runs and a host that saves them for
+// review do not replace each other.
+//
 // The program supplies everything a child uses, the agent and its model
 // included, and nothing is inherited from the agent that asked. That has three
 // consequences. A [tools.Interceptor] set on another ToolBox does not cover a
