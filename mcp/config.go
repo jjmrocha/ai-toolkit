@@ -6,8 +6,16 @@ import "time"
 // run through os/exec with no shell, so they are trusted input: take them from
 // operator configuration, never from an untrusted source.
 type ClientConfig struct {
-	// Name namespaces this server's tools in the ToolBox as "<Name>__<tool>".
+	// Name namespaces this server's tools in the ToolBox as "<Name>__<tool>",
+	// unless NoToolPrefix is set.
 	Name string
+	// NoToolPrefix registers this server's tools under the names the server
+	// publishes, without the "<Name>__" prefix. The names are still sanitized and
+	// shortened to fit [tools.MaxToolNameLength]. A name already in the ToolBox
+	// makes [NewClient] fail with [ErrToolNameTaken], so the server never
+	// replaces another tool. A tool added to the ToolBox later under the same
+	// name still replaces the server's tool.
+	NoToolPrefix bool
 	// Command is the server executable to launch.
 	Command string
 	// Args are the arguments passed to Command.

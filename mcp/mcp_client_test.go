@@ -59,6 +59,50 @@ func TestNewClient(t *testing.T) {
 		assert.Equal(t, expected, registeredToolNames(toolBox))
 	})
 
+	t.Run("registers the server's tools under their own names", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search", "fetch"}, nil)
+		ctx := t.Context()
+		toolBox := tools.NewToolBox()
+		cfg := ClientConfig{Name: "playwright", Command: "npx", NoToolPrefix: true}
+		// when
+		client, err := NewClient(ctx, cfg, toolBox)
+		// then
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+		expected := []string{"fetch", "search"}
+		assert.Equal(t, expected, registeredToolNames(toolBox))
+	})
+
+	t.Run("fails when a tool name is already taken", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search", "fetch"}, nil)
+		ctx := t.Context()
+		toolBox := tools.NewToolBox()
+		require.NoError(t, toolBox.Add(llm.Tool{Name: "search"}, testHandler))
+		cfg := ClientConfig{Name: "playwright", Command: "npx", NoToolPrefix: true}
+		// when
+		result, err := NewClient(ctx, cfg, toolBox)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrToolNameTaken)
+		expected := []string{"search"}
+		assert.Equal(t, expected, registeredToolNames(toolBox))
+	})
+
+	t.Run("keeps today's behavior for a name already taken when the prefix is on", func(t *testing.T) {
+		// given
+		startTestMCPServer(t, []string{"search"}, nil)
+		ctx := t.Context()
+		toolBox := tools.NewToolBox()
+		require.NoError(t, toolBox.Add(llm.Tool{Name: "playwright__search"}, testHandler))
+		// when
+		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		// then
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = client.Close() })
+	})
+
 	t.Run("registers nothing with a nil ToolBox and still calls tools", func(t *testing.T) {
 		// given
 		startTestMCPServer(t, []string{"search"}, nil)
@@ -150,6 +194,16 @@ func TestClientToolName(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
+	t.Run("uses the server's own name without the prefix", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{Name: "playwright", NoToolPrefix: true}}
+		// when
+		result := c.toolName("browser_navigate", nil)
+		// then
+		expected := "browser_navigate"
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("replaces characters the providers reject", func(t *testing.T) {
 		// given
 		c := &Client{config: ClientConfig{Name: "web.tools"}}
@@ -166,6 +220,16 @@ func TestClientToolName(t *testing.T) {
 		c := &Client{config: ClientConfig{Name: strings.Repeat("a", 40)}}
 		// when
 		result := c.toolName(strings.Repeat("b", 40), nil)
+		// then
+		assert.Len(t, result, tools.MaxToolNameLength)
+		assert.True(t, tools.ValidToolName(result))
+	})
+
+	t.Run("still shortens an unprefixed name the providers would reject for length", func(t *testing.T) {
+		// given
+		c := &Client{config: ClientConfig{Name: "playwright", NoToolPrefix: true}}
+		// when
+		result := c.toolName(strings.Repeat("b", 70), nil)
 		// then
 		assert.Len(t, result, tools.MaxToolNameLength)
 		assert.True(t, tools.ValidToolName(result))

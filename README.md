@@ -228,7 +228,7 @@ if err != nil {
 defer client.Close()
 ```
 
-- The client registers each server tool as `<Name>__<tool>`. When the server's tool list changes, the client updates the registered tools.
+- The client registers each server tool as `<Name>__<tool>`. Set `NoToolPrefix` to keep the server's own tool names. Then `NewClient` fails with `ErrToolNameTaken` if a name is already in the `ToolBox`. When the server's tool list changes, the client updates the registered tools.
 - `Close` stops the server process and removes its tools. If the server disconnects, the client also removes its tools.
 - The server gets a filtered set of environment variables. To give it other variables, name them in `InheritEnv`.
 - `Manager` starts and stops several servers by name. All their tools go into one `ToolBox`.

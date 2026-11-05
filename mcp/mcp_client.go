@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -37,9 +38,10 @@ type Client struct {
 
 // NewClient launches the MCP server described by cfg, completes the handshake
 // and registers the server's tools in tb, all bounded by ctx. Each tool is
-// registered as "<ClientConfig.Name>__<tool>", with a handler that forwards the
-// call to the server. A namespaced name the providers would reject is
-// rewritten, not dropped; the server is still called by its own name. Tools in
+// registered as "<ClientConfig.Name>__<tool>", or under its own name when
+// [ClientConfig.NoToolPrefix] is set, with a handler that forwards the call to
+// the server. A name the providers would reject is rewritten, not dropped; the
+// server is still called by its own name. Tools in
 // [ClientConfig.ExcludedTools] are skipped, and so are tools missing from a
 // non-empty [ClientConfig.IncludedTools]. A server whose handshake declared
 // no tools capability is not asked for a list: nothing is registered and the
@@ -48,10 +50,11 @@ type Client struct {
 // client used only through [Client.CallTool].
 //
 // The server runs until [Client.Close], which removes its tools from tb again.
-// It returns [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete, or
-// an error if the server fails to start, the handshake fails or its tools
-// cannot be registered. On a registration error the server is stopped before
-// NewClient returns.
+// It returns [ErrNameRequired] or [ErrCommandRequired] if cfg is incomplete,
+// [ErrToolNameTaken] if [ClientConfig.NoToolPrefix] is set and a tool name is
+// already in tb, or an error if the server fails to start, the handshake fails
+// or its tools cannot be registered. On a registration error the server is
+// stopped before NewClient returns.
 func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Client, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameRequired
@@ -92,7 +95,8 @@ func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Clien
 	return c, nil
 }
 
-// Name returns the client's name, which prefixes the tools it registers.
+// Name returns the client's name, which prefixes the tools it registers unless
+// [ClientConfig.NoToolPrefix] is set.
 func (c *Client) Name() string {
 	return c.config.Name
 }
@@ -192,7 +196,7 @@ func (c *Client) registerTools(ctx context.Context, tb *tools.ToolBox) error {
 			Schema:      spec.schema,
 		}
 
-		if err := tb.Add(tool, c.makeHandler(spec.name)); err != nil {
+		if err := c.addTool(tb, tool, c.makeHandler(spec.name)); err != nil {
 			for _, name := range registered {
 				tb.Remove(name)
 			}
@@ -207,6 +211,16 @@ func (c *Client) registerTools(ctx context.Context, tb *tools.ToolBox) error {
 	c.tools = registered
 
 	return nil
+}
+
+func (c *Client) addTool(tb *tools.ToolBox, tool llm.Tool, handler tools.Handler) error {
+	if c.config.NoToolPrefix {
+		if _, taken := tb.Tool(tool.Name); taken {
+			return fmt.Errorf("%w: %q", ErrToolNameTaken, tool.Name)
+		}
+	}
+
+	return tb.Add(tool, handler)
 }
 
 // CallTool calls the server's tool named tool with args and returns its text
@@ -238,6 +252,10 @@ func (c *Client) excluded(tool string) bool {
 
 func (c *Client) toolName(tool string, taken []string) string {
 	original := c.config.Name + "__" + tool
+	if c.config.NoToolPrefix {
+		original = tool
+	}
+
 	name := tools.SanitizeToolName(original)
 
 	if len(name) <= tools.MaxToolNameLength && !slices.Contains(taken, name) {
