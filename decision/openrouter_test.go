@@ -63,7 +63,7 @@ func TestOpenRouterAsk(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, http.MethodPost, gotMethod)
-		assert.Equal(t, "/decisions", gotPath)
+		assert.Equal(t, "/v1/systemone", gotPath)
 		assert.Equal(t, "Bearer sk-test", gotAuth)
 
 		var body map[string]any

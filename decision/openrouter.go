@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	openrouterBaseURL          = "https://openrouter.ai/api/alpha"
-	openrouterDecisionEndpoint = "/decisions"
+	openrouterBaseURL          = "https://openrouter.ai/api"
+	openrouterDecisionEndpoint = "/v1/systemone"
 )
 
 type openrouter struct {
