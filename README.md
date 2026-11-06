@@ -162,6 +162,7 @@ fmt.Println(answer.Selected, answer.Confidence)
 - Each answer contains probabilities. You decide which threshold to apply.
 - One request can ask several questions about the same state. The model answers them in parallel.
 - You can use any OpenRouter decision model as `Model`. To list these models, send `GET https://openrouter.ai/api/v1/models?output_modalities=decisions`. The default model list does not include them.
+- To use a local Ollama server, set `Provider` to `decision.ProviderOllama` and `Model` to an Ollama decision model, such as `nimble`. Ollama needs no API key and must be version 0.35 or later.
 
 ### `tools`
 
