@@ -277,17 +277,18 @@ defer pack.Close()
 
 | Pack | Gives the model | Needs |
 | --- | --- | --- |
-| `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch). `noToolPrefix` registers the tools without the `donsetch__` prefix | `npx` on `PATH` |
-| `CodingTools` | Symbol-aware code navigation and editing in one project, via [Serena](https://github.com/oraios/serena). The model cannot switch to another project. Read-only mode registers only the reading and navigation tools. `NoToolPrefix` registers the tools without the `serena__` prefix | `uvx` on `PATH`; a project folder |
-| `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking). `noToolPrefix` registers the tool without the `thinking__` prefix | `npx` on `PATH`; Node.js 24 or newer |
-| `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7). `noToolPrefix` registers the tools without the `context7__` prefix | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |
-| `FinanceTools` | Market data from Yahoo Finance: quotes, price history, financial statements, analyst estimates, news, holders, funds, options and screeners, via [yfmcp](https://github.com/narumiruna/yfinance-mcp). `noToolPrefix` registers the tools without the `yfinance__` prefix | `uvx` on `PATH` |
+| `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `npx` on `PATH` |
+| `CodingTools` | Symbol-aware code navigation and editing in one project, via [Serena](https://github.com/oraios/serena). The model cannot switch to another project. Read-only mode registers only the reading and navigation tools | `uvx` on `PATH`; a project folder |
+| `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH`; Node.js 24 or newer |
+| `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7) | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |
+| `FinanceTools` | Market data from Yahoo Finance: quotes, price history, financial statements, analyst estimates, news, holders, funds, options and screeners, via [yfmcp](https://github.com/narumiruna/yfinance-mcp) | `uvx` on `PATH` |
 | `ShellTools` | A `/bin/sh` command runner | — |
 | `FileTools` | The files in one folder, and no files outside it. Read-only mode registers only reading, listing and searching | — |
 | `DateTools` | The date, time of day and time zone | — |
 | `DecisionTools` | Typed questions to a decision model, answered with probabilities | A `decision.Decision` |
 | `SubAgentTools` | A `subagent` tool that hands a task to another agent | A `subagent.Manager` |
 
+- The five MCP packs register their tools with the server's prefix, such as `donsetch__web_search`. To keep the server's own names, pass `noToolPrefix` as true, or set `CodingConfig.NoToolPrefix` for `CodingTools`. If a name is already in the `ToolBox`, the pack fails with `mcp.ErrToolNameTaken`.
 - Always call `Close` when you no longer need a pack. It removes the pack's tools and stops the server the pack started, if any.
 - `Instructions` returns the pack's usage instructions for the system prompt. It returns nil when the pack has none.
 
