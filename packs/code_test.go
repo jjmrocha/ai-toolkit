@@ -26,7 +26,7 @@ func Test_serenaMCPConfig(t *testing.T) {
 			"--project", "ai-toolkit",
 		}
 		// when
-		result := serenaMCPConfig("ai-toolkit", false)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// then
 		assert.Equal(t, expected, result.Args)
 	})
@@ -42,16 +42,16 @@ func Test_serenaMCPConfig(t *testing.T) {
 			"initial_instructions",
 		}
 		// when
-		result := serenaMCPConfig("ai-toolkit", false)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// then
 		assert.Equal(t, expected, result.ExcludedTools)
 	})
 
 	t.Run("shares nothing between calls", func(t *testing.T) {
 		// given
-		expected := serenaMCPConfig("ai-toolkit", false)
+		expected := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// when
-		result := serenaMCPConfig("ai-toolkit", false)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		result.ExcludedTools[0] = "find_symbol"
 		// then
 		assert.NotEqual(t, result.ExcludedTools, expected.ExcludedTools)
@@ -66,23 +66,23 @@ func Test_serenaMCPConfig(t *testing.T) {
 			"list_queryable_projects", "query_project",
 		}
 		// when
-		result := serenaMCPConfig("ai-toolkit", true)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit", ReadOnly: true})
 		// then
 		assert.Equal(t, expected, result.IncludedTools)
 	})
 
 	t.Run("registers every tool when not read-only", func(t *testing.T) {
 		// when
-		result := serenaMCPConfig("ai-toolkit", false)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// then
 		assert.Empty(t, result.IncludedTools)
 	})
 
 	t.Run("keeps the arguments and exclusions when read-only", func(t *testing.T) {
 		// given
-		expected := serenaMCPConfig("ai-toolkit", false)
+		expected := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// when
-		result := serenaMCPConfig("ai-toolkit", true)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit", ReadOnly: true})
 		// then
 		assert.Equal(t, expected.Args, result.Args)
 		assert.Equal(t, expected.ExcludedTools, result.ExcludedTools)
@@ -90,12 +90,26 @@ func Test_serenaMCPConfig(t *testing.T) {
 
 	t.Run("shares no read tool list between calls", func(t *testing.T) {
 		// given
-		expected := serenaMCPConfig("ai-toolkit", true)
+		expected := serenaMCPConfig(CodingConfig{Project: "ai-toolkit", ReadOnly: true})
 		// when
-		result := serenaMCPConfig("ai-toolkit", true)
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit", ReadOnly: true})
 		result.IncludedTools[0] = "create_text_file"
 		// then
 		assert.NotEqual(t, result.IncludedTools, expected.IncludedTools)
+	})
+
+	t.Run("registers Serena's tools without the prefix when asked", func(t *testing.T) {
+		// when
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit", NoToolPrefix: true})
+		// then
+		assert.True(t, result.NoToolPrefix)
+	})
+
+	t.Run("keeps the prefix by default", func(t *testing.T) {
+		// when
+		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
+		// then
+		assert.False(t, result.NoToolPrefix)
 	})
 }
 
@@ -104,7 +118,7 @@ func TestCodingTools(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		// when
-		result, err := CodingTools(t.Context(), toolBox, "", false)
+		result, err := CodingTools(t.Context(), toolBox, CodingConfig{})
 		// then
 		require.ErrorIs(t, err, ErrNoProject)
 		assert.Nil(t, result)
@@ -168,5 +182,34 @@ func TestCodingToolsInstructions(t *testing.T) {
 		// then
 		assert.NotContains(t, result.Text, "serena__replace_symbol_body")
 		assert.Contains(t, result.Text, "Serena counts lines from 0")
+	})
+
+	t.Run("tells the model that query_project takes the unprefixed name", func(t *testing.T) {
+		// given
+		pack := &codingTools{project: "ai-toolkit", readOnly: true}
+		// when
+		result := pack.Instructions(t.Context())
+		// then
+		assert.Contains(t, result.Text, "pass find_symbol, not serena__find_symbol")
+	})
+
+	t.Run("names every tool without the prefix when asked", func(t *testing.T) {
+		// given
+		pack := &codingTools{project: "ai-toolkit", noToolPrefix: true}
+		// when
+		result := pack.Instructions(t.Context())
+		// then
+		assert.NotContains(t, result.Text, "serena__")
+		assert.Contains(t, result.Text, "replace_symbol_body")
+		assert.Contains(t, result.Text, "read_file returns the text without line numbers")
+	})
+
+	t.Run("leaves out the query_project note without the prefix", func(t *testing.T) {
+		// given
+		pack := &codingTools{project: "ai-toolkit", readOnly: true, noToolPrefix: true}
+		// when
+		result := pack.Instructions(t.Context())
+		// then
+		assert.NotContains(t, result.Text, "pass find_symbol, not")
 	})
 }

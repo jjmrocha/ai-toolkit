@@ -3,6 +3,7 @@ package packs
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jjmrocha/ai-toolkit/mcp"
@@ -43,6 +44,10 @@ back to serena__search_for_pattern.
 Serena runs calls one at a time, so independent calls can go out together in
 one turn.`
 
+const serenaQueryPrefixInstruction = `serena__query_project takes the name of the
+tool to run without the serena__ prefix:
+pass find_symbol, not serena__find_symbol.`
+
 const serenaEditInstruction = `Edit by symbol when the change covers a whole
 symbol: serena__replace_symbol_body replaces a definition you have read with
 include_body, and serena__insert_before_symbol and serena__insert_after_symbol
@@ -67,7 +72,20 @@ const serenaVersion = "2.1.0"
 
 const serenaName = "serena"
 
-func serenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
+// CodingConfig holds the choices [CodingTools] starts Serena with.
+type CodingConfig struct {
+	// Project is the project Serena activates at startup and keeps active. It
+	// is required: [CodingTools] returns [ErrNoProject] when it is empty.
+	Project string
+	// ReadOnly registers only Serena's reading and navigation tools.
+	ReadOnly bool
+	// NoToolPrefix registers Serena's tools under their own names, such as
+	// "find_symbol", instead of "serena__find_symbol". It sets
+	// [mcp.ClientConfig.NoToolPrefix].
+	NoToolPrefix bool
+}
+
+func serenaMCPConfig(cfg CodingConfig) mcp.ClientConfig {
 	args := []string{
 		"--from", "serena-agent==" + serenaVersion,
 		"serena", "start-mcp-server",
@@ -75,13 +93,14 @@ func serenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 		"--add-mode", "query-projects",
 		"--add-mode", "no-memories",
 		"--enable-web-dashboard", "false",
-		"--project", project,
+		"--project", cfg.Project,
 	}
 
-	cfg := mcp.ClientConfig{
-		Name:    serenaName,
-		Command: "uvx",
-		Args:    args,
+	mcpConfig := mcp.ClientConfig{
+		Name:         serenaName,
+		Command:      "uvx",
+		Args:         args,
+		NoToolPrefix: cfg.NoToolPrefix,
 		ExcludedTools: []string{
 			"execute_shell_command",
 			"write_memory", "read_memory", "list_memories",
@@ -92,8 +111,8 @@ func serenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 		},
 		ToolCallTimeout: 360 * time.Second,
 	}
-	if readOnly {
-		cfg.IncludedTools = []string{
+	if cfg.ReadOnly {
+		mcpConfig.IncludedTools = []string{
 			"read_file", "list_dir", "find_file", "search_for_pattern",
 			"get_symbols_overview", "find_symbol", "find_referencing_symbols",
 			"find_implementations", "find_declaration", "get_diagnostics_for_file",
@@ -101,63 +120,82 @@ func serenaMCPConfig(project string, readOnly bool) mcp.ClientConfig {
 		}
 	}
 
-	return cfg
+	return mcpConfig
 }
 
 type codingTools struct {
-	mcp      *mcp.Client
-	project  string
-	readOnly bool
+	mcp          *mcp.Client
+	project      string
+	readOnly     bool
+	noToolPrefix bool
 }
 
 // CodingTools registers the tools of Serena (https://github.com/oraios/serena)
-// in m under a "serena__" prefix: symbol-aware navigation and editing,
-// diagnostics, file access and read-only queries against other projects. It
-// needs the uvx executable on PATH and no API key. uvx runs a fixed release of
-// Serena, not the latest.
+// in m: symbol-aware navigation and editing, diagnostics, file access and
+// read-only queries against other projects. The tools carry a "serena__"
+// prefix, unless [CodingConfig.NoToolPrefix] is set. It needs the uvx
+// executable on PATH and no API key. uvx runs a fixed release of Serena, not
+// the latest.
 //
 // There is no shell. Serena's own is excluded, so a model that builds or runs
 // code also needs [ShellTools].
 //
-// With readOnly, only these tools are registered: "read_file", "list_dir",
-// "find_file", "search_for_pattern", "get_symbols_overview", "find_symbol",
-// "find_referencing_symbols", "find_implementations", "find_declaration",
-// "get_diagnostics_for_file", "list_queryable_projects" and "query_project". A
-// tool Serena adds later stays out, so a newer Serena release cannot bring in a
-// new editing tool. "serena__query_project" stays, and Serena runs only its read
-// tools through it.
+// With [CodingConfig.ReadOnly], only these tools are registered: "read_file",
+// "list_dir", "find_file", "search_for_pattern", "get_symbols_overview",
+// "find_symbol", "find_referencing_symbols", "find_implementations",
+// "find_declaration", "get_diagnostics_for_file", "list_queryable_projects" and
+// "query_project". A tool Serena adds later stays out, so a newer Serena
+// release cannot bring in a new editing tool. "query_project" stays, and Serena
+// runs only its read tools through it.
 //
-// project is activated at startup and stays the active project; the model
-// cannot switch to another. It returns [ErrNoProject] when project is empty.
-// "serena__query_project" runs a read-only tool against another project Serena
-// knows; its symbolic tools need Serena's project server running, its file and
-// search tools do not.
+// [CodingConfig.Project] is activated at startup and stays the active project;
+// the model cannot switch to another. It returns [ErrNoProject] when the
+// project is empty. "query_project" runs a read-only tool against another
+// project Serena knows; its symbolic tools need Serena's project server
+// running, its file and search tools do not.
 //
 // [ToolPack.Instructions] returns fixed guidance written for this pack, naming
-// the project and stating that Serena counts lines from 0, and, unless readOnly,
-// how to edit.
+// the project, stating that Serena counts lines from 0, and, unless read-only,
+// how to edit. It names the tools as they are registered. With the prefix, it
+// also tells the model that "serena__query_project" takes a tool's name
+// without the prefix.
 //
-// If registration fails, the server is stopped before CodingTools returns. If
-// the server dies later, its tools are removed from m.
-func CodingTools(ctx context.Context, m *tools.ToolBox, project string, readOnly bool) (ToolPack, error) {
-	if project == "" {
+// If registration fails, the server is stopped before CodingTools returns.
+// With [CodingConfig.NoToolPrefix], that includes [mcp.ErrToolNameTaken] when
+// one of Serena's tool names is already in m. If the server dies later, its
+// tools are removed from m.
+func CodingTools(ctx context.Context, m *tools.ToolBox, cfg CodingConfig) (ToolPack, error) {
+	if cfg.Project == "" {
 		return nil, ErrNoProject
 	}
 
-	cfg := serenaMCPConfig(project, readOnly)
-
-	client, err := mcp.NewClient(ctx, cfg, m)
+	client, err := mcp.NewClient(ctx, serenaMCPConfig(cfg), m)
 	if err != nil {
 		return nil, err
 	}
 
-	return &codingTools{mcp: client, project: project, readOnly: readOnly}, nil
+	pack := codingTools{
+		mcp:          client,
+		project:      cfg.Project,
+		readOnly:     cfg.ReadOnly,
+		noToolPrefix: cfg.NoToolPrefix,
+	}
+
+	return &pack, nil
 }
 
 func (c *codingTools) Instructions(_ context.Context) *mcp.Instruction {
 	text := fmt.Sprintf(serenaInstruction, c.project)
+	if !c.noToolPrefix {
+		text += "\n\n" + serenaQueryPrefixInstruction
+	}
+
 	if !c.readOnly {
 		text += "\n\n" + serenaEditInstruction
+	}
+
+	if c.noToolPrefix {
+		text = strings.ReplaceAll(text, serenaName+"__", "")
 	}
 
 	return &mcp.Instruction{
