@@ -70,6 +70,16 @@ func TestNew(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "typesafe/jev-1.13", result.CurrentModel())
 	})
+
+	t.Run("valid ollama config without api key returns a configured Decision", func(t *testing.T) {
+		// given
+		cfg := Config{Provider: ProviderOllama, Model: "nimble"}
+		// when
+		result, err := New(cfg)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "nimble", result.CurrentModel())
+	})
 }
 
 func TestDecisionAsk(t *testing.T) {

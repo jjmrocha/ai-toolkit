@@ -2,7 +2,7 @@
 // typed questions about a state with probabilities instead of text. Create a
 // [Decision] with [New] and call [Decision.Ask] with a [YesNo],
 // [Choice] or [Score] question. Each typed [Answer] carries the probabilities
-// behind it. The one provider is OpenRouter.
+// behind it. The providers are OpenRouter and a local Ollama server.
 //
 // What to do with an answer is up to the caller: the package reports the
 // probabilities and [ChoiceAnswer.Confidence] and applies no threshold. State

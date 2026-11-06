@@ -13,8 +13,9 @@ type Decision struct {
 }
 
 // New creates a [Decision] for the provider named in cfg. It returns
-// [ErrMissingProvider], [ErrMissingModel] or [ErrMissingAPIKey] when those
-// fields are empty, and [ErrUnsupportedProvider] for an unknown provider.
+// [ErrMissingProvider] or [ErrMissingModel] when those fields are empty,
+// [ErrMissingAPIKey] when APIKey is empty for [ProviderOpenRouter], and
+// [ErrUnsupportedProvider] for an unknown provider.
 func New(cfg Config) (*Decision, error) {
 	if cfg.Provider == "" {
 		return nil, ErrMissingProvider
@@ -29,6 +30,13 @@ func New(cfg Config) (*Decision, error) {
 	switch cfg.Provider {
 	case ProviderOpenRouter:
 		p, err := newOpenRouter(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		provider = p
+	case ProviderOllama:
+		p, err := newOllama(cfg)
 		if err != nil {
 			return nil, err
 		}

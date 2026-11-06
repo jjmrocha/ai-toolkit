@@ -9,7 +9,8 @@ var (
 	// ErrUnsupportedProvider is returned by [New] when Config.Provider is not a
 	// known [Provider].
 	ErrUnsupportedProvider = errors.New("unsupported provider")
-	// ErrMissingAPIKey is returned by [New] when Config.APIKey is empty.
+	// ErrMissingAPIKey is returned by [New] when Config.APIKey is empty for
+	// [ProviderOpenRouter].
 	ErrMissingAPIKey = errors.New("missing api_key")
 	// ErrMissingModel is returned by [New] when Config.Model is empty.
 	ErrMissingModel = errors.New("missing model")
