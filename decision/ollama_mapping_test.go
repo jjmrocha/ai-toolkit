@@ -39,6 +39,49 @@ func TestToOllamaQuestions(t *testing.T) {
 		assert.Nil(t, result["refund"].Criteria)
 	})
 
+	t.Run("maps a choice, sending null for an option with no description", func(t *testing.T) {
+		// given
+		questions := map[string]Question{
+			"team": Choice{
+				Instructions: "Which team should handle this ticket?",
+				Options:      map[string]string{"billing": "Payments and refunds", "other": ""},
+			},
+		}
+		described := "Payments and refunds"
+		expected := map[string]ollamaQuestion{
+			"team": {
+				Type:         "choice",
+				Instructions: "Which team should handle this ticket?",
+				Criteria:     map[string]*string{"billing": &described, "other": nil},
+			},
+		}
+		// when
+		result := toOllamaQuestions(questions)
+		// then
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("maps a score as an ordered list of levels", func(t *testing.T) {
+		// given
+		questions := map[string]Question{
+			"urgency": Score{
+				Instructions: "How urgent is this ticket?",
+				Levels:       []string{"Routine", "Soon", "Urgent"},
+			},
+		}
+		expected := map[string]ollamaQuestion{
+			"urgency": {
+				Type:         "score",
+				Instructions: "How urgent is this ticket?",
+				Criteria:     []string{"Routine", "Soon", "Urgent"},
+			},
+		}
+		// when
+		result := toOllamaQuestions(questions)
+		// then
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("accepts questions passed as pointers", func(t *testing.T) {
 		// given
 		questions := map[string]Question{"refund": &YesNo{Instructions: "Refund?"}}
@@ -51,6 +94,13 @@ func TestToOllamaQuestions(t *testing.T) {
 
 func TestFromOllamaToResponse(t *testing.T) {
 	questions := map[string]Question{"refund": YesNo{Instructions: "Does the customer ask for a refund?"}}
+	choiceAndScore := map[string]Question{
+		"team": Choice{
+			Instructions: "Which team should handle this ticket?",
+			Options:      map[string]string{"billing": "Payments and refunds", "technical": "Bugs and integrations", "other": "None of the above"},
+		},
+		"urgency": Score{Instructions: "How urgent is this ticket?", Levels: []string{"Routine", "Soon", "Urgent"}},
+	}
 
 	t.Run("maps a yes/no answer and the usage", func(t *testing.T) {
 		// given
@@ -68,6 +118,89 @@ func TestFromOllamaToResponse(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, expected, result)
 	})
+
+	t.Run("maps a choice answer and a score answer", func(t *testing.T) {
+		// given
+		apiResp := ollamaDecisionResponse{
+			Answers: map[string]ollamaAnswer{
+				"team": {
+					Type:          "choice",
+					Choice:        "billing",
+					Probabilities: map[string]float64{"billing": 0.984, "technical": 0.011, "other": 0.005},
+					Confidence:    0.918,
+				},
+				"urgency": {
+					Type:          "score",
+					Score:         0.693,
+					Probabilities: map[string]float64{"0": 0.482, "1": 0.342, "2": 0.175},
+					Confidence:    0.068,
+				},
+			},
+		}
+		expected := map[string]Answer{
+			"team": ChoiceAnswer{
+				Selected:      "billing",
+				Probabilities: map[string]float64{"billing": 0.984, "technical": 0.011, "other": 0.005},
+				Confidence:    0.918,
+			},
+			"urgency": ScoreAnswer{
+				Score:         0.693,
+				Legend:        []string{"Routine", "Soon", "Urgent"},
+				Probabilities: []float64{0.482, 0.342, 0.175},
+				Confidence:    0.068,
+			},
+		}
+		// when
+		result, err := fromOllamaToResponse(apiResp, choiceAndScore)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Answers)
+	})
+
+	t.Run("a score answer that skips a level reports it as zero", func(t *testing.T) {
+		// given
+		apiResp := ollamaDecisionResponse{
+			Answers: map[string]ollamaAnswer{
+				"urgency": {Type: "score", Score: 1.2, Probabilities: map[string]float64{"0": 0.4, "2": 0.6}},
+			},
+		}
+		onlyScore := map[string]Question{"urgency": choiceAndScore["urgency"]}
+		expected := ScoreAnswer{
+			Score:         1.2,
+			Legend:        []string{"Routine", "Soon", "Urgent"},
+			Probabilities: []float64{0.4, 0, 0.6},
+		}
+		// when
+		result, err := fromOllamaToResponse(apiResp, onlyScore)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Answers["urgency"])
+	})
+
+	badLevelCases := []struct {
+		name          string
+		probabilities map[string]float64
+	}{
+		{name: "a score level key is not a number", probabilities: map[string]float64{"first": 1}},
+		{name: "a score level key is below zero", probabilities: map[string]float64{"-1": 0.5, "0": 0.5}},
+		{name: "a score level key is beyond the last level", probabilities: map[string]float64{"0": 0.5, "3": 0.5}},
+	}
+
+	for _, tc := range badLevelCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// given
+			apiResp := ollamaDecisionResponse{
+				Answers: map[string]ollamaAnswer{"urgency": {Type: "score", Probabilities: tc.probabilities}},
+			}
+			onlyScore := map[string]Question{"urgency": choiceAndScore["urgency"]}
+			// when
+			result, err := fromOllamaToResponse(apiResp, onlyScore)
+			// then
+			assert.Nil(t, result)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `ollama: question "urgency"`)
+		})
+	}
 
 	t.Run("a question is left unanswered", func(t *testing.T) {
 		// given

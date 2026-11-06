@@ -107,6 +107,80 @@ func TestOllamaAsk(t *testing.T) {
 		assert.Equal(t, expected, result)
 	})
 
+	t.Run("asks a choice, a yes/no and a score question in one request", func(t *testing.T) {
+		// given
+		var gotBody []byte
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			gotBody, _ = io.ReadAll(r.Body)
+			writeJSON(t, w, `{
+				"model": "nimble",
+				"answers": {
+					"team": {"type": "choice", "choice": "billing", "probabilities": {"billing": 0.984, "technical": 0.011, "other": 0.005}, "confidence": 0.918},
+					"refund": {"type": "noul", "noul": 0.997},
+					"urgency": {"type": "score", "score": 0.693, "legend": {"0": "Routine", "1": "Soon", "2": "Urgent"}, "probabilities": {"0": 0.482, "1": 0.342, "2": 0.175}, "confidence": 0.068}
+				},
+				"usage": {"input_tokens": 841, "output_tokens": 3}
+			}`)
+		})
+		request := Request{
+			State: "I was charged twice. Please refund the extra payment.",
+			Questions: map[string]Question{
+				"team": Choice{
+					Instructions: "Which team should handle this ticket?",
+					Options:      map[string]string{"billing": "Payments and refunds", "technical": "Bugs and integrations", "other": "None of the above"},
+				},
+				"refund":  YesNo{Instructions: "Does the customer explicitly ask for a refund?"},
+				"urgency": Score{Instructions: "How urgent is this ticket?", Levels: []string{"Routine", "Soon", "Urgent"}},
+			},
+		}
+		expectedBody := map[string]any{
+			"model": "nimble",
+			"state": "I was charged twice. Please refund the extra payment.",
+			"questions": map[string]any{
+				"team": map[string]any{
+					"type":         "choice",
+					"instructions": "Which team should handle this ticket?",
+					"criteria":     map[string]any{"billing": "Payments and refunds", "technical": "Bugs and integrations", "other": "None of the above"},
+				},
+				"refund": map[string]any{
+					"type":         "noul",
+					"instructions": "Does the customer explicitly ask for a refund?",
+				},
+				"urgency": map[string]any{
+					"type":         "score",
+					"instructions": "How urgent is this ticket?",
+					"criteria":     []any{"Routine", "Soon", "Urgent"},
+				},
+			},
+		}
+		expected := &Response{
+			Answers: map[string]Answer{
+				"team": ChoiceAnswer{
+					Selected:      "billing",
+					Probabilities: map[string]float64{"billing": 0.984, "technical": 0.011, "other": 0.005},
+					Confidence:    0.918,
+				},
+				"refund": YesNoAnswer{Value: 0.997},
+				"urgency": ScoreAnswer{
+					Score:         0.693,
+					Legend:        []string{"Routine", "Soon", "Urgent"},
+					Probabilities: []float64{0.482, 0.342, 0.175},
+					Confidence:    0.068,
+				},
+			},
+			Stats: Stats{PromptTokens: 841},
+		}
+		// when
+		result, err := o.ask(t.Context(), request)
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result)
+
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(gotBody, &body))
+		assert.Equal(t, expectedBody, body)
+	})
+
 	t.Run("returns an error for an unexpected status", func(t *testing.T) {
 		// given
 		o := newTestOllama(t, func(w http.ResponseWriter, _ *http.Request) {

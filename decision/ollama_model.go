@@ -18,8 +18,12 @@ type ollamaDecisionResponse struct {
 }
 
 type ollamaAnswer struct {
-	Type string  `json:"type"`
-	Noul float64 `json:"noul"`
+	Type          string             `json:"type"`
+	Noul          float64            `json:"noul"`
+	Choice        string             `json:"choice"`
+	Score         float64            `json:"score"`
+	Confidence    float64            `json:"confidence"`
+	Probabilities map[string]float64 `json:"probabilities"`
 }
 
 type ollamaUsage struct {
