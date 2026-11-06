@@ -33,12 +33,17 @@ type webTools struct {
 // by DonSeTch (https://github.com/dondai44423/donsetch). It needs the npx
 // executable on PATH and no API key. On its first run, the package downloads
 // DonSeTch's prebuilt binary from GitHub. The tools are "donsetch__web_search",
-// "donsetch__web_fetch" and "donsetch__web_crawl".
+// "donsetch__web_fetch" and "donsetch__web_crawl", or "web_search", "web_fetch"
+// and "web_crawl" when noToolPrefix is true.
 //
-// If registration fails, the server is stopped before WebTools returns. If the
-// server dies later, its tools are removed from m.
-func WebTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, DonSeTchMCPConfig(), m)
+// If registration fails, the server is stopped before WebTools returns. With
+// noToolPrefix, that includes [mcp.ErrToolNameTaken] when one of the tool names
+// is already in m. If the server dies later, its tools are removed from m.
+func WebTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
+	cfg := DonSeTchMCPConfig()
+	cfg.NoToolPrefix = noToolPrefix
+
+	client, err := mcp.NewClient(ctx, cfg, m)
 	if err != nil {
 		return nil, err
 	}

@@ -34,12 +34,17 @@ type libraryTools struct {
 // is optional; see [Context7MCPConfig]. The tools are
 // "context7__resolve-library-id", which finds a library's context7 id, and
 // "context7__query-docs", which answers a question from that library's
-// documentation.
+// documentation. When noToolPrefix is true, they are "resolve-library-id" and
+// "query-docs".
 //
-// If registration fails, the server is stopped before LibraryTools returns. If
-// the server dies later, its tools are removed from m.
-func LibraryTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, Context7MCPConfig(), m)
+// If registration fails, the server is stopped before LibraryTools returns.
+// With noToolPrefix, that includes [mcp.ErrToolNameTaken] when one of the tool
+// names is already in m. If the server dies later, its tools are removed from m.
+func LibraryTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
+	cfg := Context7MCPConfig()
+	cfg.NoToolPrefix = noToolPrefix
+
+	client, err := mcp.NewClient(ctx, cfg, m)
 	if err != nil {
 		return nil, err
 	}

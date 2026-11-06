@@ -268,7 +268,7 @@ agt.StartSession(session)
 ### `packs`
 
 ```go
-pack, err := packs.WebTools(ctx, toolBox)
+pack, err := packs.WebTools(ctx, toolBox, false)
 if err != nil {
 	return err
 }
@@ -277,11 +277,11 @@ defer pack.Close()
 
 | Pack | Gives the model | Needs |
 | --- | --- | --- |
-| `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch) | `npx` on `PATH` |
+| `WebTools` | Web search, page fetching and crawling, via [DonSeTch](https://github.com/dondai44423/donsetch). `noToolPrefix` registers the tools without the `donsetch__` prefix | `npx` on `PATH` |
 | `CodingTools` | Symbol-aware code navigation and editing in one project, via [Serena](https://github.com/oraios/serena). The model cannot switch to another project. Read-only mode registers only the reading and navigation tools. `NoToolPrefix` registers the tools without the `serena__` prefix | `uvx` on `PATH`; a project folder |
-| `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking) | `npx` on `PATH`; Node.js 24 or newer |
-| `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7) | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |
-| `FinanceTools` | Market data from Yahoo Finance: quotes, price history, financial statements, analyst estimates, news, holders, funds, options and screeners, via [yfmcp](https://github.com/narumiruna/yfinance-mcp) | `uvx` on `PATH` |
+| `ThinkingTools` | Step-by-step reasoning it can revise and branch, via [sequential-thinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking). `noToolPrefix` registers the tool without the `thinking__` prefix | `npx` on `PATH`; Node.js 24 or newer |
+| `LibraryTools` | Current documentation for libraries and frameworks, via [context7](https://github.com/upstash/context7). `noToolPrefix` registers the tools without the `context7__` prefix | `npx` on `PATH`; Node.js 20.18.1 or newer; `CONTEXT7_API_KEY` optional |
+| `FinanceTools` | Market data from Yahoo Finance: quotes, price history, financial statements, analyst estimates, news, holders, funds, options and screeners, via [yfmcp](https://github.com/narumiruna/yfinance-mcp). `noToolPrefix` registers the tools without the `yfinance__` prefix | `uvx` on `PATH` |
 | `ShellTools` | A `/bin/sh` command runner | — |
 | `FileTools` | The files in one folder, and no files outside it. Read-only mode registers only reading, listing and searching | — |
 | `DateTools` | The date, time of day and time zone | — |

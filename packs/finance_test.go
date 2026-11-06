@@ -42,4 +42,14 @@ func TestFinanceToolsInstructions(t *testing.T) {
 		expected := &mcp.Instruction{Name: "yfinance", Text: yfinanceInstruction}
 		assert.Equal(t, expected, result)
 	})
+
+	t.Run("names the tool without the prefix when asked", func(t *testing.T) {
+		// given
+		pack := &financeTools{noToolPrefix: true}
+		// when
+		result := pack.Instructions(t.Context())
+		// then
+		assert.NotContains(t, result.Text, "yfinance__")
+		assert.Contains(t, result.Text, "yfinance_get_price_history")
+	})
 }

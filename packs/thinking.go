@@ -29,16 +29,21 @@ type thinkingTools struct {
 // reference MCP server
 // (https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking).
 // It needs the npx executable on PATH, Node.js 24 or newer and no API key. The
-// tool is "thinking__sequentialthinking": the model works a problem as numbered
-// thoughts it can revise or branch from.
+// tool is "thinking__sequentialthinking", or "sequentialthinking" when
+// noToolPrefix is true: the model works a problem as numbered thoughts it can
+// revise or branch from.
 //
 // The server keeps the thought history in memory, so it lasts as long as the
 // pack.
 //
-// If registration fails, the server is stopped before ThinkingTools returns. If
-// the server dies later, its tool is removed from m.
-func ThinkingTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, SequentialThinkingMCPConfig(), m)
+// If registration fails, the server is stopped before ThinkingTools returns.
+// With noToolPrefix, that includes [mcp.ErrToolNameTaken] when the tool name is
+// already in m. If the server dies later, its tool is removed from m.
+func ThinkingTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
+	cfg := SequentialThinkingMCPConfig()
+	cfg.NoToolPrefix = noToolPrefix
+
+	client, err := mcp.NewClient(ctx, cfg, m)
 	if err != nil {
 		return nil, err
 	}

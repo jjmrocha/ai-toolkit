@@ -2,6 +2,7 @@ package packs
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jjmrocha/ai-toolkit/mcp"
 	"github.com/jjmrocha/ai-toolkit/tools"
@@ -32,32 +33,46 @@ func YFinanceMCPConfig() mcp.ClientConfig {
 }
 
 type financeTools struct {
-	mcp *mcp.Client
+	mcp          *mcp.Client
+	noToolPrefix bool
 }
 
 // FinanceTools registers the tools of yfmcp (https://github.com/narumiruna/yfinance-mcp)
 // in m: market data from Yahoo Finance, including quotes, price history,
 // financial statements, analyst estimates, news, holders, funds, options and
-// screeners. The tools are named "yfinance__yfinance_<name>". It needs the uvx
-// executable on PATH and no API key. On its first run, uvx downloads Python 3.12
-// or newer and the package's dependencies. Every symbol and search the model asks
-// about is sent to Yahoo.
+// screeners. The tools are named "yfinance__yfinance_<name>", or
+// "yfinance_<name>" when noToolPrefix is true. It needs the uvx executable on
+// PATH and no API key. On its first run, uvx downloads Python 3.12 or newer and
+// the package's dependencies. Every symbol and search the model asks about is
+// sent to Yahoo.
 //
-// If registration fails, the server is stopped before FinanceTools returns. If
-// the server dies later, its tools are removed from m.
-func FinanceTools(ctx context.Context, m *tools.ToolBox) (ToolPack, error) {
-	client, err := mcp.NewClient(ctx, YFinanceMCPConfig(), m)
+// [ToolPack.Instructions] returns fixed guidance written for this pack, naming
+// the tools as they are registered.
+//
+// If registration fails, the server is stopped before FinanceTools returns.
+// With noToolPrefix, that includes [mcp.ErrToolNameTaken] when one of the tool
+// names is already in m. If the server dies later, its tools are removed from m.
+func FinanceTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
+	cfg := YFinanceMCPConfig()
+	cfg.NoToolPrefix = noToolPrefix
+
+	client, err := mcp.NewClient(ctx, cfg, m)
 	if err != nil {
 		return nil, err
 	}
 
-	return &financeTools{mcp: client}, nil
+	return &financeTools{mcp: client, noToolPrefix: noToolPrefix}, nil
 }
 
 func (f *financeTools) Instructions(_ context.Context) *mcp.Instruction {
+	text := yfinanceInstruction
+	if f.noToolPrefix {
+		text = strings.ReplaceAll(text, yfinanceName+"__", "")
+	}
+
 	return &mcp.Instruction{
 		Name: yfinanceName,
-		Text: yfinanceInstruction,
+		Text: text,
 	}
 }
 
