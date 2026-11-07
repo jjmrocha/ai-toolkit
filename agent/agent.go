@@ -93,35 +93,37 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 		},
 	}
 
-	restored := fn.Map(fn.Filter(cfg.Messages, func(m llm.Message) bool {
+	messages := slices.Values(cfg.Messages)
+	filteredMsg := fn.FilterSeq(messages, func(m llm.Message) bool {
 		return m.Role() != llm.SystemRole
-	}), messageValue)
-	a.messages = append(a.messages, restored...)
+	})
+	convertedMsg := fn.MapSeq(filteredMsg, func(m llm.Message) llm.Message {
+		switch v := m.(type) {
+		case *llm.UserMessage:
+			return *v
+		case *llm.AssistantMessage:
+			return *v
+		case *llm.ToolMessage:
+			return *v
+		}
+
+		return m
+	})
+
+	before := len(a.messages)
+	a.messages = slices.AppendSeq(a.messages, convertedMsg)
 
 	a.sessionID = cfg.ID
 	if a.sessionID == "" {
 		a.sessionID = token.New()
 	}
 
-	if len(restored) > 0 {
+	if len(a.messages) > before {
 		a.fb.SessionResumed(a.sessionID)
 		return
 	}
 
 	a.fb.SessionStarted()
-}
-
-func messageValue(m llm.Message) llm.Message {
-	switch v := m.(type) {
-	case *llm.UserMessage:
-		return *v
-	case *llm.AssistantMessage:
-		return *v
-	case *llm.ToolMessage:
-		return *v
-	}
-
-	return m
 }
 
 func (a *Agent) unregisterSkills() {
