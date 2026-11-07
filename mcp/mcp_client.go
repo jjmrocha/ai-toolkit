@@ -56,6 +56,10 @@ type Client struct {
 // or its tools cannot be registered. On a registration error the server is
 // stopped before NewClient returns.
 func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Client, error) {
+	return newClient(ctx, cfg, tb, commandTransport)
+}
+
+func newClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox, transport transportFactory) (*Client, error) {
 	if cfg.Name == "" {
 		return nil, ErrNameRequired
 	}
@@ -76,7 +80,7 @@ func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Clien
 		onDisconnect:  c.onDisconnect,
 	}
 
-	s, err := newSDKClient(ctx, cfg, cb)
+	s, err := newSDKClient(ctx, cfg, transport, cb)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +92,7 @@ func NewClient(ctx context.Context, cfg ClientConfig, tb *tools.ToolBox) (*Clien
 	}
 
 	if err := c.registerTools(ctx, tb); err != nil {
-		_ = c.Close()
+		c.Close()
 		return nil, err
 	}
 
@@ -160,12 +164,10 @@ func (c *Client) Instructions() *Instruction {
 // Close stops the server process and removes the client's tools from the
 // [tools.ToolBox]. Calls still waiting on the server are aborted. It is safe to
 // call more than once.
-func (c *Client) Close() error {
+func (c *Client) Close() {
 	c.session.close()
 
 	c.disconnected()
-
-	return nil
 }
 
 func (c *Client) registerTools(ctx context.Context, tb *tools.ToolBox) error {
@@ -180,6 +182,10 @@ func (c *Client) registerTools(ctx context.Context, tb *tools.ToolBox) error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if !c.connected {
+		return nil
+	}
 
 	c.removeTools()
 

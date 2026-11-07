@@ -18,7 +18,7 @@ type field struct {
 // for llm.Tool.Schema. Nested objects and arrays of objects take their own
 // ObjectBuilder, so schemas nest to any depth.
 //
-// The zero value is not usable; create one with [NewObjectBuilder].
+// The zero value is an empty builder, the same as [NewObjectBuilder] returns.
 type ObjectBuilder struct {
 	fields []field
 }

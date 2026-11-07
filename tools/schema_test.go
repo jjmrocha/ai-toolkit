@@ -94,6 +94,16 @@ func TestObjectBuilder(t *testing.T) {
 		})
 	}
 
+	t.Run("zero value builds the same schema as NewObjectBuilder", func(t *testing.T) {
+		// given
+		var b ObjectBuilder
+		expected := NewObjectBuilder().String("path", "the path", true).Build()
+		// when
+		result := b.String("path", "the path", true).Build()
+		// then
+		assert.Equal(t, expected, result)
+	})
+
 	t.Run("empty builder omits the required key", func(t *testing.T) {
 		// given
 		b := NewObjectBuilder()

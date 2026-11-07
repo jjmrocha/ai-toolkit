@@ -93,6 +93,5 @@ type anthropicUsage struct {
 
 type anthropicModel struct {
 	ID             string `json:"id"`
-	DisplayName    string `json:"display_name"`
 	MaxInputTokens int    `json:"max_input_tokens"`
 }

@@ -90,7 +90,7 @@ func TestToAnthropicMessages(t *testing.T) {
 	})
 
 	t.Run("replays the raw content blocks when present", func(t *testing.T) {
-		// given: tool_use before text, an order the rebuild path never produces
+		// given
 		raw := []anthropicContentBlock{
 			{Type: "tool_use", ID: "toolu_1", Name: "get_weather", Input: map[string]any{"city": "Lisbon"}},
 			{Type: "text", Text: "Looking it up"},
@@ -192,7 +192,7 @@ func TestToAnthropicMessages(t *testing.T) {
 	})
 
 	t.Run("sends a tool call without arguments as an empty JSON object", func(t *testing.T) {
-		// given: the API rejects a tool_use whose input is null
+		// given
 		messages := []Message{AssistantMessage{ToolCalls: []ToolCall{{ID: "toolu_1", Name: "ping"}}}}
 		// when
 		result, err := json.Marshal(toAnthropicMessages(messages))
@@ -202,7 +202,7 @@ func TestToAnthropicMessages(t *testing.T) {
 	})
 
 	t.Run("replays a redacted thinking block with its data intact", func(t *testing.T) {
-		// given: a turn the API answered with a redacted thinking block
+		// given
 		resp := anthropicChatResponse{Content: []anthropicContentBlock{
 			{Type: "redacted_thinking", Data: "opaque"},
 			{Type: "text", Text: "Hello"},
@@ -210,7 +210,7 @@ func TestToAnthropicMessages(t *testing.T) {
 		messages := []Message{*fromAnthropicToAssistantMessage(resp)}
 		// when
 		result, err := json.Marshal(toAnthropicMessages(messages))
-		// then: the API rejects a thinking block replayed without its data
+		// then
 		require.NoError(t, err)
 		assert.Contains(t, string(result), `"data":"opaque"`)
 	})
@@ -282,7 +282,7 @@ func TestToAnthropicTools(t *testing.T) {
 		tools := []Tool{{Name: "get_weather", Description: "Get the weather", Schema: schema}}
 		// when
 		result := toAnthropicTools(tools)
-		// then: a single tool is also the last one, so it carries the cache breakpoint
+		// then
 		expected := []anthropicTool{{
 			Name:         "get_weather",
 			Description:  "Get the weather",
@@ -388,7 +388,7 @@ func TestFromAnthropicToAssistantMessage(t *testing.T) {
 func TestFromAnthropicToModelInfo(t *testing.T) {
 	t.Run("maps the requested id as the name and the context size", func(t *testing.T) {
 		// given
-		model := anthropicModel{ID: "claude-opus-4-8", DisplayName: "Claude Opus 4.8", MaxInputTokens: 1000000}
+		model := anthropicModel{ID: "claude-opus-4-8", MaxInputTokens: 1000000}
 		// when
 		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
 		// then
@@ -398,7 +398,7 @@ func TestFromAnthropicToModelInfo(t *testing.T) {
 
 	t.Run("returns ErrMissingContextLength when no context size is reported", func(t *testing.T) {
 		// given
-		model := anthropicModel{ID: "claude-opus-4-8", DisplayName: "Claude Opus 4.8"}
+		model := anthropicModel{ID: "claude-opus-4-8"}
 		// when
 		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
 		// then

@@ -3,6 +3,7 @@ package decision
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 )
 
@@ -78,6 +79,14 @@ func (d *Decision) Ask(ctx context.Context, req Request) (*Response, error) {
 }
 
 func validateQuestion(id string, q Question) error {
+	if q == nil {
+		return fmt.Errorf("%w: question %q is nil", ErrInvalidQuestion, id)
+	}
+
+	if v := reflect.ValueOf(q); v.Kind() == reflect.Pointer && v.IsNil() {
+		return fmt.Errorf("%w: question %q is nil", ErrInvalidQuestion, id)
+	}
+
 	switch q.Type() {
 	case YesNoType:
 		question := questionValue[YesNo](q)
@@ -86,13 +95,13 @@ func validateQuestion(id string, q Question) error {
 		}
 	case ChoiceType:
 		question := questionValue[Choice](q)
-		if len(question.Options) == 0 {
-			return fmt.Errorf("%w: choice question %q has no options", ErrInvalidQuestion, id)
+		if len(question.Options) < 2 {
+			return fmt.Errorf("%w: choice question %q has %d options, expected 2 or more", ErrInvalidQuestion, id, len(question.Options))
 		}
 	case ScoreType:
 		question := questionValue[Score](q)
-		if len(question.Levels) == 0 {
-			return fmt.Errorf("%w: score question %q has no levels", ErrInvalidQuestion, id)
+		if len(question.Levels) < 2 {
+			return fmt.Errorf("%w: score question %q has %d levels, expected 2 or more", ErrInvalidQuestion, id, len(question.Levels))
 		}
 	}
 

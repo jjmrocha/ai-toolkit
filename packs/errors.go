@@ -23,12 +23,6 @@ var ErrManyMatches = errors.New("more than one match")
 // cannot be compiled.
 var ErrInvalidPattern = errors.New("invalid pattern")
 
-// ErrInvalidQuestion is returned by the decision tools [DecisionTools]
-// registers when "decision_choice" is given fewer than two options or the same
-// option twice, or "decision_score" fewer than two levels. The decision
-// model is not asked.
-var ErrInvalidQuestion = errors.New("invalid question")
-
 // ErrNoAgents is returned by [SubAgentTools] when the [subagent.Manager] it is
 // given has no agent registered.
 var ErrNoAgents = errors.New("no agents registered")

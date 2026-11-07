@@ -80,7 +80,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("keeps the line that passes MaxOutputBytes and stops there", func(t *testing.T) {
-		// given: each line costs its own length plus the newline
+		// given
 		cfg := RunConfig{
 			Path:           "sh",
 			Args:           []string{"-c", "echo aaaa; echo bbbb; echo cccc; echo dddd"},
@@ -110,7 +110,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("keeps the exit code of a command that finished before the cap stopped it", func(t *testing.T) {
-		// given: the command is long gone by the time the cap is reached
+		// given
 		cfg := RunConfig{
 			Path:           "sh",
 			Args:           []string{"-c", "echo aaaa; echo bbbb; echo cccc; exit 2"},
@@ -125,7 +125,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("stops a command that keeps running past MaxOutputBytes", func(t *testing.T) {
-		// given: without a kill this would take thirty seconds
+		// given
 		cfg := RunConfig{
 			Path:           "sh",
 			Args:           []string{"-c", "echo aaaa; echo bbbb; sleep 30"},

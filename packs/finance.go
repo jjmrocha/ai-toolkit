@@ -32,6 +32,14 @@ func YFinanceMCPConfig() mcp.ClientConfig {
 	}
 }
 
+// FinanceConfig holds the choices [FinanceTools] starts yfmcp with.
+type FinanceConfig struct {
+	// NoToolPrefix registers the tools under their own names, such as
+	// "yfinance_get_price_history", instead of "yfinance__yfinance_get_price_history". It sets
+	// [mcp.ClientConfig.NoToolPrefix].
+	NoToolPrefix bool
+}
+
 type financeTools struct {
 	mcp          *mcp.Client
 	noToolPrefix bool
@@ -41,8 +49,8 @@ type financeTools struct {
 // in m: market data from Yahoo Finance, including quotes, price history,
 // financial statements, analyst estimates, news, holders, funds, options and
 // screeners. The tools are named "yfinance__yfinance_<name>", or
-// "yfinance_<name>" when noToolPrefix is true. It needs the uvx executable on
-// PATH and no API key. On its first run, uvx downloads Python 3.12 or newer and
+// "yfinance_<name>" when [FinanceConfig.NoToolPrefix] is set. It needs the uvx
+// executable on PATH and no API key. On its first run, uvx downloads Python 3.12 or newer and
 // the package's dependencies. Every symbol and search the model asks about is
 // sent to Yahoo.
 //
@@ -50,18 +58,19 @@ type financeTools struct {
 // the tools as they are registered.
 //
 // If registration fails, the server is stopped before FinanceTools returns.
-// With noToolPrefix, that includes [mcp.ErrToolNameTaken] when one of the tool
-// names is already in m. If the server dies later, its tools are removed from m.
-func FinanceTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
-	cfg := YFinanceMCPConfig()
-	cfg.NoToolPrefix = noToolPrefix
+// With [FinanceConfig.NoToolPrefix], that includes [mcp.ErrToolNameTaken] when
+// one of the tool names is already in m. If the server dies later, its tools are
+// removed from m.
+func FinanceTools(ctx context.Context, m *tools.ToolBox, cfg FinanceConfig) (ToolPack, error) {
+	mcpConfig := YFinanceMCPConfig()
+	mcpConfig.NoToolPrefix = cfg.NoToolPrefix
 
-	client, err := mcp.NewClient(ctx, cfg, m)
+	client, err := mcp.NewClient(ctx, mcpConfig, m)
 	if err != nil {
 		return nil, err
 	}
 
-	return &financeTools{mcp: client, noToolPrefix: noToolPrefix}, nil
+	return &financeTools{mcp: client, noToolPrefix: cfg.NoToolPrefix}, nil
 }
 
 func (f *financeTools) Instructions(_ context.Context) *mcp.Instruction {
@@ -77,5 +86,7 @@ func (f *financeTools) Instructions(_ context.Context) *mcp.Instruction {
 }
 
 func (f *financeTools) Close() error {
-	return f.mcp.Close()
+	f.mcp.Close()
+
+	return nil
 }

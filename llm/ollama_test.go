@@ -226,7 +226,7 @@ not json
 	})
 
 	t.Run("returns an error on a non-2xx status", func(t *testing.T) {
-		// given: 400 is not retried
+		// given
 		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"error":"bad request"}`)
@@ -294,7 +294,7 @@ func TestOllamaModelInfo(t *testing.T) {
 	})
 
 	t.Run("returns an error on a non-2xx status other than 404", func(t *testing.T) {
-		// given: 400 is not retried
+		// given
 		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"error":"bad request"}`)

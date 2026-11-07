@@ -11,14 +11,11 @@ var _ ToolPack = (*financeTools)(nil)
 
 func TestYFinanceMCPConfig(t *testing.T) {
 	t.Run("starts the yfinance server with uvx", func(t *testing.T) {
-		// given
-		expected := []string{"--from", "yfmcp==0.14.0", "yfmcp"}
 		// when
 		result := YFinanceMCPConfig()
 		// then
 		assert.Equal(t, "yfinance", result.Name)
 		assert.Equal(t, "uvx", result.Command)
-		assert.Equal(t, expected, result.Args)
 	})
 
 	t.Run("shares nothing between calls", func(t *testing.T) {

@@ -18,7 +18,7 @@ func TestFileToolsInstructions(t *testing.T) {
 		// given
 		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, folder, false)
+		pack, err := FileTools(toolBox, FileConfig{Path: folder})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
@@ -32,7 +32,7 @@ func TestFileToolsInstructions(t *testing.T) {
 		// given
 		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, folder, false)
+		pack, err := FileTools(toolBox, FileConfig{Path: folder})
 		require.NoError(t, err)
 		require.NoError(t, pack.Close())
 		// when
@@ -45,7 +45,7 @@ func TestFileToolsInstructions(t *testing.T) {
 	t.Run("covers editing and deleting when not read-only", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir(), false)
+		pack, err := FileTools(toolBox, FileConfig{Path: t.TempDir()})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
@@ -59,7 +59,7 @@ func TestFileToolsInstructions(t *testing.T) {
 		// given
 		folder := t.TempDir()
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, folder, true)
+		pack, err := FileTools(toolBox, FileConfig{Path: folder, ReadOnly: true})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = pack.Close() })
 		// when
@@ -91,7 +91,7 @@ func runFileTool(t *testing.T, root string, name string, args map[string]any) (s
 
 	toolBox := tools.NewToolBox()
 
-	pack, err := FileTools(toolBox, root, false)
+	pack, err := FileTools(toolBox, FileConfig{Path: root})
 	require.NoError(t, err)
 
 	defer func() { _ = pack.Close() }()
@@ -111,7 +111,7 @@ func TestFileTools(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		// when
-		pack, err := FileTools(toolBox, t.TempDir(), false)
+		pack, err := FileTools(toolBox, FileConfig{Path: t.TempDir()})
 		require.NoError(t, err)
 
 		defer func() { _ = pack.Close() }()
@@ -132,7 +132,7 @@ func TestFileTools(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
 		// when
-		pack, err := FileTools(toolBox, t.TempDir(), true)
+		pack, err := FileTools(toolBox, FileConfig{Path: t.TempDir(), ReadOnly: true})
 		require.NoError(t, err)
 
 		defer func() { _ = pack.Close() }()
@@ -145,7 +145,7 @@ func TestFileTools(t *testing.T) {
 	t.Run("removes the read tools on close when read-only", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir(), true)
+		pack, err := FileTools(toolBox, FileConfig{Path: t.TempDir(), ReadOnly: true})
 		require.NoError(t, err)
 		// when
 		err = pack.Close()
@@ -157,7 +157,7 @@ func TestFileTools(t *testing.T) {
 	t.Run("removes the tools on close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		pack, err := FileTools(toolBox, t.TempDir(), false)
+		pack, err := FileTools(toolBox, FileConfig{Path: t.TempDir()})
 		require.NoError(t, err)
 		// when
 		err = pack.Close()
@@ -169,10 +169,10 @@ func TestFileTools(t *testing.T) {
 	t.Run("leaves a newer pack's tools in place on a second close", func(t *testing.T) {
 		// given
 		toolBox := tools.NewToolBox()
-		oldPack, err := FileTools(toolBox, t.TempDir(), false)
+		oldPack, err := FileTools(toolBox, FileConfig{Path: t.TempDir()})
 		require.NoError(t, err)
 		require.NoError(t, oldPack.Close())
-		newPack, err := FileTools(toolBox, t.TempDir(), false)
+		newPack, err := FileTools(toolBox, FileConfig{Path: t.TempDir()})
 		require.NoError(t, err)
 		defer func() { _ = newPack.Close() }()
 		// when
@@ -192,7 +192,7 @@ func TestFileTools(t *testing.T) {
 		root := filepath.Join(t.TempDir(), "missing")
 		toolBox := tools.NewToolBox()
 		// when
-		pack, err := FileTools(toolBox, root, false)
+		pack, err := FileTools(toolBox, FileConfig{Path: root})
 		// then
 		require.Error(t, err)
 		assert.Nil(t, pack)
@@ -262,6 +262,19 @@ func TestFileReadTool(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		expected := "<file lines=\"2-3 of 5\">\ntwo\nthree\n</file>"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("reads a page before a line too long to read", func(t *testing.T) {
+		// given
+		long := strings.Repeat("x", 2*maxFileReadBytes)
+		root := rootWith(t, map[string]string{"log.txt": "one\ntwo\nthree\n" + long})
+		args := map[string]any{"path": "log.txt", "limit": float64(2)}
+		// when
+		result, err := runFileTool(t, root, readToolName, args)
+		// then
+		require.NoError(t, err)
+		expected := "<file lines=\"1-2 of 4\">\none\ntwo\n</file>"
 		assert.Equal(t, expected, result)
 	})
 

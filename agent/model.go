@@ -46,7 +46,7 @@ type Response struct {
 type ModelInfo struct {
 	// Provider is the model's provider.
 	Provider llm.Provider
-	// ModelName is the model's display name.
+	// ModelName is the model's id.
 	ModelName string
 	// ModelContextSize is the model's context window in tokens, or 0 if unknown.
 	ModelContextSize int

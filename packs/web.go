@@ -25,6 +25,14 @@ func DonSeTchMCPConfig() mcp.ClientConfig {
 	}
 }
 
+// WebConfig holds the choices [WebTools] starts DonSeTch with.
+type WebConfig struct {
+	// NoToolPrefix registers the tools under their own names, such as
+	// "web_search", instead of "donsetch__web_search". It sets
+	// [mcp.ClientConfig.NoToolPrefix].
+	NoToolPrefix bool
+}
+
 type webTools struct {
 	mcp *mcp.Client
 }
@@ -34,16 +42,17 @@ type webTools struct {
 // executable on PATH and no API key. On its first run, the package downloads
 // DonSeTch's prebuilt binary from GitHub. The tools are "donsetch__web_search",
 // "donsetch__web_fetch" and "donsetch__web_crawl", or "web_search", "web_fetch"
-// and "web_crawl" when noToolPrefix is true.
+// and "web_crawl" when [WebConfig.NoToolPrefix] is set.
 //
 // If registration fails, the server is stopped before WebTools returns. With
-// noToolPrefix, that includes [mcp.ErrToolNameTaken] when one of the tool names
-// is already in m. If the server dies later, its tools are removed from m.
-func WebTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
-	cfg := DonSeTchMCPConfig()
-	cfg.NoToolPrefix = noToolPrefix
+// [WebConfig.NoToolPrefix], that includes [mcp.ErrToolNameTaken] when one of the
+// tool names is already in m. If the server dies later, its tools are removed
+// from m.
+func WebTools(ctx context.Context, m *tools.ToolBox, cfg WebConfig) (ToolPack, error) {
+	mcpConfig := DonSeTchMCPConfig()
+	mcpConfig.NoToolPrefix = cfg.NoToolPrefix
 
-	client, err := mcp.NewClient(ctx, cfg, m)
+	client, err := mcp.NewClient(ctx, mcpConfig, m)
 	if err != nil {
 		return nil, err
 	}
@@ -56,5 +65,7 @@ func (w *webTools) Instructions(_ context.Context) *mcp.Instruction {
 }
 
 func (w *webTools) Close() error {
-	return w.mcp.Close()
+	w.mcp.Close()
+
+	return nil
 }

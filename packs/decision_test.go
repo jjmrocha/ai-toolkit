@@ -317,7 +317,7 @@ func TestDecisionTools(t *testing.T) {
 				// when
 				_, err := runDecisionTool(t, client, testCase.tool, testCase.args)
 				// then
-				require.ErrorIs(t, err, ErrInvalidQuestion)
+				require.ErrorIs(t, err, decision.ErrInvalidQuestion)
 				assert.Zero(t, server.requests)
 			})
 		}

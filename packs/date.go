@@ -18,8 +18,6 @@ const (
 	timeOfDayLayout     = "15:04:05.000"
 )
 
-var now = time.Now
-
 const dateInstruction = `You have no clock of your own: the date and time you
 remember are the ones you were trained on. Call these tools rather than assuming
 when it is, wherever the answer you are writing carries a date, a time or a
@@ -28,6 +26,7 @@ long session, because the day may have moved.`
 
 type datePack struct {
 	toolBox *tools.ToolBox
+	now     func() time.Time
 	names   []string
 	once    sync.Once
 }
@@ -62,6 +61,12 @@ func (p *datePack) Instructions(_ context.Context) *mcp.Instruction {
 // registration, DateTools returns the error from [tools.ToolBox.Add] and leaves
 // the tools it already registered in place.
 func DateTools(m *tools.ToolBox) (ToolPack, error) {
+	return dateTools(m, time.Now)
+}
+
+func dateTools(m *tools.ToolBox, now func() time.Time) (ToolPack, error) {
+	pack := datePack{toolBox: m, now: now}
+
 	dateTool := llm.Tool{
 		Name: currentDateToolName,
 		Description: "Return today's date on the host, as \"2006-01-02\". Call it rather than assuming a " +
@@ -84,27 +89,29 @@ func DateTools(m *tools.ToolBox) (ToolPack, error) {
 	}
 
 	names, err := register(m, []registration{
-		{tool: dateTool, handler: currentDate},
-		{tool: timeTool, handler: currentTime},
-		{tool: zoneTool, handler: timeZone},
+		{tool: dateTool, handler: pack.currentDate},
+		{tool: timeTool, handler: pack.currentTime},
+		{tool: zoneTool, handler: pack.timeZone},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &datePack{toolBox: m, names: names}, nil
+	pack.names = names
+
+	return &pack, nil
 }
 
-func currentDate(context.Context, map[string]any) (string, error) {
-	return now().Format(time.DateOnly), nil
+func (p *datePack) currentDate(context.Context, map[string]any) (string, error) {
+	return p.now().Format(time.DateOnly), nil
 }
 
-func currentTime(context.Context, map[string]any) (string, error) {
-	return now().Format(timeOfDayLayout), nil
+func (p *datePack) currentTime(context.Context, map[string]any) (string, error) {
+	return p.now().Format(timeOfDayLayout), nil
 }
 
-func timeZone(context.Context, map[string]any) (string, error) {
-	name, offset := now().Zone()
+func (p *datePack) timeZone(context.Context, map[string]any) (string, error) {
+	name, offset := p.now().Zone()
 
 	return renderZone(name, offset), nil
 }

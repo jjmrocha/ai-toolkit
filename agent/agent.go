@@ -12,13 +12,19 @@ import (
 	"github.com/jjmrocha/go-algo/token"
 )
 
-type modelInterface interface {
+// Model is the chat client an [Agent] runs on. [llm.LLM] implements it.
+type Model interface {
+	// Chat sends messages to the model, offering it tools, and returns its reply.
 	Chat(ctx context.Context, messages []llm.Message, tools []llm.Tool) (*llm.AssistantMessage, error)
+	// ModelInfo returns the model's context window, which the agent uses to
+	// decide when to compact. A nil result, like an error, turns automatic
+	// compaction off until a later turn gets one.
 	ModelInfo(ctx context.Context) (*llm.ModelInfo, error)
-	AvailableModels() []string
+	// ChangeModel switches to model. [Agent.ChangeModel] calls it and returns its
+	// error.
 	ChangeModel(model string) error
+	// Effort returns the reasoning effort, reported by [Agent.ModelInfo].
 	Effort() llm.Effort
-	ChangeEffort(e llm.Effort) error
 }
 
 // Agent runs a tool-calling chat loop against an LLM and holds one session's
@@ -26,7 +32,7 @@ type modelInterface interface {
 // methods.
 type Agent struct {
 	config           Config
-	llm              modelInterface
+	llm              Model
 	toolBox          *tools.ToolBox
 	skills           *skills.Collection
 	fb               Feedback
@@ -36,14 +42,14 @@ type Agent struct {
 	modelInfo        *llm.ModelInfo
 }
 
-// New creates an [Agent] for an [llm.LLM], with [NopFeedback]; use
-// [Agent.SetFeedback] with [NewStdoutFeedback] to print events. It returns
-// [ErrNoLLM] when llm is nil and [ErrInvalidThreshold] when
-// Config.CompactionThresholdPercent is outside 0 to 100. Change the model with
-// [Agent.ChangeModel], not on llm directly: the agent caches the model's
+// New creates an [Agent] that runs on model, usually an [llm.LLM], with
+// [NopFeedback]; use [Agent.SetFeedback] with [NewStdoutFeedback] to print
+// events. It returns [ErrNoLLM] when model is nil and [ErrInvalidThreshold]
+// when Config.CompactionThresholdPercent is outside 0 to 100. Change the model
+// with [Agent.ChangeModel], not on model directly: the agent caches the model's
 // context window and only refreshes it there.
-func New(cfg Config, llm *llm.LLM) (*Agent, error) {
-	if llm == nil {
+func New(cfg Config, model Model) (*Agent, error) {
+	if model == nil {
 		return nil, ErrNoLLM
 	}
 
@@ -55,7 +61,7 @@ func New(cfg Config, llm *llm.LLM) (*Agent, error) {
 
 	return &Agent{
 		config: cfg,
-		llm:    llm,
+		llm:    model,
 		fb:     feedback,
 	}, nil
 }
@@ -95,9 +101,9 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 		},
 	}
 
-	restored := fn.Filter(cfg.Messages, func(m llm.Message) bool {
+	restored := fn.Map(fn.Filter(cfg.Messages, func(m llm.Message) bool {
 		return m.Role() != llm.SystemRole
-	})
+	}), messageValue)
 	a.messages = append(a.messages, restored...)
 
 	a.sessionID = cfg.ID
@@ -111,6 +117,19 @@ func (a *Agent) StartSession(cfg SessionConfig) {
 	}
 
 	a.fb.SessionStarted()
+}
+
+func messageValue(m llm.Message) llm.Message {
+	switch v := m.(type) {
+	case *llm.UserMessage:
+		return *v
+	case *llm.AssistantMessage:
+		return *v
+	case *llm.ToolMessage:
+		return *v
+	}
+
+	return m
 }
 
 func (a *Agent) unregisterSkills() {
@@ -312,15 +331,9 @@ func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
 	}
 }
 
-// AvailableModels returns the models [Agent.ChangeModel] accepts. It always
-// includes the active model.
-func (a *Agent) AvailableModels() []string {
-	return a.llm.AvailableModels()
-}
-
-// ChangeModel switches the agent to model, which must be in
-// [Agent.AvailableModels]. The context window is fetched again on the next
-// turn. On failure it returns the client's error and keeps the current model.
+// ChangeModel switches the agent to model, which the [Model] must accept, such
+// as one from [llm.LLM.AvailableModels]. The context window is fetched again on
+// the next turn. On failure it returns the client's error and keeps the current model.
 func (a *Agent) ChangeModel(model string) error {
 	if err := a.llm.ChangeModel(model); err != nil {
 		return err
@@ -332,14 +345,8 @@ func (a *Agent) ChangeModel(model string) error {
 	return nil
 }
 
-// ChangeEffort sets the reasoning effort for later turns. On failure it returns
-// the client's error and keeps the current effort.
-func (a *Agent) ChangeEffort(e llm.Effort) error {
-	return a.llm.ChangeEffort(e)
-}
-
 // CompactContext summarizes the conversation, keeping the system message and
-// the last turn as they are. [Agent.Process] calls it once a completed turn
+// the last two turns as they are. [Agent.Process] calls it once a completed turn
 // goes past Config.CompactionThresholdPercent of the context window; call it
 // yourself to cut token cost sooner. It does nothing if there is nothing to
 // summarize or the model fails to summarize.
@@ -375,7 +382,7 @@ func (a *Agent) loadModelLimits(ctx context.Context) {
 	}
 
 	info, err := a.llm.ModelInfo(ctx)
-	if err != nil {
+	if err != nil || info == nil {
 		a.fb.ModelInfoUnavailable()
 		return
 	}

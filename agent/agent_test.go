@@ -24,13 +24,10 @@ type fakeLLM struct {
 	infoErr   error
 	chatCalls int
 	calls     [][]llm.Message
-	models    []string
 	current   string
 	changeErr error
 	effort    llm.Effort
-
-	changeEffortErr error
-	toolLists       [][]llm.Tool
+	toolLists [][]llm.Tool
 }
 
 func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, toolList []llm.Tool) (*llm.AssistantMessage, error) {
@@ -51,8 +48,6 @@ func (f *fakeLLM) ModelInfo(context.Context) (*llm.ModelInfo, error) {
 	return f.info, nil
 }
 
-func (f *fakeLLM) AvailableModels() []string { return f.models }
-
 func (f *fakeLLM) ChangeModel(model string) error {
 	if f.changeErr != nil {
 		return f.changeErr
@@ -63,15 +58,7 @@ func (f *fakeLLM) ChangeModel(model string) error {
 
 func (f *fakeLLM) Effort() llm.Effort { return f.effort }
 
-func (f *fakeLLM) ChangeEffort(e llm.Effort) error {
-	if f.changeEffortErr != nil {
-		return f.changeEffortErr
-	}
-	f.effort = e
-	return nil
-}
-
-func agentWithLLM(m modelInterface, fb Feedback, cfg Config) *Agent {
+func agentWithLLM(m Model, fb Feedback, cfg Config) *Agent {
 	return &Agent{config: cfg, llm: m, fb: fb}
 }
 
@@ -215,6 +202,22 @@ func TestNew(t *testing.T) {
 			require.NoError(t, err, "pct=%d", pct)
 			assert.NotNil(t, result, "pct=%d", pct)
 		}
+	})
+
+	t.Run("runs on any Model, not only an llm.LLM", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{{Content: "hello"}},
+			info:    &llm.ModelInfo{ContextSize: 1000},
+		}
+		agt, err := New(Config{}, fake)
+		require.NoError(t, err)
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		result, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "hello", result.Content)
 	})
 }
 
@@ -975,7 +978,7 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("pairs every ToolCalled with a ToolReturned, in order", func(t *testing.T) {
-		// given: two calls in one round
+		// given
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -1001,7 +1004,7 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("returns ErrMaxIterations when the iteration cap is reached", func(t *testing.T) {
-		// given: the model never stops requesting tools
+		// given
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
 				{ToolCalls: []llm.ToolCall{{Name: "echo"}}},
@@ -1033,7 +1036,7 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("compacts after a tool round when the threshold is crossed", func(t *testing.T) {
-		// given: two completed turns, then a tool round whose final reply trips
+		// given
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -1055,7 +1058,7 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err)
 		// when
 		result, err := agt.Process(t.Context(), "u3")
-		// then: the round returns its final reply and compaction runs after it
+		// then
 		require.NoError(t, err)
 		assert.Equal(t, "done", result.Content)
 		assert.Equal(t, []string{"echo"}, fb.tools)
@@ -1064,7 +1067,7 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("summarizes without repeating the system prompt", func(t *testing.T) {
-		// given: same shape as the threshold test, watching the summarizer call
+		// given
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -1081,7 +1084,7 @@ func TestProcess(t *testing.T) {
 		_, err1 := agt.Process(t.Context(), "u1")
 		_, err2 := agt.Process(t.Context(), "u2")
 		_, err3 := agt.Process(t.Context(), "u3")
-		// then: the summarizer sees its own system prompt and a transcript
+		// then
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		require.NoError(t, err3)
@@ -1103,17 +1106,31 @@ func TestProcess(t *testing.T) {
 		}
 		agt := agentWithLLM(fake, fb, Config{})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
-		// when: two turns both fail to fetch the model info
+		// when
 		_, err1 := agt.Process(t.Context(), "u1")
 		_, err2 := agt.Process(t.Context(), "u2")
-		// then: the fetch is retried every turn, so the event fires each time
+		// then
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		assert.Equal(t, []string{"SessionStarted", "ModelInfoUnavailable", "ModelInfoUnavailable"}, fb.events)
 	})
 
+	t.Run("treats a model that reports no info and no error as info unavailable", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "one"}}}
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		result, err := agt.Process(t.Context(), "u1")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "one", result.Content)
+		assert.Equal(t, []string{"SessionStarted", "ModelInfoUnavailable"}, fb.events)
+	})
+
 	t.Run("feeds a failing tool's error back to the model and continues", func(t *testing.T) {
-		// given: the tool errors on the first turn; the model then answers.
+		// given
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{
@@ -1142,7 +1159,7 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("skips compaction when the model info is unavailable", func(t *testing.T) {
-		// given: ModelInfo fails, so limits stay zero and compaction is skipped
+		// given
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 9999}}},
 			infoErr: errors.New("no info"),
@@ -1160,25 +1177,12 @@ func TestProcess(t *testing.T) {
 	})
 }
 
-func TestAvailableModels(t *testing.T) {
-	t.Run("returns the underlying client's model list", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{models: []string{"m1", "m2"}}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		// when
-		result := agt.AvailableModels()
-		// then
-		assert.Equal(t, []string{"m1", "m2"}, result)
-	})
-}
-
 func TestChangeModel(t *testing.T) {
 	t.Run("updates the current model and resets the context window", func(t *testing.T) {
-		// given: an agent whose limits were loaded for a 1000-token model
+		// given
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 1}}},
 			info:    &llm.ModelInfo{Name: "old", ContextSize: 1000},
-			models:  []string{"m2"},
 		}
 		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
@@ -1226,37 +1230,13 @@ func TestModelInfo(t *testing.T) {
 	})
 
 	t.Run("returns nil when the model info cannot be fetched", func(t *testing.T) {
-		// given: called before any turn, with a client that cannot report info
+		// given
 		fake := &fakeLLM{infoErr: errors.New("no info")}
 		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
 		// when
 		result := agt.ModelInfo(t.Context())
 		// then
 		assert.Nil(t, result)
-	})
-}
-
-func TestChangeEffort(t *testing.T) {
-	t.Run("sets the effort on the underlying client", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		// when
-		err := agt.ChangeEffort(llm.EffortMax)
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, llm.EffortMax, fake.effort)
-	})
-
-	t.Run("propagates the client error and leaves the effort alone", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{changeEffortErr: llm.ErrInvalidEffort}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		// when
-		err := agt.ChangeEffort(llm.Effort("bogus"))
-		// then
-		assert.ErrorIs(t, err, llm.ErrInvalidEffort)
-		assert.Empty(t, fake.effort)
 	})
 }
 
@@ -1287,41 +1267,67 @@ func TestCompactContext(t *testing.T) {
 		assert.Contains(t, result, "<name>git-release</name>")
 	})
 
-	t.Run("is a no-op when there is no older turn to summarize", func(t *testing.T) {
-		// given: a single completed turn — nothing older than the kept window
-		fb := &recordingFeedback{}
-		fake := &fakeLLM{}
-		agt := agentWithLLM(fake, fb, Config{})
-		agt.messages = []llm.Message{
-			llm.SystemMessage{Content: "sys"},
-			llm.UserMessage{Content: "u1"},
-			llm.AssistantMessage{Content: "a1"},
+	t.Run("summarizes the turns restored as pointers", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "a2", Stats: llm.Stats{TotalTokens: 10}},
+				{Content: "a3", Stats: llm.Stats{TotalTokens: 10}},
+				{Content: "SUMMARY"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
 		}
-		before := len(agt.messages)
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: []llm.Message{
+			&llm.UserMessage{Content: "u1"},
+			&llm.AssistantMessage{Content: "a1"},
+		}})
+		_, err2 := agt.Process(t.Context(), "u2")
+		_, err3 := agt.Process(t.Context(), "u3")
+		require.NoError(t, err2)
+		require.NoError(t, err3)
 		// when
 		agt.CompactContext(t.Context())
 		// then
-		assert.Len(t, agt.messages, before)
+		summaryRequest, ok := fake.calls[len(fake.calls)-1][1].(llm.UserMessage)
+		require.True(t, ok)
+		assert.Contains(t, summaryRequest.Content, "User: u1")
+		assert.Contains(t, summaryRequest.Content, "Assistant: a1")
+	})
+
+	t.Run("is a no-op when there is no older turn to summarize", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{}
+		agt := agentWithLLM(fake, fb, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: []llm.Message{
+			llm.UserMessage{Content: "u1"},
+			llm.AssistantMessage{Content: "a1"},
+		}})
+		before := agt.Messages()
+		// when
+		agt.CompactContext(t.Context())
+		// then
+		assert.Equal(t, before, agt.Messages())
 		assert.Zero(t, fake.chatCalls)
 		assert.NotContains(t, fb.events, "ContextCompacted")
 	})
 
 	t.Run("leaves the conversation unchanged when summarization fails", func(t *testing.T) {
-		// given: enough turns that an older one exists, but the summarizing Chat errors
+		// given
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{chatErr: errors.New("summary boom")}
 		agt := agentWithLLM(fake, fb, Config{})
-		agt.messages = []llm.Message{
-			llm.SystemMessage{Content: "sys"},
+		agt.StartSession(SessionConfig{Prompt: "sys", Messages: []llm.Message{
 			llm.UserMessage{Content: "u1"}, llm.AssistantMessage{Content: "a1"},
 			llm.UserMessage{Content: "u2"}, llm.AssistantMessage{Content: "a2"},
 			llm.UserMessage{Content: "u3"}, llm.AssistantMessage{Content: "a3"},
-		}
-		snapshot := append([]llm.Message(nil), agt.messages...)
+		}})
+		before := agt.Messages()
 		// when
 		agt.CompactContext(t.Context())
 		// then
-		assert.Equal(t, snapshot, agt.messages)
+		assert.Equal(t, before, agt.Messages())
 		assert.NotContains(t, fb.events, "ContextCompacted")
 		assert.Contains(t, fb.events, "ContextCompactionFailed")
 	})

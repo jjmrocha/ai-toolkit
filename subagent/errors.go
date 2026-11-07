@@ -14,4 +14,7 @@ var (
 	ErrAgentNotFound = errors.New("agent not found")
 	// ErrNoPrompt is returned by [Manager.Run] when the prompt is empty.
 	ErrNoPrompt = errors.New("no prompt provided")
+	// ErrAgentBusy is returned by [Manager.Run] when another run of the same
+	// agent is still in progress.
+	ErrAgentBusy = errors.New("agent busy")
 )

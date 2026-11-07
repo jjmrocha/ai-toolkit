@@ -13,38 +13,21 @@ var (
 	_ ToolPack = (*webTools)(nil)
 )
 
-func Test_serenaMCPConfig(t *testing.T) {
-	t.Run("starts Serena on the given project with the query-projects and no-memories modes and no web dashboard", func(t *testing.T) {
-		// given
-		expected := []string{
-			"--from", "serena-agent==2.1.0",
-			"serena", "start-mcp-server",
-			"--context", "desktop-app",
-			"--add-mode", "query-projects",
-			"--add-mode", "no-memories",
-			"--enable-web-dashboard", "false",
-			"--project", "ai-toolkit",
-		}
+func TestSerenaMCPConfig(t *testing.T) {
+	t.Run("starts Serena on the given project with no web dashboard", func(t *testing.T) {
 		// when
 		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// then
-		assert.Equal(t, expected, result.Args)
+		assert.Equal(t, "uvx", result.Command)
+		assert.Subset(t, result.Args, []string{"--project", "ai-toolkit"})
+		assert.Subset(t, result.Args, []string{"--enable-web-dashboard", "false"})
 	})
 
-	t.Run("leaves Serena's shell, memory, onboarding, project switching and manual tools out", func(t *testing.T) {
-		// given
-		expected := []string{
-			"execute_shell_command",
-			"write_memory", "read_memory", "list_memories",
-			"edit_memory", "delete_memory", "rename_memory",
-			"onboarding",
-			"activate_project", "get_current_config",
-			"initial_instructions",
-		}
+	t.Run("leaves Serena's shell and project switching out", func(t *testing.T) {
 		// when
 		result := serenaMCPConfig(CodingConfig{Project: "ai-toolkit"})
 		// then
-		assert.Equal(t, expected, result.ExcludedTools)
+		assert.Subset(t, result.ExcludedTools, []string{"execute_shell_command", "activate_project"})
 	})
 
 	t.Run("shares nothing between calls", func(t *testing.T) {

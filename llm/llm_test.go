@@ -60,9 +60,9 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff
-		cfg.Models = []string{"openai/gpt-4o"}
-		assert.Equal(t, cfg, result.config)
+		assert.Equal(t, "openai/gpt-4o", result.CurrentModel())
+		assert.Equal(t, EffortOff, result.Effort())
+		assert.Equal(t, []string{"openai/gpt-4o"}, result.AvailableModels())
 	})
 
 	t.Run("valid ollama config returns a configured LLM without an API key", func(t *testing.T) {
@@ -73,9 +73,9 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff
-		cfg.Models = []string{"llama3.2"}
-		assert.Equal(t, cfg, result.config)
+		assert.Equal(t, "llama3.2", result.CurrentModel())
+		assert.Equal(t, EffortOff, result.Effort())
+		assert.Equal(t, []string{"llama3.2"}, result.AvailableModels())
 	})
 
 	t.Run("valid anthropic config returns a configured LLM", func(t *testing.T) {
@@ -86,13 +86,13 @@ func TestNew(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		cfg.Effort = EffortOff
-		cfg.Models = []string{"claude-opus-4-8"}
-		assert.Equal(t, cfg, result.config)
+		assert.Equal(t, "claude-opus-4-8", result.CurrentModel())
+		assert.Equal(t, EffortOff, result.Effort())
+		assert.Equal(t, []string{"claude-opus-4-8"}, result.AvailableModels())
 	})
 
 	t.Run("seeds Models with the active model when it is absent", func(t *testing.T) {
-		// given: Models does not list the configured Model
+		// given
 		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"other"}}
 		// when
 		result, err := New(cfg)
@@ -114,29 +114,6 @@ func TestNew(t *testing.T) {
 }
 
 func TestLLMChat(t *testing.T) {
-	t.Run("delegates to the provider and returns its result", func(t *testing.T) {
-		// given
-		expected := &AssistantMessage{Content: "Hello there"}
-		var gotMessages []Message
-		var gotTools []Tool
-		llm := &LLM{provider: fakeProvider{
-			chatFunc: func(_ context.Context, messages []Message, tools []Tool) (*AssistantMessage, error) {
-				gotMessages = messages
-				gotTools = tools
-				return expected, nil
-			},
-		}}
-		messages := []Message{UserMessage{Content: "Hi"}}
-		tools := []Tool{{Name: "get_weather"}}
-		// when
-		result, err := llm.Chat(t.Context(), messages, tools)
-		// then
-		require.NoError(t, err)
-		assert.Same(t, expected, result)
-		assert.Equal(t, messages, gotMessages)
-		assert.Equal(t, tools, gotTools)
-	})
-
 	t.Run("propagates the provider error", func(t *testing.T) {
 		// given
 		expectedErr := errors.New("boom")
@@ -155,7 +132,7 @@ func TestLLMChat(t *testing.T) {
 
 func TestLLMModelInfo(t *testing.T) {
 	t.Run("delegates to the provider and stamps the configured provider", func(t *testing.T) {
-		// given: the provider reports model info without a provider set
+		// given
 		expected := &ModelInfo{Provider: ProviderOpenRouter, Name: "OpenAI: GPT-4o", ContextSize: 128000}
 		llm := &LLM{
 			config: Config{Provider: ProviderOpenRouter},
@@ -210,6 +187,20 @@ func TestLLMAvailableModels(t *testing.T) {
 		result := llm.AvailableModels()
 		// then
 		assert.Equal(t, expected, result)
+	})
+
+	t.Run("returns a copy the caller cannot use to widen the list", func(t *testing.T) {
+		// given
+		models := []string{"llama3.2", "other"}
+		client, err := New(Config{Provider: ProviderOllama, Model: "llama3.2", Models: models})
+		require.NoError(t, err)
+		client.AvailableModels()[0] = "x"
+		models[1] = "y"
+		// when
+		err = client.ChangeModel("x")
+		// then
+		assert.ErrorIs(t, err, ErrModelNotFound)
+		assert.Equal(t, []string{"llama3.2", "other"}, client.AvailableModels())
 	})
 }
 

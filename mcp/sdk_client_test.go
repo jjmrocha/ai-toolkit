@@ -248,8 +248,6 @@ type testMCPServer struct {
 	names   []string
 }
 
-var testMCPServers []*testMCPServer
-
 func startTestMCPServer(t *testing.T, toolNames []string, options *sdk.ServerOptions, clientNames ...string) *testMCPServer {
 	t.Helper()
 
@@ -260,36 +258,29 @@ func startTestMCPServer(t *testing.T, toolNames []string, options *sdk.ServerOpt
 		server.AddTool(testTool(name), testToolHandler)
 	}
 
-	testServer := &testMCPServer{server: server, names: clientNames}
-	testMCPServers = append(testMCPServers, testServer)
+	return &testMCPServer{server: server, names: clientNames}
+}
 
-	if len(testMCPServers) == 1 {
-		original := newTransport
-		newTransport = func(cfg ClientConfig) sdk.Transport {
-			clientSide, serverSide := sdk.NewInMemoryTransports()
+func testTransport(t *testing.T, servers ...*testMCPServer) transportFactory {
+	t.Helper()
 
-			target := testMCPServers[len(testMCPServers)-1]
-			for _, started := range testMCPServers {
-				if slices.Contains(started.names, cfg.Name) {
-					target = started
-				}
+	return func(cfg ClientConfig) sdk.Transport {
+		clientSide, serverSide := sdk.NewInMemoryTransports()
+
+		target := servers[len(servers)-1]
+		for _, started := range servers {
+			if slices.Contains(started.names, cfg.Name) {
+				target = started
 			}
-
-			session, err := target.server.Connect(context.Background(), serverSide, nil)
-			require.NoError(t, err)
-
-			target.session = session
-
-			return clientSide
 		}
 
-		t.Cleanup(func() {
-			testMCPServers = nil
-			newTransport = original
-		})
-	}
+		session, err := target.server.Connect(context.Background(), serverSide, nil)
+		require.NoError(t, err)
 
-	return testServer
+		target.session = session
+
+		return clientSide
+	}
 }
 
 func testTool(name string) *sdk.Tool {

@@ -40,21 +40,12 @@ func TestDateToolsInstructions(t *testing.T) {
 	})
 }
 
-func fixedNow(t *testing.T, value time.Time) {
-	t.Helper()
-
-	original := now
-	now = func() time.Time { return value }
-
-	t.Cleanup(func() { now = original })
-}
-
-func runDateTool(t *testing.T, name string) string {
+func runDateTool(t *testing.T, name string, instant time.Time) string {
 	t.Helper()
 
 	toolBox := tools.NewToolBox()
 
-	pack, err := DateTools(toolBox)
+	pack, err := dateTools(toolBox, func() time.Time { return instant })
 	require.NoError(t, err)
 
 	defer func() { _ = pack.Close() }()
@@ -114,9 +105,9 @@ func TestDateTools(t *testing.T) {
 
 	t.Run("reports the date as year, month and day", func(t *testing.T) {
 		// given
-		fixedNow(t, time.Date(2026, time.September, 20, 15, 4, 5, 0, time.UTC))
+		instant := time.Date(2026, time.September, 20, 15, 4, 5, 0, time.UTC)
 		// when
-		result := runDateTool(t, currentDateToolName)
+		result := runDateTool(t, currentDateToolName, instant)
 		// then
 		assert.Equal(t, "2026-09-20", result)
 	})
@@ -147,9 +138,9 @@ func TestDateTools(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				// given
-				fixedNow(t, testCase.value)
+				instant := testCase.value
 				// when
-				result := runDateTool(t, currentTimeToolName)
+				result := runDateTool(t, currentTimeToolName, instant)
 				// then
 				assert.Equal(t, testCase.expected, result)
 			})
@@ -197,9 +188,9 @@ func TestDateTools(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				// given
-				fixedNow(t, time.Date(2026, time.September, 20, 15, 4, 5, 0, testCase.zone))
+				instant := time.Date(2026, time.September, 20, 15, 4, 5, 0, testCase.zone)
 				// when
-				result := runDateTool(t, timeZoneToolName)
+				result := runDateTool(t, timeZoneToolName, instant)
 				// then
 				assert.Equal(t, testCase.expected, result)
 			})

@@ -47,42 +47,42 @@ func TestNewClient(t *testing.T) {
 
 	t.Run("registers the server's tools under its name", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search", "fetch"}, nil)
+		server := startTestMCPServer(t, []string{"search", "fetch"}, nil)
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		// when
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
 		// then
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		expected := []string{"playwright__fetch", "playwright__search"}
 		assert.Equal(t, expected, registeredToolNames(toolBox))
 	})
 
 	t.Run("registers the server's tools under their own names", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search", "fetch"}, nil)
+		server := startTestMCPServer(t, []string{"search", "fetch"}, nil)
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		cfg := ClientConfig{Name: "playwright", Command: "npx", NoToolPrefix: true}
 		// when
-		client, err := NewClient(ctx, cfg, toolBox)
+		client, err := newClient(ctx, cfg, toolBox, testTransport(t, server))
 		// then
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		expected := []string{"fetch", "search"}
 		assert.Equal(t, expected, registeredToolNames(toolBox))
 	})
 
 	t.Run("fails when a tool name is already taken", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search", "fetch"}, nil)
+		server := startTestMCPServer(t, []string{"search", "fetch"}, nil)
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		require.NoError(t, toolBox.Add(llm.Tool{Name: "search"}, testHandler))
 		cfg := ClientConfig{Name: "playwright", Command: "npx", NoToolPrefix: true}
 		// when
-		result, err := NewClient(ctx, cfg, toolBox)
+		result, err := newClient(ctx, cfg, toolBox, testTransport(t, server))
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrToolNameTaken)
@@ -92,24 +92,24 @@ func TestNewClient(t *testing.T) {
 
 	t.Run("keeps today's behavior for a name already taken when the prefix is on", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		require.NoError(t, toolBox.Add(llm.Tool{Name: "playwright__search"}, testHandler))
 		// when
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
 		// then
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 	})
 
 	t.Run("registers nothing with a nil ToolBox and still calls tools", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, nil)
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, nil, testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		// when
 		result, err := client.CallTool(ctx, "search", nil)
 		// then
@@ -124,7 +124,7 @@ func TestNewClient(t *testing.T) {
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		// when
-		result, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		result, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
 		// then
 		assert.Nil(t, result)
 		assert.Error(t, err)
@@ -149,9 +149,9 @@ func TestNewClient(t *testing.T) {
 		server := startTestMCPServer(t, []string{"search", "fetch"}, nil)
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		expected := []string{"playwright__fetch", "playwright__search"}
 		require.Equal(t, expected, registeredToolNames(toolBox))
 		// when
@@ -168,9 +168,9 @@ func TestNewClient(t *testing.T) {
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		config := ClientConfig{Name: "playwright", Command: "npx", IncludedTools: []string{"search", "crawl"}}
-		client, err := NewClient(ctx, config, toolBox)
+		client, err := newClient(ctx, config, toolBox, testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		require.Equal(t, []string{"playwright__search"}, registeredToolNames(toolBox))
 		// when
 		server.server.AddTool(testTool("extra"), testToolHandler)
@@ -181,199 +181,146 @@ func TestNewClient(t *testing.T) {
 			return slices.Equal(expected, registeredToolNames(toolBox))
 		}, time.Second, 10*time.Millisecond)
 	})
-}
-
-func TestClientToolName(t *testing.T) {
-	t.Run("namespaces the tool under the server name", func(t *testing.T) {
-		// given
-		c := &Client{config: ClientConfig{Name: "playwright"}}
-		// when
-		result := c.toolName("browser_navigate", nil)
-		// then
-		expected := "playwright__browser_navigate"
-		assert.Equal(t, expected, result)
-	})
-
-	t.Run("uses the server's own name without the prefix", func(t *testing.T) {
-		// given
-		c := &Client{config: ClientConfig{Name: "playwright", NoToolPrefix: true}}
-		// when
-		result := c.toolName("browser_navigate", nil)
-		// then
-		expected := "browser_navigate"
-		assert.Equal(t, expected, result)
-	})
 
 	t.Run("replaces characters the providers reject", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{Name: "web.tools"}}
+		cfg := ClientConfig{Name: "web.tools", Command: "npx"}
 		// when
-		result := c.toolName("fetch/page", nil)
+		result := registerServerTools(t, cfg, "fetch.page")
 		// then
-		expected := "web_tools__fetch_page"
+		expected := []string{"web_tools__fetch_page"}
 		assert.Equal(t, expected, result)
-		assert.True(t, tools.ValidToolName(result))
 	})
 
 	t.Run("shortens a name the providers would reject for length", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{Name: strings.Repeat("a", 40)}}
+		cfg := ClientConfig{Name: strings.Repeat("a", 40), Command: "npx"}
 		// when
-		result := c.toolName(strings.Repeat("b", 40), nil)
+		result := registerServerTools(t, cfg, strings.Repeat("b", 40))
 		// then
-		assert.Len(t, result, tools.MaxToolNameLength)
-		assert.True(t, tools.ValidToolName(result))
+		require.Len(t, result, 1)
+		assert.Len(t, result[0], tools.MaxToolNameLength)
+		assert.True(t, tools.ValidToolName(result[0]))
 	})
 
 	t.Run("still shortens an unprefixed name the providers would reject for length", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{Name: "playwright", NoToolPrefix: true}}
+		cfg := ClientConfig{Name: "playwright", Command: "npx", NoToolPrefix: true}
 		// when
-		result := c.toolName(strings.Repeat("b", 70), nil)
+		result := registerServerTools(t, cfg, strings.Repeat("b", 70))
 		// then
-		assert.Len(t, result, tools.MaxToolNameLength)
-		assert.True(t, tools.ValidToolName(result))
+		require.Len(t, result, 1)
+		assert.Len(t, result[0], tools.MaxToolNameLength)
+		assert.True(t, tools.ValidToolName(result[0]))
 	})
 
-	t.Run("gives a name already taken a distinct suffix", func(t *testing.T) {
+	t.Run("gives two tools that sanitize to the same name distinct names", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{Name: "playwright"}}
-		taken := []string{"playwright__browser_navigate"}
+		cfg := ClientConfig{Name: "playwright", Command: "npx"}
 		// when
-		result := c.toolName("browser_navigate", taken)
+		result := registerServerTools(t, cfg, "fetch.page", "fetch_page")
 		// then
-		assert.NotContains(t, taken, result)
-		assert.True(t, tools.ValidToolName(result))
+		require.Len(t, result, 2)
+		assert.NotEqual(t, result[0], result[1])
+		assert.True(t, tools.ValidToolName(result[0]))
+		assert.True(t, tools.ValidToolName(result[1]))
 	})
 
 	t.Run("gives the same tool the same name every time", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{Name: strings.Repeat("a", 40)}}
-		expected := c.toolName(strings.Repeat("b", 40), nil)
+		cfg := ClientConfig{Name: strings.Repeat("a", 40), Command: "npx"}
+		expected := registerServerTools(t, cfg, strings.Repeat("b", 40))
 		// when
-		result := c.toolName(strings.Repeat("b", 40), nil)
+		result := registerServerTools(t, cfg, strings.Repeat("b", 40))
 		// then
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("gives different tools different names once shortened", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{Name: strings.Repeat("a", 40)}}
-		first := c.toolName(strings.Repeat("b", 40), nil)
+		cfg := ClientConfig{Name: strings.Repeat("a", 40), Command: "npx"}
 		// when
-		result := c.toolName(strings.Repeat("c", 40), nil)
+		result := registerServerTools(t, cfg, strings.Repeat("b", 40), strings.Repeat("c", 40))
 		// then
-		assert.NotEqual(t, first, result)
-	})
-}
-
-func TestClientExcluded(t *testing.T) {
-	t.Run("drops a tool the config names", func(t *testing.T) {
-		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			ExcludedTools: []string{"execute_shell_command"},
-		}}
-		// when
-		result := c.excluded("execute_shell_command")
-		// then
-		assert.True(t, result)
+		require.Len(t, result, 2)
+		assert.NotEqual(t, result[0], result[1])
 	})
 
-	t.Run("keeps a tool the config does not name", func(t *testing.T) {
+	t.Run("leaves out the excluded tools and keeps the rest", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			ExcludedTools: []string{"execute_shell_command"},
-		}}
+		cfg := ClientConfig{Name: "serena", Command: "uvx", ExcludedTools: []string{"execute_shell_command"}}
 		// when
-		result := c.excluded("find_symbol")
+		result := registerServerTools(t, cfg, "execute_shell_command", "find_symbol")
 		// then
-		assert.False(t, result)
+		expected := []string{"serena__find_symbol"}
+		assert.Equal(t, expected, result)
 	})
 
-	t.Run("matches the name the server published, not the namespaced one", func(t *testing.T) {
+	t.Run("excludes by the name the server published, not the namespaced one", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			ExcludedTools: []string{"serena__execute_shell_command"},
-		}}
+		cfg := ClientConfig{Name: "serena", Command: "uvx", ExcludedTools: []string{"serena__execute_shell_command"}}
 		// when
-		result := c.excluded("execute_shell_command")
+		result := registerServerTools(t, cfg, "execute_shell_command")
 		// then
-		assert.False(t, result)
-	})
-
-	t.Run("drops a tool the include list does not name", func(t *testing.T) {
-		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			IncludedTools: []string{"find_symbol"},
-		}}
-		// when
-		result := c.excluded("replace_content")
-		// then
-		assert.True(t, result)
-	})
-
-	t.Run("keeps a tool the include list names", func(t *testing.T) {
-		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			IncludedTools: []string{"find_symbol"},
-		}}
-		// when
-		result := c.excluded("find_symbol")
-		// then
-		assert.False(t, result)
+		expected := []string{"serena__execute_shell_command"}
+		assert.Equal(t, expected, result)
 	})
 
 	t.Run("keeps every tool when the include list is empty", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			IncludedTools: []string{},
-		}}
+		cfg := ClientConfig{Name: "serena", Command: "uvx", IncludedTools: []string{}}
 		// when
-		result := c.excluded("replace_content")
+		result := registerServerTools(t, cfg, "replace_content")
 		// then
-		assert.False(t, result)
+		expected := []string{"serena__replace_content"}
+		assert.Equal(t, expected, result)
 	})
 
-	t.Run("drops a tool both lists name", func(t *testing.T) {
+	t.Run("leaves out a tool both lists name", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{
+		cfg := ClientConfig{
 			Name:          "serena",
+			Command:       "uvx",
 			IncludedTools: []string{"execute_shell_command"},
 			ExcludedTools: []string{"execute_shell_command"},
-		}}
+		}
 		// when
-		result := c.excluded("execute_shell_command")
+		result := registerServerTools(t, cfg, "execute_shell_command")
 		// then
-		assert.True(t, result)
+		assert.Empty(t, result)
 	})
 
 	t.Run("includes by the name the server published, not the namespaced one", func(t *testing.T) {
 		// given
-		c := &Client{config: ClientConfig{
-			Name:          "serena",
-			IncludedTools: []string{"serena__find_symbol"},
-		}}
+		cfg := ClientConfig{Name: "serena", Command: "uvx", IncludedTools: []string{"serena__find_symbol"}}
 		// when
-		result := c.excluded("find_symbol")
+		result := registerServerTools(t, cfg, "find_symbol")
 		// then
-		assert.True(t, result)
+		assert.Empty(t, result)
 	})
+}
+
+func registerServerTools(t *testing.T, cfg ClientConfig, toolNames ...string) []string {
+	t.Helper()
+
+	server := startTestMCPServer(t, toolNames, nil)
+	toolBox := tools.NewToolBox()
+
+	client, err := newClient(t.Context(), cfg, toolBox, testTransport(t, server))
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	return registeredToolNames(toolBox)
 }
 
 func TestClientInstructions(t *testing.T) {
 	t.Run("returns the instructions the server sent at handshake", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
+		server := startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
 		ctx := t.Context()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox())
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox(), testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		// when
 		result := client.Instructions()
 		// then
@@ -383,11 +330,11 @@ func TestClientInstructions(t *testing.T) {
 
 	t.Run("nil when the server sent none", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox())
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox(), testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		// when
 		result := client.Instructions()
 		// then
@@ -398,11 +345,11 @@ func TestClientInstructions(t *testing.T) {
 func TestClientName(t *testing.T) {
 	t.Run("returns the name the client registered under", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox())
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox(), testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		// when
 		result := client.Name()
 		// then
@@ -413,11 +360,11 @@ func TestClientName(t *testing.T) {
 func TestClientCallTool(t *testing.T) {
 	t.Run("returns the text the server's tool produced", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox())
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox(), testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		// when
 		result, err := client.CallTool(ctx, "search", nil)
 		// then
@@ -427,11 +374,11 @@ func TestClientCallTool(t *testing.T) {
 
 	t.Run("fails for a tool the server does not have", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox())
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, tools.NewToolBox(), testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		// when
 		_, err = client.CallTool(ctx, "fetch", nil)
 		// then
@@ -445,9 +392,9 @@ func TestClientConnected(t *testing.T) {
 		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
-		client, err := NewClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		client, err := newClient(ctx, ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = client.Close() })
+		t.Cleanup(client.Close)
 		require.Equal(t, []string{"playwright__search"}, registeredToolNames(toolBox))
 		// when
 		require.NoError(t, server.session.Close())
@@ -456,39 +403,51 @@ func TestClientConnected(t *testing.T) {
 			return !client.Connected() && len(toolBox.Tools()) == 0
 		}, time.Second, 10*time.Millisecond)
 	})
+
+	t.Run("registers nothing when the tool list changes after the client disconnected", func(t *testing.T) {
+		// given
+		server := startTestMCPServer(t, []string{"search"}, nil)
+		toolBox := tools.NewToolBox()
+		client, err := newClient(t.Context(), ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
+		require.NoError(t, err)
+		t.Cleanup(client.Close)
+		client.disconnected()
+		// when
+		client.onToolsChange()
+		// then
+		assert.Empty(t, toolBox.Tools())
+	})
 }
 
 func TestClientClose(t *testing.T) {
 	t.Run("removes only the client's tools from the ToolBox", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		toolBox := tools.NewToolBox()
 		require.NoError(t, toolBox.Add(llm.Tool{Name: "other"}, testHandler))
-		client, err := NewClient(t.Context(), ClientConfig{Name: "playwright", Command: "npx"}, toolBox)
+		client, err := newClient(t.Context(), ClientConfig{Name: "playwright", Command: "npx"}, toolBox, testTransport(t, server))
 		require.NoError(t, err)
 		// when
-		err = client.Close()
+		client.Close()
 		// then
-		assert.NoError(t, err)
 		expected := []string{"other"}
 		assert.Equal(t, expected, registeredToolNames(toolBox))
 	})
 
 	t.Run("leaves a newer client's tools in place on a second close", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		toolBox := tools.NewToolBox()
 		cfg := ClientConfig{Name: "playwright", Command: "npx"}
-		oldClient, err := NewClient(t.Context(), cfg, toolBox)
+		oldClient, err := newClient(t.Context(), cfg, toolBox, testTransport(t, server))
 		require.NoError(t, err)
-		require.NoError(t, oldClient.Close())
-		newClient, err := NewClient(t.Context(), cfg, toolBox)
+		oldClient.Close()
+		newerClient, err := newClient(t.Context(), cfg, toolBox, testTransport(t, server))
 		require.NoError(t, err)
-		t.Cleanup(func() { _ = newClient.Close() })
+		t.Cleanup(newerClient.Close)
 		// when
-		err = oldClient.Close()
+		oldClient.Close()
 		// then
-		assert.NoError(t, err)
 		expected := []string{"playwright__search"}
 		assert.Equal(t, expected, registeredToolNames(toolBox))
 	})

@@ -7,7 +7,7 @@ var (
 	// ErrNoSession is returned when a method needs a session and none has been
 	// started, or it was closed.
 	ErrNoSession = errors.New("no session started")
-	// ErrNoLLM is returned by [New] when the LLM is nil.
+	// ErrNoLLM is returned by [New] when the model is nil.
 	ErrNoLLM = errors.New("no LLM provided")
 	// ErrMaxIterations is returned by [Agent.Process] when it reaches
 	// Config.MaxIterations before the model's final reply.

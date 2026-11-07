@@ -2,9 +2,11 @@ package packs
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,26 +22,27 @@ import (
 )
 
 const (
-	readToolName      = "file_read"
-	writeToolName     = "file_write"
-	editToolName      = "file_edit"
-	listToolName      = "file_list"
-	searchToolName    = "file_search"
-	deleteToolName    = "file_delete"
-	workdirToolName   = "file_workdir"
-	pathArg           = "path"
-	contentArg        = "content"
-	oldStringArg      = "old_string"
-	newStringArg      = "new_string"
-	offsetArg         = "offset"
-	limitArg          = "limit"
-	patternArg        = "pattern"
-	globArg           = "glob"
-	recursiveArg      = "recursive"
-	defaultReadLines  = 2000
-	maxSearchMatches  = 100
-	maxMatchTextBytes = 500
-	maxFileReadBytes  = 1024 * 1024
+	readToolName        = "file_read"
+	writeToolName       = "file_write"
+	editToolName        = "file_edit"
+	listToolName        = "file_list"
+	searchToolName      = "file_search"
+	deleteToolName      = "file_delete"
+	workdirToolName     = "file_workdir"
+	pathArg             = "path"
+	contentArg          = "content"
+	oldStringArg        = "old_string"
+	newStringArg        = "new_string"
+	offsetArg           = "offset"
+	limitArg            = "limit"
+	patternArg          = "pattern"
+	globArg             = "glob"
+	recursiveArg        = "recursive"
+	defaultReadLines    = 2000
+	maxSearchMatches    = 100
+	maxMatchTextBytes   = 500
+	maxFileReadBytes    = 1024 * 1024
+	lineCountChunkBytes = 64 * 1024
 )
 
 const fileInstruction = `These tools reach only the folder %s and nothing
@@ -51,6 +54,16 @@ answer.`
 const fileWriteInstruction = `file_edit changes one chosen place: include enough
 of the surroundings to make the target text unambiguous. Never delete work you
 did not make, and never discard a whole folder's content behind a single call.`
+
+// FileConfig holds the choices [FileTools] opens its folder with.
+type FileConfig struct {
+	// Path is the folder the tools work in. A relative path is resolved against
+	// the current working directory, and empty means that directory itself.
+	Path string
+	// ReadOnly registers only "file_read", "file_list", "file_search" and
+	// "file_workdir".
+	ReadOnly bool
+}
 
 type filePack struct {
 	toolBox  *tools.ToolBox
@@ -87,8 +100,8 @@ func (p *filePack) Close() error {
 	return err
 }
 
-// FileTools registers seven tools in m that work on the files under path and
-// nowhere else:
+// FileTools registers seven tools in m that work on the files under
+// [FileConfig.Path] and nowhere else:
 //
 //   - "file_read" reads a text file one page of lines at a time
 //   - "file_write" writes a whole file
@@ -99,12 +112,12 @@ func (p *filePack) Close() error {
 //   - "file_workdir" returns the folder's absolute path, for naming a file to a
 //     tool outside the pack
 //
-// With readOnly, only "file_read", "file_list", "file_search" and
+// With [FileConfig.ReadOnly], only "file_read", "file_list", "file_search" and
 // "file_workdir" are registered, and [ToolPack.Instructions] leaves out editing
 // and deleting.
 //
 // [ToolPack.Close] removes the tools and closes the folder. FileTools returns an
-// error, and registers nothing, if path cannot be opened.
+// error, and registers nothing, if the folder cannot be opened.
 //
 // The confinement is [os.Root]: a path that climbs out, is absolute, or leaves
 // through a symbolic link is refused. That is what separates this pack from
@@ -118,8 +131,8 @@ func (p *filePack) Close() error {
 // "file_search" returns paths relative to the folder, ready for "file_read",
 // skips binary files, and returns at most 100 matches unless the call asks for
 // more, marking a result it cut short.
-func FileTools(m *tools.ToolBox, path string, readOnly bool) (ToolPack, error) {
-	absPath, err := filepath.Abs(path)
+func FileTools(m *tools.ToolBox, cfg FileConfig) (ToolPack, error) {
+	absPath, err := filepath.Abs(cfg.Path)
 	if err != nil {
 		return nil, fmt.Errorf("opening root: %w", err)
 	}
@@ -133,7 +146,7 @@ func FileTools(m *tools.ToolBox, path string, readOnly bool) (ToolPack, error) {
 		toolBox:  m,
 		root:     opened,
 		path:     absPath,
-		readOnly: readOnly,
+		readOnly: cfg.ReadOnly,
 	}
 
 	readTool := llm.Tool{
@@ -222,7 +235,7 @@ func FileTools(m *tools.ToolBox, path string, readOnly bool) (ToolPack, error) {
 		{tool: searchTool, handler: pack.searchFiles},
 		{tool: workdirTool, handler: pack.workdir},
 	}
-	if !readOnly {
+	if !cfg.ReadOnly {
 		writeRegistration := registration{tool: writeTool, handler: pack.writeFile}
 		editRegistration := registration{tool: editTool, handler: pack.editFile}
 		deleteRegistration := registration{tool: deleteTool, handler: pack.deleteFile}
@@ -527,19 +540,28 @@ func positiveIntArg(arguments *tools.Arguments, name string, fallback int) (int,
 }
 
 func readPage(file *os.File, offset int, limit int) ([]string, int, error) {
+	total, err := countLines(file)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return nil, 0, err
+	}
+
 	var (
 		lines     []string
-		total     int
+		number    int
 		collected int
 	)
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxFileReadBytes)
 
-	for scanner.Scan() {
-		total++
+	for len(lines) < limit && collected < maxFileReadBytes && scanner.Scan() {
+		number++
 
-		if total < offset || len(lines) == limit || collected >= maxFileReadBytes {
+		if number < offset {
 			continue
 		}
 
@@ -554,6 +576,34 @@ func readPage(file *os.File, offset int, limit int) ([]string, int, error) {
 	}
 
 	return lines, total, nil
+}
+
+func countLines(file *os.File) (int, error) {
+	buffer := make([]byte, lineCountChunkBytes)
+	count := 0
+	last := byte('\n')
+
+	for {
+		n, err := file.Read(buffer)
+		if chunk := buffer[:n]; len(chunk) > 0 {
+			count += bytes.Count(chunk, []byte{'\n'})
+			last = chunk[len(chunk)-1]
+		}
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	if last != '\n' {
+		count++
+	}
+
+	return count, nil
 }
 
 func renderPage(lines []string, offset int, total int) string {

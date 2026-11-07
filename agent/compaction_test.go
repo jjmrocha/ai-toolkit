@@ -25,7 +25,7 @@ func TestCompactionThreshold(t *testing.T) {
 	t.Run("uses the default percentage when pct is zero", func(t *testing.T) {
 		// when
 		result := compactionThreshold(8000, 0)
-		// then: defaultCompactionThresholdPercent is 85
+		// then
 		assert.Equal(t, 6800, result)
 	})
 
@@ -53,7 +53,7 @@ func TestIndexOfTheBeginningOfTurnToKeep(t *testing.T) {
 		msgs = append(msgs, turn("u2", "a2")...)
 		// when
 		result := indexOfTheBeginningOfTurnToKeep(msgs)
-		// then: keeping "u1" and "u2" starts at "u1", index 1
+		// then
 		assert.Equal(t, 1, result)
 		assert.IsType(t, llm.UserMessage{}, msgs[result])
 	})
@@ -71,7 +71,7 @@ func TestIndexOfTheBeginningOfTurnToKeep(t *testing.T) {
 		}
 		// when
 		result := indexOfTheBeginningOfTurnToKeep(msgs)
-		// then: the two kept turns start at "u1", index 1, so the tool pair is kept
+		// then
 		assert.Equal(t, 1, result)
 	})
 

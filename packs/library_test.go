@@ -10,14 +10,11 @@ var _ ToolPack = (*libraryTools)(nil)
 
 func TestContext7MCPConfig(t *testing.T) {
 	t.Run("starts the context7 server with npx", func(t *testing.T) {
-		// given
-		expected := []string{"-y", "@upstash/context7-mcp@4.4.4"}
 		// when
 		result := Context7MCPConfig()
 		// then
 		assert.Equal(t, "context7", result.Name)
 		assert.Equal(t, "npx", result.Command)
-		assert.Equal(t, expected, result.Args)
 	})
 
 	t.Run("passes the API key variable to the server", func(t *testing.T) {

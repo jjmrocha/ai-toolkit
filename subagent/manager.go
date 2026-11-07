@@ -18,6 +18,7 @@ type subAgent struct {
 	agent   *agent.Agent
 	toolBox *tools.ToolBox
 	skills  *skills.Collection
+	busy    chan struct{}
 }
 
 type childFeedback struct {
@@ -106,6 +107,7 @@ func (m *Manager) Register(cfg Config, agent *agent.Agent, toolBox *tools.ToolBo
 		agent:   agent,
 		toolBox: toolBox,
 		skills:  skills,
+		busy:    make(chan struct{}, 1),
 	}
 
 	m.mu.Lock()
@@ -142,13 +144,15 @@ func (m *Manager) Agents() []Info {
 // success or failure, to the manager's [Debugger], if one is set; see
 // [Manager.SetDebugger].
 //
-// Run returns [ErrNoPrompt] when prompt is empty and [ErrAgentNotFound] when no
-// agent is registered under name, in both cases without calling the model. An
-// error from [agent.Agent.Process], such as [agent.ErrMaxIterations], is
-// returned unchanged.
+// Run returns [ErrNoPrompt] when prompt is empty, [ErrAgentNotFound] when no
+// agent is registered under name, and [ErrAgentBusy] when another run of name
+// is still in progress, in each case without calling the model. An error from
+// [agent.Agent.Process], such as [agent.ErrMaxIterations], is returned
+// unchanged.
 //
-// An [agent.Agent] is not safe for concurrent use, so two runs that use the
-// same one must not overlap.
+// An [agent.Agent] is not safe for concurrent use. Run keeps two runs of one
+// name apart, but two names registered with the same agent must not run at the
+// same time.
 func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, error) {
 	if prompt == "" {
 		return "", ErrNoPrompt
@@ -163,6 +167,14 @@ func (m *Manager) Run(ctx context.Context, name string, prompt string) (string, 
 	if !ok {
 		return "", fmt.Errorf("subagent: %w: %s", ErrAgentNotFound, name)
 	}
+
+	select {
+	case registered.busy <- struct{}{}:
+	default:
+		return "", fmt.Errorf("subagent: %w: %s", ErrAgentBusy, name)
+	}
+
+	defer func() { <-registered.busy }()
 
 	child := registered.agent
 	defer child.Close()

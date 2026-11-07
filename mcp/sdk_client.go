@@ -31,14 +31,16 @@ type callBacks struct {
 	onProgress    func(string)
 }
 
-var newTransport = func(cfg ClientConfig) sdk.Transport {
+type transportFactory func(ClientConfig) sdk.Transport
+
+func commandTransport(cfg ClientConfig) sdk.Transport {
 	cmd := exec.Command(cfg.Command, cfg.Args...) //nolint:gosec // command and args are operator-provided configuration
 	cmd.Env = command.InheritedEnv(cfg.InheritEnv)
 
 	return &sdk.CommandTransport{Command: cmd}
 }
 
-func newSDKClient(ctx context.Context, cfg ClientConfig, cb callBacks) (*sdkClient, error) {
+func newSDKClient(ctx context.Context, cfg ClientConfig, transport transportFactory, cb callBacks) (*sdkClient, error) {
 	s := &sdkClient{
 		callBacks: cb,
 	}
@@ -55,7 +57,7 @@ func newSDKClient(ctx context.Context, cfg ClientConfig, cb callBacks) (*sdkClie
 
 	client := sdk.NewClient(&impl, &options)
 
-	session, err := client.Connect(ctx, newTransport(cfg), nil)
+	session, err := client.Connect(ctx, transport(cfg), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error starting mcp %s: %w", cfg.Name, err)
 	}

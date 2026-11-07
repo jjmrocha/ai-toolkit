@@ -98,8 +98,8 @@ type levelProbability struct {
 // provider, and each call is billed on the whole input.
 //
 // A choice with fewer than two options or a repeated option, and a score with
-// fewer than two levels, fail with [ErrInvalidQuestion] before the provider is
-// called. Errors from [decision.Decision.Ask] are returned unchanged.
+// fewer than two levels, fail with [decision.ErrInvalidQuestion] before the
+// provider is called. Errors from [decision.Decision.Ask] are returned unchanged.
 //
 // The caller owns client, so [ToolPack.Close] only unregisters. If m rejects a
 // registration, DecisionTools returns the error from [tools.ToolBox.Add] and
@@ -221,14 +221,10 @@ func askChoice(ctx context.Context, client *decision.Decision, args map[string]a
 		}
 
 		if _, ok := question.Options[name]; ok {
-			return "", fmt.Errorf("%w: option %q is given more than once", ErrInvalidQuestion, name)
+			return "", fmt.Errorf("%w: option %q is given more than once", decision.ErrInvalidQuestion, name)
 		}
 
 		question.Options[name] = description
-	}
-
-	if len(question.Options) < 2 {
-		return "", fmt.Errorf("%w: %d options given, expected 2 or more", ErrInvalidQuestion, len(question.Options))
 	}
 
 	answer, err := askOne[decision.ChoiceAnswer](ctx, client, input, question)
@@ -254,10 +250,6 @@ func askScore(ctx context.Context, client *decision.Decision, args map[string]an
 	levels, err := arguments.GetArrayOfStrings(levelsArg)
 	if err != nil {
 		return "", err
-	}
-
-	if len(levels) < 2 {
-		return "", fmt.Errorf("%w: %d levels given, expected 2 or more", ErrInvalidQuestion, len(levels))
 	}
 
 	question := decision.Score{Instructions: instructions, Levels: levels}

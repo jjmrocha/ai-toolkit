@@ -24,6 +24,14 @@ func Context7MCPConfig() mcp.ClientConfig {
 	}
 }
 
+// LibraryConfig holds the choices [LibraryTools] starts context7 with.
+type LibraryConfig struct {
+	// NoToolPrefix registers the tools under their own names, such as
+	// "query-docs", instead of "context7__query-docs". It sets
+	// [mcp.ClientConfig.NoToolPrefix].
+	NoToolPrefix bool
+}
+
 type libraryTools struct {
 	mcp *mcp.Client
 }
@@ -34,17 +42,18 @@ type libraryTools struct {
 // is optional; see [Context7MCPConfig]. The tools are
 // "context7__resolve-library-id", which finds a library's context7 id, and
 // "context7__query-docs", which answers a question from that library's
-// documentation. When noToolPrefix is true, they are "resolve-library-id" and
-// "query-docs".
+// documentation. When [LibraryConfig.NoToolPrefix] is set, they are
+// "resolve-library-id" and "query-docs".
 //
 // If registration fails, the server is stopped before LibraryTools returns.
-// With noToolPrefix, that includes [mcp.ErrToolNameTaken] when one of the tool
-// names is already in m. If the server dies later, its tools are removed from m.
-func LibraryTools(ctx context.Context, m *tools.ToolBox, noToolPrefix bool) (ToolPack, error) {
-	cfg := Context7MCPConfig()
-	cfg.NoToolPrefix = noToolPrefix
+// With [LibraryConfig.NoToolPrefix], that includes [mcp.ErrToolNameTaken] when
+// one of the tool names is already in m. If the server dies later, its tools are
+// removed from m.
+func LibraryTools(ctx context.Context, m *tools.ToolBox, cfg LibraryConfig) (ToolPack, error) {
+	mcpConfig := Context7MCPConfig()
+	mcpConfig.NoToolPrefix = cfg.NoToolPrefix
 
-	client, err := mcp.NewClient(ctx, cfg, m)
+	client, err := mcp.NewClient(ctx, mcpConfig, m)
 	if err != nil {
 		return nil, err
 	}
@@ -57,5 +66,7 @@ func (l *libraryTools) Instructions(_ context.Context) *mcp.Instruction {
 }
 
 func (l *libraryTools) Close() error {
-	return l.mcp.Close()
+	l.mcp.Close()
+
+	return nil
 }

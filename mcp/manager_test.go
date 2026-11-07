@@ -64,10 +64,11 @@ func TestManagerStatus(t *testing.T) {
 func TestManagerInstructions(t *testing.T) {
 	t.Run("returns the instructions of the running MCPs, sorted by name", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "zeta")
-		startTestMCPServer(t, []string{"fetch"}, &sdk.ServerOptions{Instructions: "Use fetch to read a page."}, "alpha")
+		server := startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "zeta")
+		other := startTestMCPServer(t, []string{"fetch"}, &sdk.ServerOptions{Instructions: "Use fetch to read a page."}, "alpha")
 		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
+		m.transport = testTransport(t, server, other)
 		m.Register(ClientConfig{Name: "zeta", Command: "npx"})
 		m.Register(ClientConfig{Name: "alpha", Command: "npx"})
 		t.Cleanup(m.Close)
@@ -85,10 +86,11 @@ func TestManagerInstructions(t *testing.T) {
 
 	t.Run("leaves out an MCP that sent no instructions", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "playwright")
-		startTestMCPServer(t, []string{"fetch"}, nil, "quiet")
+		server := startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."}, "playwright")
+		other := startTestMCPServer(t, []string{"fetch"}, nil, "quiet")
 		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
+		m.transport = testTransport(t, server, other)
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		m.Register(ClientConfig{Name: "quiet", Command: "npx"})
 		t.Cleanup(m.Close)
@@ -103,9 +105,10 @@ func TestManagerInstructions(t *testing.T) {
 
 	t.Run("leaves out an MCP that is not running", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
+		server := startTestMCPServer(t, []string{"search"}, &sdk.ServerOptions{Instructions: "Use search to query the web."})
 		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
+		m.transport = testTransport(t, server)
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		m.Register(ClientConfig{Name: "registered-only", Command: "npx"})
 		t.Cleanup(m.Close)
@@ -123,6 +126,7 @@ func TestManagerInstructions(t *testing.T) {
 		ctx := t.Context()
 		toolBox := tools.NewToolBox()
 		m := NewManager(toolBox)
+		m.transport = testTransport(t, server)
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		t.Cleanup(m.Close)
 		require.NoError(t, m.Start(ctx, "playwright"))
@@ -140,9 +144,10 @@ func TestManagerInstructions(t *testing.T) {
 
 	t.Run("nil when no running MCP sent instructions", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
+		m.transport = testTransport(t, server)
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		t.Cleanup(m.Close)
 		require.NoError(t, m.Start(ctx, "playwright"))
@@ -212,9 +217,10 @@ func TestManagerClose(t *testing.T) {
 
 	t.Run("keeps the registration of a server it started", func(t *testing.T) {
 		// given
-		startTestMCPServer(t, []string{"search"}, nil)
+		server := startTestMCPServer(t, []string{"search"}, nil)
 		ctx := t.Context()
 		m := NewManager(tools.NewToolBox())
+		m.transport = testTransport(t, server)
 		m.Register(ClientConfig{Name: "playwright", Command: "npx"})
 		require.NoError(t, m.Start(ctx, "playwright"))
 		m.Close()

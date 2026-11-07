@@ -14,18 +14,20 @@ import (
 // [Manager.Stop], and see which are running with [Manager.Status]. It is safe
 // for concurrent use.
 type Manager struct {
-	toolBox *tools.ToolBox
-	configs map[string]ClientConfig
-	clients map[string]*Client
-	mu      sync.Mutex
+	toolBox   *tools.ToolBox
+	transport transportFactory
+	configs   map[string]ClientConfig
+	clients   map[string]*Client
+	mu        sync.Mutex
 }
 
 // NewManager returns an empty [Manager] that registers each MCP's tools in tb.
 func NewManager(tb *tools.ToolBox) *Manager {
 	return &Manager{
-		toolBox: tb,
-		configs: make(map[string]ClientConfig),
-		clients: make(map[string]*Client),
+		toolBox:   tb,
+		transport: commandTransport,
+		configs:   make(map[string]ClientConfig),
+		clients:   make(map[string]*Client),
 	}
 }
 
@@ -38,7 +40,7 @@ func (m *Manager) Close() {
 
 	for name, client := range m.clients {
 		delete(m.clients, name)
-		_ = client.Close()
+		client.Close()
 	}
 }
 
@@ -66,7 +68,7 @@ func (m *Manager) Status() []Status {
 			active = client.Connected()
 
 			if !active {
-				_ = client.Close()
+				client.Close()
 				delete(m.clients, name)
 			}
 		}
@@ -90,7 +92,7 @@ func (m *Manager) Instructions() []Instruction {
 
 	for name, client := range m.clients {
 		if !client.Connected() {
-			_ = client.Close()
+			client.Close()
 			delete(m.clients, name)
 
 			continue
@@ -114,9 +116,9 @@ func (m *Manager) Instructions() []Instruction {
 
 // Start launches the MCP registered under name and registers its tools in the
 // [tools.ToolBox]. A running client is reused; a dead one is replaced. ctx
-// bounds the handshake and the tools/list request. It returns
-// [ErrMCPNotRegistered] when nothing is registered under name, or the launch or
-// registration error.
+// bounds the handshake and the tools/list request. Other calls on the Manager
+// wait until the server has started. It returns [ErrMCPNotRegistered] when
+// nothing is registered under name, or the launch or registration error.
 func (m *Manager) Start(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,11 +133,11 @@ func (m *Manager) Start(ctx context.Context, name string) error {
 			return nil
 		}
 
-		_ = client.Close()
+		client.Close()
 		delete(m.clients, name)
 	}
 
-	client, err := NewClient(ctx, cfg, m.toolBox)
+	client, err := newClient(ctx, cfg, m.toolBox, m.transport)
 	if err != nil {
 		return err
 	}
@@ -161,7 +163,7 @@ func (m *Manager) Stop(name string) error {
 		return nil
 	}
 
-	_ = client.Close()
+	client.Close()
 	delete(m.clients, name)
 
 	return nil

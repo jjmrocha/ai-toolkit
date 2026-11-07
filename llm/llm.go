@@ -35,6 +35,7 @@ func New(cfg Config) (*LLM, error) {
 		return nil, ErrInvalidEffort
 	}
 
+	cfg.Models = slices.Clone(cfg.Models)
 	if !slices.Contains(cfg.Models, cfg.Model) {
 		cfg.Models = append([]string{cfg.Model}, cfg.Models...)
 	}
@@ -108,12 +109,13 @@ func (l *LLM) CurrentModel() string {
 // AvailableModels returns the models the client can switch between:
 // Config.Models plus Config.Model, which is always included.
 func (l *LLM) AvailableModels() []string {
-	return l.config.Models
+	return slices.Clone(l.config.Models)
 }
 
 // ChangeModel switches the client to model, which must be in
 // [LLM.AvailableModels]. It returns [ErrMissingModel] when model is empty and
-// [ErrModelNotFound] when it is not available.
+// [ErrModelNotFound] when it is not available. It waits for requests in flight
+// to end, and the client's other methods wait with it.
 func (l *LLM) ChangeModel(model string) error {
 	if model == "" {
 		return ErrMissingModel
@@ -139,7 +141,8 @@ func (l *LLM) Effort() Effort {
 
 // ChangeEffort sets the reasoning effort for later requests. An empty e means
 // [EffortOff], as in [New]. It returns [ErrInvalidEffort], changing nothing,
-// when e is not a known [Effort].
+// when e is not a known [Effort]. It waits for requests in flight to end, and
+// the client's other methods wait with it.
 func (l *LLM) ChangeEffort(e Effort) error {
 	if e == "" {
 		e = EffortOff

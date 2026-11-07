@@ -146,6 +146,10 @@ func TestDecisionAsk(t *testing.T) {
 			{name: "only yes described by pointer", question: &YesNo{Instructions: "Is it?", True: "It is"}},
 			{name: "choice without options", question: Choice{Instructions: "Which one?"}},
 			{name: "score without levels", question: Score{Instructions: "How much?"}},
+			{name: "choice with one option", question: Choice{Instructions: "Which one?", Options: map[string]string{"only": ""}}},
+			{name: "score with one level", question: Score{Instructions: "How much?", Levels: []string{"some"}}},
+			{name: "nil question", question: nil},
+			{name: "nil pointer question", question: (*YesNo)(nil)},
 		}
 
 		for _, testCase := range testCases {

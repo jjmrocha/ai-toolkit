@@ -269,7 +269,7 @@ agt.StartSession(session)
 ### `packs`
 
 ```go
-pack, err := packs.WebTools(ctx, toolBox, false)
+pack, err := packs.WebTools(ctx, toolBox, packs.WebConfig{})
 if err != nil {
 	return err
 }
@@ -289,7 +289,7 @@ defer pack.Close()
 | `DecisionTools` | Typed questions to a decision model, answered with probabilities | A `decision.Decision` |
 | `SubAgentTools` | A `subagent` tool that hands a task to another agent | A `subagent.Manager` |
 
-- The five MCP packs register their tools with the server's prefix, such as `donsetch__web_search`. To keep the server's own names, pass `noToolPrefix` as true, or set `CodingConfig.NoToolPrefix` for `CodingTools`. If a name is already in the `ToolBox`, the pack fails with `mcp.ErrToolNameTaken`.
+- The five MCP packs register their tools with the server's prefix, such as `donsetch__web_search`. To keep the server's own names, set `NoToolPrefix` in the pack's config, such as `WebConfig.NoToolPrefix`. If a name is already in the `ToolBox`, the pack fails with `mcp.ErrToolNameTaken`.
 - Always call `Close` when you no longer need a pack. It removes the pack's tools and stops the server the pack started, if any.
 - `Instructions` returns the pack's usage instructions for the system prompt. It returns nil when the pack has none.
 
@@ -322,6 +322,8 @@ fmt.Println(resp.Content)
 - When a tool fails, the agent sends the error text to the model, so the model can recover.
 - Before the context window is full, the agent summarizes the older turns.
 - To save a session, call `Messages`. To resume it, pass those messages in `SessionConfig.Messages`.
+- To change the model, call `Agent.ChangeModel`, not the model's own `ChangeModel`. The agent caches the model's context window and refreshes it only there.
+- `agent.New` takes any `agent.Model`. An `llm.LLM` is one; a fake model lets you test an agent without a provider.
 - `Feedback` reports tool calls and session events. To handle only some events, embed `NopFeedback` in your type.
 
 ### `subagent`
@@ -355,6 +357,7 @@ defer pack.Close()
 - Each run starts a new conversation and closes it after the final answer. The calling agent gets only the answer, so its context stays small.
 - The `subagent` tool's description lists the sub-agents, and the model picks one by name. Register every sub-agent before you call `SubAgentTools`.
 - To start a sub-agent from your own code, call `Run`.
+- Only one run of a sub-agent can be in progress at a time. While it runs, `Run` returns `ErrAgentBusy` for the same name.
 - `SetFeedback` installs a `Feedback` that reports the start, end, tool calls and token usage of each run. Each event includes the sub-agent's name.
 - `Run` replaces the `agent.Feedback` of the sub-agent's agent.
 - `SetDebugger` installs a `Debugger` that receives the full conversation and the error of each run, so you can save it and review how the sub-agent followed its instructions. A failed run gives the conversation up to where the child stopped.

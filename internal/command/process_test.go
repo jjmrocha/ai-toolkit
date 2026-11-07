@@ -38,7 +38,7 @@ func collectLines(p *Process) []string {
 
 func TestProcessWrite(t *testing.T) {
 	t.Run("delivers the message to the process stdin", func(t *testing.T) {
-		// given: cat echoes back whatever it reads
+		// given
 		p := startProcess(t, "cat")
 		// when
 		err := p.Write(t.Context(), "hello")
@@ -49,7 +49,7 @@ func TestProcessWrite(t *testing.T) {
 	})
 
 	t.Run("rejects a message containing a newline", func(t *testing.T) {
-		// given: the framing check runs before any channel is touched
+		// given
 		p := &Process{allowInput: true}
 		// when
 		err := p.Write(t.Context(), "one\ntwo")
@@ -79,7 +79,7 @@ func TestProcessWrite(t *testing.T) {
 	})
 
 	t.Run("returns the context error when the context is cancelled", func(t *testing.T) {
-		// given: no writer goroutine, so only the context can unblock the send
+		// given
 		p := &Process{allowInput: true, outgoing: make(chan string)}
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
@@ -112,7 +112,7 @@ func TestProcessOutput(t *testing.T) {
 	})
 
 	t.Run("delivers a line of any length", func(t *testing.T) {
-		// given: far more than bufio's default, with no newline anywhere
+		// given
 		size := 1024*1024 + 8*1024
 		script := "head -c " + strconv.Itoa(size) + ` /dev/zero | tr '\0' 'a'`
 		p := startProcess(t, "sh", "-c", script)
@@ -133,7 +133,7 @@ func TestProcessOutput(t *testing.T) {
 	})
 
 	t.Run("closes the channel on Close while the output is undrained", func(t *testing.T) {
-		// given: the process writes without anyone reading, so the reader parks on send
+		// given
 		p := startProcess(t, "sh", "-c", "echo one; echo two; cat > /dev/null")
 		// when
 		p.Close()
@@ -169,7 +169,7 @@ func TestProcessOutput(t *testing.T) {
 	})
 
 	t.Run("delivers every line to a consumer that pauses", func(t *testing.T) {
-		// given: output stays buffered in the pipe while the consumer sleeps
+		// given
 		const lines = 200
 		script := `i=0; while [ $i -lt 200 ]; do echo "line$i"; i=$((i+1)); done`
 		p := startProcess(t, "sh", "-c", script)
@@ -187,7 +187,7 @@ func TestProcessOutput(t *testing.T) {
 	})
 
 	t.Run("closes stdin at once when AllowInput is not set", func(t *testing.T) {
-		// given: cat blocks forever on an open stdin, and exits on EOF
+		// given
 		p, err := NewProcess(ProcessConfig{Path: "cat"})
 		require.NoError(t, err)
 		t.Cleanup(p.Close)
@@ -214,17 +214,17 @@ func TestProcessOutput(t *testing.T) {
 
 func TestProcessClose(t *testing.T) {
 	t.Run("returns as soon as the process exits on stdin close", func(t *testing.T) {
-		// given: cat stays alive on stdin and exits on EOF
+		// given
 		p := startProcess(t, "cat")
 		// when
 		start := time.Now()
 		p.Close()
-		// then: no signal is needed, so Close returns well before the first timeout
+		// then
 		assert.Less(t, time.Since(start), defaultStopTimeout)
 	})
 
 	t.Run("returns when the output pipe is shared with stderr", func(t *testing.T) {
-		// given: the reader only reaches EOF if the parent's write end was closed
+		// given
 		p, err := NewProcess(ProcessConfig{Path: "cat", IncludeStderr: true, AllowInput: true})
 		require.NoError(t, err)
 		t.Cleanup(p.Close)
@@ -261,7 +261,7 @@ func TestProcessRunning(t *testing.T) {
 	})
 
 	t.Run("returns false after the process exits on its own", func(t *testing.T) {
-		// given: wait for the watcher to reap the self-exited process
+		// given
 		p := startProcess(t, "sh", "-c", "exit 0")
 		<-p.exited
 		// when

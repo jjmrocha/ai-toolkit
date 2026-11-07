@@ -81,7 +81,7 @@ func TestSanitizeToolName(t *testing.T) {
 	}
 
 	t.Run("does not bound the length", func(t *testing.T) {
-		// given: a name well past the provider limit
+		// given
 		input := strings.Repeat(".", MaxToolNameLength+10)
 		// when
 		result := SanitizeToolName(input)
@@ -156,7 +156,7 @@ func TestToolBoxRemove(t *testing.T) {
 		require.NoError(t, box.Add(llm.Tool{Name: "a"}, noopHandler))
 		// when
 		box.Remove("ghost")
-		// then: the tools that are registered stay registered
+		// then
 		result := box.Tools()
 		require.Len(t, result, 1)
 		assert.Equal(t, "a", result[0].Name)
@@ -165,14 +165,14 @@ func TestToolBoxRemove(t *testing.T) {
 
 func TestToolBoxTools(t *testing.T) {
 	t.Run("returns the tools sorted by name", func(t *testing.T) {
-		// given: registration order differs from name order
+		// given
 		box := NewToolBox()
 		require.NoError(t, box.Add(llm.Tool{Name: "zeta"}, noopHandler))
 		require.NoError(t, box.Add(llm.Tool{Name: "alpha"}, noopHandler))
 		require.NoError(t, box.Add(llm.Tool{Name: "mid"}, noopHandler))
 		// when
 		result := box.Tools()
-		// then: stable order keeps provider prompt prefixes cacheable
+		// then
 		expected := []string{"alpha", "mid", "zeta"}
 		names := []string{result[0].Name, result[1].Name, result[2].Name}
 		assert.Equal(t, expected, names)
@@ -242,7 +242,7 @@ func TestToolBoxTool(t *testing.T) {
 }
 
 func TestToolBoxConcurrentAccess(t *testing.T) {
-	// given: correctness here is enforced by the race detector
+	// given
 	const goroutines = 50
 
 	box := NewToolBox()
@@ -265,7 +265,7 @@ func TestToolBoxConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
-	// then: the tool that was never removed is still registered and runnable
+	// then
 	result, err := box.Execute(t.Context(), llm.ToolCall{Name: "stable"})
 	require.NoError(t, err)
 	assert.Equal(t, "stable", result.ToolName)
@@ -416,7 +416,7 @@ func TestToolBoxSetInterceptor(t *testing.T) {
 	})
 
 	t.Run("is safe to set while calls are executing", func(t *testing.T) {
-		// given: correctness here is enforced by the race detector
+		// given
 		const goroutines = 50
 
 		box := NewToolBox()

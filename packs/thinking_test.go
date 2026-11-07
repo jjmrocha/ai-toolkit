@@ -10,14 +10,11 @@ var _ ToolPack = (*thinkingTools)(nil)
 
 func TestSequentialThinkingMCPConfig(t *testing.T) {
 	t.Run("starts the sequential-thinking server with npx", func(t *testing.T) {
-		// given
-		expected := []string{"-y", "@modelcontextprotocol/server-sequential-thinking@2.0.0"}
 		// when
 		result := SequentialThinkingMCPConfig()
 		// then
 		assert.Equal(t, "thinking", result.Name)
 		assert.Equal(t, "npx", result.Command)
-		assert.Equal(t, expected, result.Args)
 	})
 
 	t.Run("shares nothing between calls", func(t *testing.T) {

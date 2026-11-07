@@ -205,5 +205,7 @@ func (c *codingTools) Instructions(_ context.Context) *mcp.Instruction {
 }
 
 func (c *codingTools) Close() error {
-	return c.mcp.Close()
+	c.mcp.Close()
+
+	return nil
 }

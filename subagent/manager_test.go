@@ -585,6 +585,27 @@ func TestManagerRun(t *testing.T) {
 		assert.ErrorContains(t, debuggedErr, "boom")
 	})
 
+	t.Run("refuses a second run of the same agent while the first is in progress", func(t *testing.T) {
+		// given
+		var nestedErr error
+
+		child, _ := newChild(t, toolCallReply, answerReply)
+		manager := NewManager()
+		toolBox := tools.NewToolBox()
+		echoTool := llm.Tool{Name: "echo", Schema: tools.NewObjectBuilder().Build()}
+		require.NoError(t, toolBox.Add(echoTool, func(ctx context.Context, _ map[string]any) (string, error) {
+			_, nestedErr = manager.Run(ctx, "explore", "find the lexer")
+			return "echoed", nil
+		}))
+		require.NoError(t, manager.Register(Config{Name: "explore"}, child, toolBox, nil))
+		// when
+		result, err := manager.Run(t.Context(), "explore", "find the parser")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "the answer", result)
+		assert.ErrorIs(t, nestedErr, ErrAgentBusy)
+	})
+
 	t.Run("stops the child when the context is cancelled", func(t *testing.T) {
 		// given
 		child, _ := newChild(t, answerReply)

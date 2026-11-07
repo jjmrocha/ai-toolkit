@@ -32,6 +32,8 @@
 // ToolBox's skill tools when a child ends. And two runs at the same time must
 // not share an [agent.Agent], which is not safe for concurrent use, nor a
 // ToolBox with skills, whose skill tools the first to end would remove.
+// [Manager.Run] refuses a second run of a name while the first is in progress,
+// with [ErrAgentBusy], but it cannot see two names that share one agent.
 //
 // To let a model start sub-agents, register the tool with packs.SubAgentTools.
 package subagent

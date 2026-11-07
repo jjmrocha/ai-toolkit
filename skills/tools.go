@@ -28,7 +28,7 @@ const (
 	maxOutputBytes      = 1024 * 1024
 )
 
-var executeTimeout = 2 * time.Minute
+const defaultExecuteTimeout = 2 * time.Minute
 
 // RegisterTools adds three tools to tb: "skill_load", "skill_load_file" and
 // "skill_execute_file", which load a skill's instructions, read the files it
@@ -171,7 +171,7 @@ func (c *Collection) executeSkillFile(ctx context.Context, args map[string]any) 
 		return "", err
 	}
 
-	runCtx, cancel := ictx.WithTimeout(ctx, executeTimeout)
+	runCtx, cancel := ictx.WithTimeout(ctx, c.executeTimeout)
 	defer cancel()
 
 	result, err := command.Run(runCtx, command.RunConfig{
@@ -183,7 +183,7 @@ func (c *Collection) executeSkillFile(ctx context.Context, args map[string]any) 
 	})
 	if err != nil {
 		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
-			return renderExecuteTimeout(executeTimeout), nil
+			return renderExecuteTimeout(c.executeTimeout), nil
 		}
 
 		return "", fmt.Errorf("executing %q from skill %q: %w", scriptPath, name, hidePath(err))

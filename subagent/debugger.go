@@ -14,7 +14,8 @@ import "github.com/jjmrocha/ai-toolkit/llm"
 // [Manager.Run] returns, such as [agent.ErrMaxIterations].
 //
 // A run that [Manager.Run] rejects before it starts the child, for an empty
-// prompt or an unknown name, has no conversation and does not call it.
+// prompt, an unknown name or a busy agent, has no conversation and does not
+// call it.
 //
 // [Manager.Run] calls it before it returns, so a slow Debugger delays the
 // answer. Runs can happen at the same time, so it must be safe for concurrent

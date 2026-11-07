@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -31,14 +32,16 @@ type skill struct {
 //
 // A Collection is safe for concurrent use.
 type Collection struct {
-	mu     sync.RWMutex
-	skills map[string]skill
+	mu             sync.RWMutex
+	skills         map[string]skill
+	executeTimeout time.Duration
 }
 
 // NewCollection returns an empty [Collection].
 func NewCollection() *Collection {
 	return &Collection{
-		skills: make(map[string]skill),
+		skills:         make(map[string]skill),
+		executeTimeout: defaultExecuteTimeout,
 	}
 }
 

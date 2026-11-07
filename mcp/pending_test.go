@@ -67,7 +67,7 @@ func TestPendingRequestReset(t *testing.T) {
 		p := newPendingRequest()
 		ctx := p.newResettableTimeout(t.Context(), "ait-1", testTimeout)
 		deadline := time.Now().Add(testTimeout)
-		// when: progress keeps arriving until the original budget would have expired
+		// when
 		for time.Now().Before(deadline) {
 			p.reset("ait-1")
 			time.Sleep(testPollPeriod)
@@ -80,7 +80,7 @@ func TestPendingRequestReset(t *testing.T) {
 		// given
 		p := newPendingRequest()
 		ctx := p.newResettableTimeout(t.Context(), "ait-1", testMargin)
-		// when: progress arrives for a call that is not in flight
+		// when
 		p.reset("ait-99")
 		// then
 		assert.NoError(t, ctx.Err())
@@ -91,7 +91,7 @@ func TestPendingRequestReset(t *testing.T) {
 		p := newPendingRequest()
 		p.newResettableTimeout(t.Context(), "ait-1", testMargin)
 		p.stop("ait-1")
-		// when: a late progress notification arrives
+		// when
 		p.reset("ait-1")
 		// then
 		assert.Empty(t, p.requests)

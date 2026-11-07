@@ -248,8 +248,8 @@ func TestFromORToAssistantMessage(t *testing.T) {
 
 func TestFromORToModelInfo(t *testing.T) {
 	models := []orModel{
-		{ID: "anthropic/claude-3", Name: "Claude 3", ContextLength: 200000},
-		{ID: "openai/gpt-4o", Name: "OpenAI: GPT-4o", ContextLength: 128000},
+		{ID: "anthropic/claude-3", ContextLength: 200000},
+		{ID: "openai/gpt-4o", ContextLength: 128000},
 	}
 
 	t.Run("maps the matching model", func(t *testing.T) {
@@ -278,7 +278,7 @@ func TestFromORToModelInfo(t *testing.T) {
 
 	t.Run("returns ErrMissingContextLength when the context length is zero", func(t *testing.T) {
 		// given
-		zero := []orModel{{ID: "openai/gpt-4o", Name: "OpenAI: GPT-4o", ContextLength: 0}}
+		zero := []orModel{{ID: "openai/gpt-4o", ContextLength: 0}}
 		// when
 		result, err := fromORToModelInfo(zero, "openai/gpt-4o")
 		// then

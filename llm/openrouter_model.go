@@ -117,6 +117,5 @@ type orModelsResponse struct {
 
 type orModel struct {
 	ID            string `json:"id"`
-	Name          string `json:"name"`
 	ContextLength int    `json:"context_length"`
 }

@@ -263,7 +263,7 @@ func TestOpenRouterChat(t *testing.T) {
 	})
 
 	t.Run("returns an error on a non-2xx status", func(t *testing.T) {
-		// given: 400 is not retried (only 429 and 5xx are)
+		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"error":{"message":"model not found"}}`)
@@ -276,7 +276,7 @@ func TestOpenRouterChat(t *testing.T) {
 	})
 
 	t.Run("retries on 429 and then succeeds", func(t *testing.T) {
-		// given: first call is rate-limited, second succeeds
+		// given
 		var calls atomic.Int32
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			if calls.Add(1) == 1 {

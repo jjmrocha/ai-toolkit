@@ -458,7 +458,7 @@ func TestGetArrayOfInts(t *testing.T) {
 	})
 
 	t.Run("accepts float64 elements and truncates them", func(t *testing.T) {
-		// given JSON numbers decode as float64
+		// given
 		args := NewArguments(map[string]any{"ns": []any{1.0, 2.9, 3.2}})
 		// when
 		result, err := args.GetArrayOfInts("ns")
@@ -507,7 +507,7 @@ func TestGetArrayOfFloat64s(t *testing.T) {
 	})
 
 	t.Run("accepts int elements by index, not by value", func(t *testing.T) {
-		// given int values that would index out of bounds if used as the slice
+		// given
 		args := NewArguments(map[string]any{"xs": []any{5, 6, 7}})
 		// when
 		result, err := args.GetArrayOfFloat64s("xs")
