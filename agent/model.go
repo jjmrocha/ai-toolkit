@@ -1,10 +1,6 @@
 package agent
 
-import (
-	"time"
-
-	"github.com/jjmrocha/ai-toolkit/llm"
-)
+import "time"
 
 // Metadata describes how one [Agent.Process] call was served. The token counts
 // are the final reply's, not the whole round's.
@@ -39,17 +35,4 @@ type Response struct {
 	Content string
 	// Metadata is the round's token usage and timing.
 	Metadata Metadata
-}
-
-// ModelInfo describes the model an [Agent] uses: provider, name, context
-// window and reasoning effort.
-type ModelInfo struct {
-	// Provider is the model's provider.
-	Provider llm.Provider
-	// ModelName is the model's id.
-	ModelName string
-	// ModelContextSize is the model's context window in tokens, or 0 if unknown.
-	ModelContextSize int
-	// Effort is the reasoning effort applied to each turn.
-	Effort llm.Effort
 }

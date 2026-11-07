@@ -452,7 +452,7 @@ func TestOpenRouterModelInfo(t *testing.T) {
 		result, err := o.modelInfo(t.Context())
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "openai/gpt-4o", ContextSize: 128000}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderOpenRouter, Name: "openai/gpt-4o", ContextSize: 128000}, result)
 	})
 
 	t.Run("returns an error when the configured model is not listed", func(t *testing.T) {
@@ -490,6 +490,35 @@ func TestOpenRouterModelInfo(t *testing.T) {
 		// then
 		assert.Nil(t, result)
 		assert.Error(t, err)
+	})
+}
+
+func TestOpenRouterChangeModel(t *testing.T) {
+	t.Run("switches to the model and returns its info", func(t *testing.T) {
+		// given
+		expected := &ModelInfo{Provider: ProviderOpenRouter, Name: "anthropic/claude-3", ContextSize: 200000}
+		o := newTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(t, w, `{"data":[{"id":"anthropic/claude-3","context_length":200000}]}`)
+		})
+		// when
+		result, err := o.changeModel(t.Context(), "anthropic/claude-3")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, "anthropic/claude-3", o.currentModel())
+	})
+
+	t.Run("keeps the old model when the new model's info cannot be fetched", func(t *testing.T) {
+		// given
+		o := newTestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(t, w, `{"data":[]}`)
+		})
+		// when
+		result, err := o.changeModel(t.Context(), "anthropic/claude-3")
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrModelNotFound)
+		assert.Equal(t, "openai/gpt-4o", o.currentModel())
 	})
 }
 

@@ -32,9 +32,9 @@ type Feedback interface {
 	// conversation is left as it was, and compaction is tried again after the next
 	// completed turn.
 	ContextCompactionFailed()
-	// ModelInfoUnavailable fires when the model's context window cannot be
-	// fetched, which turns automatic compaction off. The fetch is retried every
-	// turn, so it fires on each failure.
+	// ModelInfoUnavailable fires when [Model.ModelInfo] returns nil, which turns
+	// automatic compaction off for that turn. It is checked every turn, so it
+	// fires on each turn without info.
 	ModelInfoUnavailable()
 	// TokensUsed fires after each response that asks for tools, so token usage can
 	// be tracked before the final answer. The final answer's usage is in

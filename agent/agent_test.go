@@ -21,12 +21,8 @@ type fakeLLM struct {
 	replies   []*llm.AssistantMessage
 	chatErr   error
 	info      *llm.ModelInfo
-	infoErr   error
 	chatCalls int
 	calls     [][]llm.Message
-	current   string
-	changeErr error
-	effort    llm.Effort
 	toolLists [][]llm.Tool
 }
 
@@ -41,22 +37,9 @@ func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, toolList []llm
 	return reply, nil
 }
 
-func (f *fakeLLM) ModelInfo(context.Context) (*llm.ModelInfo, error) {
-	if f.infoErr != nil {
-		return nil, f.infoErr
-	}
-	return f.info, nil
+func (f *fakeLLM) ModelInfo() *llm.ModelInfo {
+	return f.info
 }
-
-func (f *fakeLLM) ChangeModel(model string) error {
-	if f.changeErr != nil {
-		return f.changeErr
-	}
-	f.current = model
-	return nil
-}
-
-func (f *fakeLLM) Effort() llm.Effort { return f.effort }
 
 func agentWithLLM(m Model, fb Feedback, cfg Config) *Agent {
 	return &Agent{config: cfg, llm: m, fb: fb}
@@ -145,21 +128,10 @@ func (f *recordingFeedback) SessionResumed(sessionID string) {
 	f.events = append(f.events, "SessionResumed")
 }
 
-func mustTestLLM(t testing.TB) *llm.LLM {
-	t.Helper()
-
-	client, err := llm.New(llm.Config{Provider: llm.ProviderOllama, Model: "test-model"})
-	if err != nil {
-		t.Fatalf("llm.New: unexpected error: %v", err)
-	}
-
-	return client
-}
-
 func mustNewTestAgent(t testing.TB, cfg Config, fb Feedback) *Agent {
 	t.Helper()
 
-	agt, err := New(cfg, mustTestLLM(t))
+	agt, err := New(cfg, &fakeLLM{})
 	if err != nil {
 		t.Fatalf("New(%+v): unexpected error: %v", cfg, err)
 	}
@@ -180,7 +152,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent is negative", func(t *testing.T) {
 		// when
-		result, err := New(Config{CompactionThresholdPercent: -1}, mustTestLLM(t))
+		result, err := New(Config{CompactionThresholdPercent: -1}, &fakeLLM{})
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -188,7 +160,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("returns ErrInvalidThreshold when the percent exceeds one hundred", func(t *testing.T) {
 		// when
-		result, err := New(Config{CompactionThresholdPercent: 101}, mustTestLLM(t))
+		result, err := New(Config{CompactionThresholdPercent: 101}, &fakeLLM{})
 		// then
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrInvalidThreshold)
@@ -197,7 +169,7 @@ func TestNew(t *testing.T) {
 	t.Run("succeeds for percents within range", func(t *testing.T) {
 		for _, pct := range []int{0, 50, 100} {
 			// when
-			result, err := New(Config{CompactionThresholdPercent: pct}, mustTestLLM(t))
+			result, err := New(Config{CompactionThresholdPercent: pct}, &fakeLLM{})
 			// then
 			require.NoError(t, err, "pct=%d", pct)
 			assert.NotNil(t, result, "pct=%d", pct)
@@ -1102,7 +1074,6 @@ func TestProcess(t *testing.T) {
 		fb := &recordingFeedback{}
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{{Content: "one"}, {Content: "two"}},
-			infoErr: errors.New("no info"),
 		}
 		agt := agentWithLLM(fake, fb, Config{})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
@@ -1113,20 +1084,6 @@ func TestProcess(t *testing.T) {
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		assert.Equal(t, []string{"SessionStarted", "ModelInfoUnavailable", "ModelInfoUnavailable"}, fb.events)
-	})
-
-	t.Run("treats a model that reports no info and no error as info unavailable", func(t *testing.T) {
-		// given
-		fb := &recordingFeedback{}
-		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "one"}}}
-		agt := agentWithLLM(fake, fb, Config{})
-		agt.StartSession(SessionConfig{Prompt: "sys"})
-		// when
-		result, err := agt.Process(t.Context(), "u1")
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "one", result.Content)
-		assert.Equal(t, []string{"SessionStarted", "ModelInfoUnavailable"}, fb.events)
 	})
 
 	t.Run("feeds a failing tool's error back to the model and continues", func(t *testing.T) {
@@ -1158,11 +1115,36 @@ func TestProcess(t *testing.T) {
 		assert.Contains(t, toolMsg.Content, "kaboom")
 	})
 
+	t.Run("compacts with the context window the model reports after a model change", func(t *testing.T) {
+		// given
+		fb := &recordingFeedback{}
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{Content: "a1", Stats: llm.Stats{TotalTokens: 100}},
+				{Content: "a2", Stats: llm.Stats{TotalTokens: 100}},
+				{Content: "a3", Stats: llm.Stats{TotalTokens: 950}},
+				{Content: "SUMMARY"},
+			},
+			info: &llm.ModelInfo{ContextSize: 100000},
+		}
+		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 90})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		_, err1 := agt.Process(t.Context(), "u1")
+		_, err2 := agt.Process(t.Context(), "u2")
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+		fake.info = &llm.ModelInfo{ContextSize: 1000}
+		// when
+		_, err := agt.Process(t.Context(), "u3")
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, fb.events, "ContextCompacted")
+	})
+
 	t.Run("skips compaction when the model info is unavailable", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 9999}}},
-			infoErr: errors.New("no info"),
 		}
 		fb := &recordingFeedback{}
 		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 1})
@@ -1174,69 +1156,6 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, "hi", result.Content)
 		assert.NotContains(t, fb.events, "ContextCompacted")
 		assert.Equal(t, 1, fake.chatCalls)
-	})
-}
-
-func TestChangeModel(t *testing.T) {
-	t.Run("updates the current model and resets the context window", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{
-			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 1}}},
-			info:    &llm.ModelInfo{Name: "old", ContextSize: 1000},
-		}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		agt.StartSession(SessionConfig{Prompt: "sys"})
-		_, err := agt.Process(t.Context(), "hi")
-		require.NoError(t, err)
-		fake.info = &llm.ModelInfo{Name: "m2", ContextSize: 2000}
-		// when
-		err = agt.ChangeModel("m2")
-		// then
-		require.NoError(t, err)
-		assert.Equal(t, "m2", fake.current)
-		result := agt.ModelInfo(t.Context())
-		require.NotNil(t, result)
-		assert.Equal(t, 2000, result.ModelContextSize)
-	})
-
-	t.Run("propagates the client error and keeps the current model", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{changeErr: errors.New("boom"), current: "old"}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		// when
-		err := agt.ChangeModel("m2")
-		// then
-		assert.ErrorContains(t, err, "boom")
-		assert.Equal(t, "old", fake.current)
-	})
-}
-
-func TestModelInfo(t *testing.T) {
-	t.Run("reports the active model's provider, name, context window, and effort", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{
-			info:   &llm.ModelInfo{Provider: llm.ProviderAnthropic, Name: "m1", ContextSize: 2000},
-			effort: llm.EffortMedium,
-		}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		// when
-		result := agt.ModelInfo(t.Context())
-		// then
-		require.NotNil(t, result)
-		assert.Equal(t, llm.ProviderAnthropic, result.Provider)
-		assert.Equal(t, "m1", result.ModelName)
-		assert.Equal(t, 2000, result.ModelContextSize)
-		assert.Equal(t, llm.EffortMedium, result.Effort)
-	})
-
-	t.Run("returns nil when the model info cannot be fetched", func(t *testing.T) {
-		// given
-		fake := &fakeLLM{infoErr: errors.New("no info")}
-		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
-		// when
-		result := agt.ModelInfo(t.Context())
-		// then
-		assert.Nil(t, result)
 	})
 }
 

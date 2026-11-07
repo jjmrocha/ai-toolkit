@@ -393,7 +393,7 @@ func TestFromAnthropicToModelInfo(t *testing.T) {
 		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "claude-opus-4-8", ContextSize: 1000000}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000}, result)
 	})
 
 	t.Run("returns ErrMissingContextLength when no context size is reported", func(t *testing.T) {

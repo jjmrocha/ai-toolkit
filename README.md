@@ -36,7 +36,7 @@ func run(ctx context.Context) error {
 		Model:    "qwen3:8b",
 	}
 
-	model, err := llm.New(modelCfg)
+	model, err := llm.New(ctx, modelCfg)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ cfg := llm.Config{
 	Model:    "openai/gpt-4o",
 }
 
-model, err := llm.New(cfg)
+model, err := llm.New(ctx, cfg)
 if err != nil {
 	return err
 }
@@ -119,7 +119,9 @@ fmt.Println(reply.Content)
 
 - To use a different provider, change `Provider` and `Model`. Ollama needs no API key.
 - `Effort` sets how much the model reasons, from `EffortOff` to `EffortMax`. Each provider gets its equivalent setting.
-- To change the effort during a conversation, call `ChangeEffort`. To change the model, call `ChangeModel` with a model from `Config.Models`.
+- `New` asks the provider for the model's context window, so it fails when the provider cannot be reached or does not offer the model.
+- `ModelInfo` returns the provider, model id and context window without a new request.
+- To change the effort during a conversation, call `ChangeEffort`. To change the model, call `ChangeModel` with a model from `Config.Models`. It returns the new model's info, and keeps the current model when that info cannot be fetched.
 - Each reply contains the token usage, the prompt-cache reads and writes, and the provider's stop reason.
 
 ### `decision`
@@ -322,7 +324,7 @@ fmt.Println(resp.Content)
 - When a tool fails, the agent sends the error text to the model, so the model can recover.
 - Before the context window is full, the agent summarizes the older turns.
 - To save a session, call `Messages`. To resume it, pass those messages in `SessionConfig.Messages`.
-- To change the model, call `Agent.ChangeModel`, not the model's own `ChangeModel`. The agent caches the model's context window and refreshes it only there.
+- To change the model, call `ChangeModel` on the `llm.LLM`. The agent uses the new context window from the next turn.
 - `agent.New` takes any `agent.Model`. An `llm.LLM` is one; a fake model lets you test an agent without a provider.
 - `Feedback` reports tool calls and session events. To handle only some events, embed `NopFeedback` in your type.
 

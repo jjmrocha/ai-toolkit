@@ -16,11 +16,11 @@ var (
 	// ErrInvalidEffort is returned by [New] and [LLM.ChangeEffort] when the effort
 	// is not a known [Effort].
 	ErrInvalidEffort = errors.New("invalid effort")
-	// ErrModelNotFound is returned by [LLM.ModelInfo] when the provider does not
-	// offer the model, and by [LLM.ChangeModel] when the model is not in
-	// [LLM.AvailableModels].
+	// ErrModelNotFound is returned by [New] and [LLM.ChangeModel] when the
+	// provider does not offer the model, and by [LLM.ChangeModel] when the model
+	// is not in [LLM.AvailableModels].
 	ErrModelNotFound = errors.New("model not found")
-	// ErrMissingContextLength is returned by [LLM.ModelInfo] when the provider
-	// reports no context length for the model.
+	// ErrMissingContextLength is returned by [New] and [LLM.ChangeModel] when the
+	// provider reports no context length for the model.
 	ErrMissingContextLength = errors.New("context length not found in model info")
 )

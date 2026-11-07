@@ -116,5 +116,8 @@ func fromOllamaToModelInfo(resp ollamaShowResponse, model string) (*ModelInfo, e
 		return nil, fmt.Errorf("ollama: %w: %q", ErrMissingContextLength, model)
 	}
 
-	return &ModelInfo{Name: model, ContextSize: int(ctxLen)}, nil
+	return &ModelInfo{
+		Provider:    ProviderOllama,
+		Name:        model,
+		ContextSize: int(ctxLen)}, nil
 }

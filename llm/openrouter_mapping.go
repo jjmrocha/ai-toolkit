@@ -140,6 +140,7 @@ func fromORToModelInfo(models []orModel, id string) (*ModelInfo, error) {
 	}
 
 	return &ModelInfo{
+		Provider:    ProviderOpenRouter,
 		Name:        id,
 		ContextSize: model.ContextLength,
 	}, nil

@@ -187,7 +187,7 @@ func TestFromOllamaToModelInfo(t *testing.T) {
 		result, err := fromOllamaToModelInfo(resp, "llama3.2")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "llama3.2", ContextSize: 8192}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderOllama, Name: "llama3.2", ContextSize: 8192}, result)
 	})
 
 	t.Run("returns an error when the context length key is absent", func(t *testing.T) {

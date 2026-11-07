@@ -257,7 +257,7 @@ func TestFromORToModelInfo(t *testing.T) {
 		result, err := fromORToModelInfo(models, "openai/gpt-4o")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "openai/gpt-4o", ContextSize: 128000}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderOpenRouter, Name: "openai/gpt-4o", ContextSize: 128000}, result)
 	})
 
 	t.Run("returns ErrModelNotFound when the id is absent", func(t *testing.T) {

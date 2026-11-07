@@ -17,7 +17,7 @@ const (
 type llmProvider interface {
 	chat(context.Context, []Message, []Tool) (*AssistantMessage, error)
 	modelInfo(context.Context) (*ModelInfo, error)
-	changeModel(model string) error
+	changeModel(ctx context.Context, model string) (*ModelInfo, error)
 	currentModel() string
 	effort() Effort
 	changeEffort(e Effort)

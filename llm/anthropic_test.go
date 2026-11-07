@@ -353,7 +353,7 @@ func TestAnthropicModelInfo(t *testing.T) {
 		result, err := a.modelInfo(t.Context())
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Name: "claude-opus-4-8", ContextSize: 1000000}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000}, result)
 	})
 
 	t.Run("returns ErrModelNotFound when the model is not found", func(t *testing.T) {
@@ -392,6 +392,38 @@ func TestAnthropicModelInfo(t *testing.T) {
 		// then
 		assert.Nil(t, result)
 		assert.Error(t, err)
+	})
+}
+
+func TestAnthropicChangeModel(t *testing.T) {
+	t.Run("switches to the model and returns its info", func(t *testing.T) {
+		// given
+		var gotPath string
+		expected := &ModelInfo{Provider: ProviderAnthropic, Name: "claude-haiku-4-5", ContextSize: 200000}
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			writeJSON(t, w, `{"id":"claude-haiku-4-5","max_input_tokens":200000}`)
+		})
+		// when
+		result, err := a.changeModel(t.Context(), "claude-haiku-4-5")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, "/models/claude-haiku-4-5", gotPath)
+		assert.Equal(t, "claude-haiku-4-5", a.currentModel())
+	})
+
+	t.Run("keeps the old model when the new model's info cannot be fetched", func(t *testing.T) {
+		// given
+		a := newTestAnthropic(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+		// when
+		result, err := a.changeModel(t.Context(), "claude-haiku-4-5")
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrModelNotFound)
+		assert.Equal(t, "claude-opus-4-8", a.currentModel())
 	})
 }
 

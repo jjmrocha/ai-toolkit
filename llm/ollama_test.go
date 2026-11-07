@@ -273,7 +273,7 @@ func TestOllamaModelInfo(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "/api/show", gotPath)
-		assert.Equal(t, &ModelInfo{Name: "llama3.2", ContextSize: 8192}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderOllama, Name: "llama3.2", ContextSize: 8192}, result)
 
 		var sent ollamaShowRequest
 		require.NoError(t, json.Unmarshal(gotBody, &sent))
@@ -316,6 +316,35 @@ func TestOllamaModelInfo(t *testing.T) {
 		// then
 		assert.Nil(t, result)
 		assert.ErrorContains(t, err, "something went wrong")
+	})
+}
+
+func TestOllamaChangeModel(t *testing.T) {
+	t.Run("switches to the model and returns its info", func(t *testing.T) {
+		// given
+		expected := &ModelInfo{Provider: ProviderOllama, Name: "qwen3", ContextSize: 4096}
+		o := newTestOllama(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(t, w, `{"model_info":{"general.architecture":"qwen3","qwen3.context_length":4096}}`)
+		})
+		// when
+		result, err := o.changeModel(t.Context(), "qwen3")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, "qwen3", o.currentModel())
+	})
+
+	t.Run("keeps the old model when the new model's info cannot be fetched", func(t *testing.T) {
+		// given
+		o := newTestOllama(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+		// when
+		result, err := o.changeModel(t.Context(), "qwen3")
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrModelNotFound)
+		assert.Equal(t, "llama3.2", o.currentModel())
 	})
 }
 

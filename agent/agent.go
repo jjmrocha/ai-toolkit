@@ -17,37 +17,29 @@ type Model interface {
 	// Chat sends messages to the model, offering it tools, and returns its reply.
 	Chat(ctx context.Context, messages []llm.Message, tools []llm.Tool) (*llm.AssistantMessage, error)
 	// ModelInfo returns the model's context window, which the agent uses to
-	// decide when to compact. A nil result, like an error, turns automatic
-	// compaction off until a later turn gets one.
-	ModelInfo(ctx context.Context) (*llm.ModelInfo, error)
-	// ChangeModel switches to model. [Agent.ChangeModel] calls it and returns its
-	// error.
-	ChangeModel(model string) error
-	// Effort returns the reasoning effort, reported by [Agent.ModelInfo].
-	Effort() llm.Effort
+	// decide when to compact. A nil result turns automatic compaction off for
+	// that turn.
+	ModelInfo() *llm.ModelInfo
 }
 
 // Agent runs a tool-calling chat loop against an LLM and holds one session's
 // conversation. It is not safe for concurrent use: serialize calls to its
 // methods.
 type Agent struct {
-	config           Config
-	llm              Model
-	toolBox          *tools.ToolBox
-	skills           *skills.Collection
-	fb               Feedback
-	messages         []llm.Message
-	sessionID        string
-	compactThreshold int
-	modelInfo        *llm.ModelInfo
+	config    Config
+	llm       Model
+	toolBox   *tools.ToolBox
+	skills    *skills.Collection
+	fb        Feedback
+	messages  []llm.Message
+	sessionID string
 }
 
 // New creates an [Agent] that runs on model, usually an [llm.LLM], with
 // [NopFeedback]; use [Agent.SetFeedback] with [NewStdoutFeedback] to print
 // events. It returns [ErrNoLLM] when model is nil and [ErrInvalidThreshold]
-// when Config.CompactionThresholdPercent is outside 0 to 100. Change the model
-// with [Agent.ChangeModel], not on model directly: the agent caches the model's
-// context window and only refreshes it there.
+// when Config.CompactionThresholdPercent is outside 0 to 100. A model change
+// made on model, such as [llm.LLM.ChangeModel], applies from the next turn.
 func New(cfg Config, model Model) (*Agent, error) {
 	if model == nil {
 		return nil, ErrNoLLM
@@ -204,8 +196,8 @@ func (a *Agent) SetFeedback(fb Feedback) {
 // until then, and calling it fails with [tools.ErrToolNotFound], which the
 // model sees as tool error text.
 //
-// The first round also asks for the model's context window (see
-// [llm.LLM.ModelInfo]) and caches it. Once a completed turn goes past
+// After the final reply, Process reads the model's context window from
+// [Model.ModelInfo]. Once a completed turn goes past
 // Config.CompactionThresholdPercent of that window, the older turns are
 // summarized before the next round.
 //
@@ -307,42 +299,16 @@ func toolResult(msg *llm.ToolMessage) string {
 }
 
 func (a *Agent) compactIfNeeded(ctx context.Context, lastTotalTokens int) {
-	a.loadModelLimits(ctx)
+	info := a.llm.ModelInfo()
+	if info == nil {
+		a.fb.ModelInfoUnavailable()
+		return
+	}
 
-	if a.compactThreshold != 0 && lastTotalTokens > a.compactThreshold {
+	threshold := compactionThreshold(info.ContextSize, a.config.CompactionThresholdPercent)
+	if threshold != 0 && lastTotalTokens > threshold {
 		a.CompactContext(ctx)
 	}
-}
-
-// ModelInfo returns the model the agent uses: provider, name, context window
-// and reasoning effort. It fetches the context window if needed, so it works
-// before the first turn. It returns nil if the client cannot provide it.
-func (a *Agent) ModelInfo(ctx context.Context) *ModelInfo {
-	a.loadModelLimits(ctx)
-	if a.modelInfo == nil {
-		return nil
-	}
-
-	return &ModelInfo{
-		Provider:         a.modelInfo.Provider,
-		ModelName:        a.modelInfo.Name,
-		ModelContextSize: a.modelInfo.ContextSize,
-		Effort:           a.llm.Effort(),
-	}
-}
-
-// ChangeModel switches the agent to model, which the [Model] must accept, such
-// as one from [llm.LLM.AvailableModels]. The context window is fetched again on
-// the next turn. On failure it returns the client's error and keeps the current model.
-func (a *Agent) ChangeModel(model string) error {
-	if err := a.llm.ChangeModel(model); err != nil {
-		return err
-	}
-
-	a.modelInfo = nil
-	a.compactThreshold = 0
-
-	return nil
 }
 
 // CompactContext summarizes the conversation, keeping the system message and
@@ -374,19 +340,4 @@ func (a *Agent) CompactContext(ctx context.Context) {
 
 	a.messages = compacted
 	a.fb.ContextCompacted()
-}
-
-func (a *Agent) loadModelLimits(ctx context.Context) {
-	if a.modelInfo != nil {
-		return
-	}
-
-	info, err := a.llm.ModelInfo(ctx)
-	if err != nil || info == nil {
-		a.fb.ModelInfoUnavailable()
-		return
-	}
-
-	a.modelInfo = info
-	a.compactThreshold = compactionThreshold(info.ContextSize, a.config.CompactionThresholdPercent)
 }

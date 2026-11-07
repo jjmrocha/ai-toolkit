@@ -36,7 +36,7 @@ func newSubAgentChild(t *testing.T, reply string) *agent.Agent {
 	}))
 	t.Cleanup(server.Close)
 
-	model, err := llm.New(llm.Config{Provider: llm.ProviderOllama, Model: "test", BaseURL: server.URL})
+	model, err := llm.New(t.Context(), llm.Config{Provider: llm.ProviderOllama, Model: "test", BaseURL: server.URL})
 	require.NoError(t, err)
 
 	child, err := agent.New(agent.Config{}, model)

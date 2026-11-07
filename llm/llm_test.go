@@ -3,6 +3,8 @@ package llm
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,68 +47,94 @@ func TestNew(t *testing.T) {
 	for _, tc := range errorCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// when
-			result, err := New(tc.cfg)
+			result, err := New(t.Context(), tc.cfg)
 			// then
 			assert.Nil(t, result)
 			assert.ErrorIs(t, err, tc.expectedErr)
 		})
 	}
 
+	t.Run("returns the provider error when the model info cannot be fetched", func(t *testing.T) {
+		// given
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		t.Cleanup(server.Close)
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", BaseURL: server.URL}
+		// when
+		result, err := New(t.Context(), cfg)
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, ErrModelNotFound)
+	})
+
 	t.Run("valid openrouter config returns a configured LLM", func(t *testing.T) {
 		// given
-		cfg := Config{Provider: ProviderOpenRouter, Model: "openai/gpt-4o", APIKey: "sk-test"}
+		expected := &ModelInfo{Provider: ProviderOpenRouter, Name: "openai/gpt-4o", ContextSize: 128000}
+		url := newModelInfoServer(t, `{"data":[{"id":"openai/gpt-4o","context_length":128000}]}`)
+		cfg := Config{Provider: ProviderOpenRouter, Model: "openai/gpt-4o", APIKey: "sk-test", BaseURL: url}
 		// when
-		result, err := New(cfg)
+		result, err := New(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "openai/gpt-4o", result.CurrentModel())
 		assert.Equal(t, EffortOff, result.Effort())
 		assert.Equal(t, []string{"openai/gpt-4o"}, result.AvailableModels())
+		assert.Equal(t, expected, result.ModelInfo())
 	})
 
 	t.Run("valid ollama config returns a configured LLM without an API key", func(t *testing.T) {
 		// given
-		cfg := Config{Provider: ProviderOllama, Model: "llama3.2"}
+		expected := &ModelInfo{Provider: ProviderOllama, Name: "llama3.2", ContextSize: 8192}
+		url := newModelInfoServer(t, `{"model_info":{"general.architecture":"llama","llama.context_length":8192}}`)
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", BaseURL: url}
 		// when
-		result, err := New(cfg)
+		result, err := New(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "llama3.2", result.CurrentModel())
 		assert.Equal(t, EffortOff, result.Effort())
 		assert.Equal(t, []string{"llama3.2"}, result.AvailableModels())
+		assert.Equal(t, expected, result.ModelInfo())
 	})
 
 	t.Run("valid anthropic config returns a configured LLM", func(t *testing.T) {
 		// given
-		cfg := Config{Provider: ProviderAnthropic, Model: "claude-opus-4-8", APIKey: "sk-test"}
+		expected := &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000}
+		url := newModelInfoServer(t, `{"id":"claude-opus-4-8","max_input_tokens":1000000}`)
+		cfg := Config{Provider: ProviderAnthropic, Model: "claude-opus-4-8", APIKey: "sk-test", BaseURL: url}
 		// when
-		result, err := New(cfg)
+		result, err := New(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "claude-opus-4-8", result.CurrentModel())
 		assert.Equal(t, EffortOff, result.Effort())
 		assert.Equal(t, []string{"claude-opus-4-8"}, result.AvailableModels())
+		assert.Equal(t, expected, result.ModelInfo())
 	})
 
 	t.Run("seeds Models with the active model when it is absent", func(t *testing.T) {
 		// given
-		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"other"}}
+		url := newModelInfoServer(t, `{"model_info":{"general.architecture":"llama","llama.context_length":8192}}`)
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"other"}, BaseURL: url}
 		// when
-		result, err := New(cfg)
+		result, err := New(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, []string{"llama3.2", "other"}, result.AvailableModels())
-		assert.NoError(t, result.ChangeModel("llama3.2"))
+		_, err = result.ChangeModel(t.Context(), "llama3.2")
+		assert.NoError(t, err)
 	})
 
 	t.Run("does not duplicate the active model when Models already lists it", func(t *testing.T) {
 		// given
-		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"llama3.2", "other"}}
+		url := newModelInfoServer(t, `{"model_info":{"general.architecture":"llama","llama.context_length":8192}}`)
+		cfg := Config{Provider: ProviderOllama, Model: "llama3.2", Models: []string{"llama3.2", "other"}, BaseURL: url}
 		// when
-		result, err := New(cfg)
+		result, err := New(t.Context(), cfg)
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, []string{"llama3.2", "other"}, result.AvailableModels())
@@ -131,37 +159,25 @@ func TestLLMChat(t *testing.T) {
 }
 
 func TestLLMModelInfo(t *testing.T) {
-	t.Run("delegates to the provider and stamps the configured provider", func(t *testing.T) {
+	t.Run("returns the info fetched when the client was created", func(t *testing.T) {
 		// given
-		expected := &ModelInfo{Provider: ProviderOpenRouter, Name: "OpenAI: GPT-4o", ContextSize: 128000}
-		llm := &LLM{
-			config: Config{Provider: ProviderOpenRouter},
-			provider: fakeProvider{
-				modelInfoFunc: func(context.Context) (*ModelInfo, error) {
-					return &ModelInfo{Name: "OpenAI: GPT-4o", ContextSize: 128000}, nil
-				},
-			},
-		}
+		expected := &ModelInfo{Provider: ProviderOllama, Name: "m1", ContextSize: 1000}
+		llm := &LLM{modelInfo: &ModelInfo{Provider: ProviderOllama, Name: "m1", ContextSize: 1000}}
 		// when
-		result, err := llm.ModelInfo(t.Context())
+		result := llm.ModelInfo()
 		// then
-		require.NoError(t, err)
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("propagates the provider error", func(t *testing.T) {
+	t.Run("returns a copy that callers cannot use to change the stored info", func(t *testing.T) {
 		// given
-		expectedErr := errors.New("boom")
-		llm := &LLM{provider: fakeProvider{
-			modelInfoFunc: func(context.Context) (*ModelInfo, error) {
-				return nil, expectedErr
-			},
-		}}
+		expected := &ModelInfo{Name: "m1", ContextSize: 1000}
+		llm := &LLM{modelInfo: &ModelInfo{Name: "m1", ContextSize: 1000}}
+		llm.ModelInfo().ContextSize = 1
 		// when
-		result, err := llm.ModelInfo(t.Context())
+		result := llm.ModelInfo()
 		// then
-		assert.Nil(t, result)
-		assert.ErrorIs(t, err, expectedErr)
+		assert.Equal(t, expected, result)
 	})
 }
 
@@ -192,12 +208,13 @@ func TestLLMAvailableModels(t *testing.T) {
 	t.Run("returns a copy the caller cannot use to widen the list", func(t *testing.T) {
 		// given
 		models := []string{"llama3.2", "other"}
-		client, err := New(Config{Provider: ProviderOllama, Model: "llama3.2", Models: models})
+		url := newModelInfoServer(t, `{"model_info":{"general.architecture":"llama","llama.context_length":8192}}`)
+		client, err := New(t.Context(), Config{Provider: ProviderOllama, Model: "llama3.2", Models: models, BaseURL: url})
 		require.NoError(t, err)
 		client.AvailableModels()[0] = "x"
 		models[1] = "y"
 		// when
-		err = client.ChangeModel("x")
+		_, err = client.ChangeModel(t.Context(), "x")
 		// then
 		assert.ErrorIs(t, err, ErrModelNotFound)
 		assert.Equal(t, []string{"llama3.2", "other"}, client.AvailableModels())
@@ -205,28 +222,57 @@ func TestLLMAvailableModels(t *testing.T) {
 }
 
 func TestLLMChangeModel(t *testing.T) {
-	t.Run("switches to a configured model via the provider", func(t *testing.T) {
+	t.Run("switches to a configured model via the provider and returns its info", func(t *testing.T) {
 		// given
 		var changed string
+		expected := &ModelInfo{Name: "m2", ContextSize: 2000}
 		llm := &LLM{
-			config: Config{Models: []string{"m1", "m2"}},
+			config:    Config{Models: []string{"m1", "m2"}},
+			modelInfo: &ModelInfo{Name: "m1", ContextSize: 1000},
 			provider: fakeProvider{
-				changeModelFunc: func(m string) error { changed = m; return nil },
+				changeModelFunc: func(_ context.Context, m string) (*ModelInfo, error) {
+					changed = m
+					return &ModelInfo{Name: "m2", ContextSize: 2000}, nil
+				},
 			},
 		}
 		// when
-		err := llm.ChangeModel("m2")
+		result, err := llm.ChangeModel(t.Context(), "m2")
 		// then
 		require.NoError(t, err)
 		assert.Equal(t, "m2", changed)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, expected, llm.ModelInfo())
+	})
+
+	t.Run("keeps the current info when the provider fails", func(t *testing.T) {
+		// given
+		expectedErr := errors.New("boom")
+		expected := &ModelInfo{Name: "m1", ContextSize: 1000}
+		llm := &LLM{
+			config:    Config{Models: []string{"m1", "m2"}},
+			modelInfo: &ModelInfo{Name: "m1", ContextSize: 1000},
+			provider: fakeProvider{
+				changeModelFunc: func(context.Context, string) (*ModelInfo, error) {
+					return nil, expectedErr
+				},
+			},
+		}
+		// when
+		result, err := llm.ChangeModel(t.Context(), "m2")
+		// then
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Equal(t, expected, llm.ModelInfo())
 	})
 
 	t.Run("returns ErrMissingModel when model is empty", func(t *testing.T) {
 		// given
 		llm := &LLM{config: Config{Models: []string{"m1"}}}
 		// when
-		err := llm.ChangeModel("")
+		result, err := llm.ChangeModel(t.Context(), "")
 		// then
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrMissingModel)
 	})
 
@@ -234,8 +280,9 @@ func TestLLMChangeModel(t *testing.T) {
 		// given
 		llm := &LLM{config: Config{Models: []string{"m1"}}}
 		// when
-		err := llm.ChangeModel("m2")
+		result, err := llm.ChangeModel(t.Context(), "m2")
 		// then
+		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrModelNotFound)
 	})
 }
@@ -290,7 +337,7 @@ func TestLLMChangeEffort(t *testing.T) {
 type fakeProvider struct {
 	chatFunc         func(context.Context, []Message, []Tool) (*AssistantMessage, error)
 	modelInfoFunc    func(context.Context) (*ModelInfo, error)
-	changeModelFunc  func(string) error
+	changeModelFunc  func(context.Context, string) (*ModelInfo, error)
 	currentModelFunc func() string
 	effortFunc       func() Effort
 	changeEffortFunc func(Effort)
@@ -304,11 +351,8 @@ func (f fakeProvider) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	return f.modelInfoFunc(ctx)
 }
 
-func (f fakeProvider) changeModel(model string) error {
-	if f.changeModelFunc == nil {
-		return nil
-	}
-	return f.changeModelFunc(model)
+func (f fakeProvider) changeModel(ctx context.Context, model string) (*ModelInfo, error) {
+	return f.changeModelFunc(ctx, model)
 }
 
 func (f fakeProvider) currentModel() string {
@@ -330,4 +374,14 @@ func (f fakeProvider) changeEffort(e Effort) {
 		return
 	}
 	f.changeEffortFunc(e)
+}
+
+func newModelInfoServer(t testing.TB, body string) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, body)
+	}))
+	t.Cleanup(server.Close)
+
+	return server.URL
 }

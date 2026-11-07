@@ -172,6 +172,7 @@ func fromAnthropicToModelInfo(model anthropicModel, id string) (*ModelInfo, erro
 	}
 
 	return &ModelInfo{
+		Provider:    ProviderAnthropic,
 		Name:        id,
 		ContextSize: model.MaxInputTokens,
 	}, nil

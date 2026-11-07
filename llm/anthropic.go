@@ -229,9 +229,17 @@ func (a *anthropic) modelInfo(ctx context.Context) (*ModelInfo, error) {
 	return fromAnthropicToModelInfo(apiResp, a.config.Model)
 }
 
-func (a *anthropic) changeModel(model string) error {
+func (a *anthropic) changeModel(ctx context.Context, model string) (*ModelInfo, error) {
+	oldModel := a.config.Model
 	a.config.Model = model
-	return nil
+
+	info, err := a.modelInfo(ctx)
+	if err != nil {
+		a.config.Model = oldModel
+		return nil, err
+	}
+
+	return info, nil
 }
 
 func (a *anthropic) currentModel() string {
