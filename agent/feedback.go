@@ -32,10 +32,6 @@ type Feedback interface {
 	// conversation is left as it was, and compaction is tried again after the next
 	// completed turn.
 	ContextCompactionFailed()
-	// ModelInfoUnavailable fires when [Model.ModelInfo] returns nil, which turns
-	// automatic compaction off for that turn. It is checked every turn, so it
-	// fires on each turn without info.
-	ModelInfoUnavailable()
 	// TokensUsed fires after each response that asks for tools, so token usage can
 	// be tracked before the final answer. The final answer's usage is in
 	// [Response.Metadata]. cacheReadTokens is the part of that response's prompt
@@ -104,10 +100,6 @@ func (s *writerFeedback) ContextCompactionFailed() {
 	_, _ = fmt.Fprintln(s.stdout, "Context compaction failed")
 }
 
-func (s *writerFeedback) ModelInfoUnavailable() {
-	_, _ = fmt.Fprintln(s.stdout, "Model info unavailable; automatic context compaction is disabled")
-}
-
 func (s *writerFeedback) TokensUsed(totalTokens, _ int) {
 	_, _ = fmt.Fprintln(s.stdout, "Tokens used:", totalTokens)
 }
@@ -154,10 +146,6 @@ func (NopFeedback) ContextCompacted() {
 
 // ContextCompactionFailed does nothing.
 func (NopFeedback) ContextCompactionFailed() {
-}
-
-// ModelInfoUnavailable does nothing.
-func (NopFeedback) ModelInfoUnavailable() {
 }
 
 // TokensUsed does nothing.

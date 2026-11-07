@@ -17,8 +17,8 @@ type Model interface {
 	// Chat sends messages to the model, offering it tools, and returns its reply.
 	Chat(ctx context.Context, messages []llm.Message, tools []llm.Tool) (*llm.AssistantMessage, error)
 	// ModelInfo returns the model's context window, which the agent uses to
-	// decide when to compact. A nil result turns automatic compaction off for
-	// that turn.
+	// decide when to compact. It must not return nil. A ContextSize of 0 turns
+	// automatic compaction off.
 	ModelInfo() *llm.ModelInfo
 }
 
@@ -196,10 +196,10 @@ func (a *Agent) SetFeedback(fb Feedback) {
 // until then, and calling it fails with [tools.ErrToolNotFound], which the
 // model sees as tool error text.
 //
-// After the final reply, Process reads the model's context window from
-// [Model.ModelInfo]. Once a completed turn goes past
-// Config.CompactionThresholdPercent of that window, the older turns are
-// summarized before the next round.
+// At the start, Process reads the model's context window from
+// [Model.ModelInfo] once and uses it for the whole round. Once a completed
+// turn goes past Config.CompactionThresholdPercent of that window, the older
+// turns are summarized before the next round.
 //
 // Process returns [ErrNoSession] if no session has been started,
 // [ErrMaxIterations] if it reaches Config.MaxIterations, or the model's error.
@@ -213,6 +213,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 	}
 
 	toolList := a.toolBox.Tools()
+	contextSize := a.llm.ModelInfo().ContextSize
 
 	var (
 		callCount    int
@@ -236,7 +237,7 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		a.messages = append(a.messages, *response)
 
 		if len(response.ToolCalls) == 0 {
-			a.compactIfNeeded(ctx, response.Stats.TotalTokens)
+			a.compactIfNeeded(ctx, contextSize, response.Stats.TotalTokens)
 
 			return &Response{
 				Content: response.Content,
@@ -298,14 +299,8 @@ func toolResult(msg *llm.ToolMessage) string {
 	return msg.Content
 }
 
-func (a *Agent) compactIfNeeded(ctx context.Context, lastTotalTokens int) {
-	info := a.llm.ModelInfo()
-	if info == nil {
-		a.fb.ModelInfoUnavailable()
-		return
-	}
-
-	threshold := compactionThreshold(info.ContextSize, a.config.CompactionThresholdPercent)
+func (a *Agent) compactIfNeeded(ctx context.Context, contextSize, lastTotalTokens int) {
+	threshold := compactionThreshold(contextSize, a.config.CompactionThresholdPercent)
 	if threshold != 0 && lastTotalTokens > threshold {
 		a.CompactContext(ctx)
 	}

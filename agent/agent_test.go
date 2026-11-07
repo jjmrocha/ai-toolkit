@@ -38,6 +38,9 @@ func (f *fakeLLM) Chat(_ context.Context, messages []llm.Message, toolList []llm
 }
 
 func (f *fakeLLM) ModelInfo() *llm.ModelInfo {
+	if f.info == nil {
+		return &llm.ModelInfo{}
+	}
 	return f.info
 }
 
@@ -116,9 +119,6 @@ func (f *recordingFeedback) TokensUsed(totalTokens, cacheReadTokens int) {
 func (f *recordingFeedback) ContextCompacted() { f.events = append(f.events, "ContextCompacted") }
 func (f *recordingFeedback) ContextCompactionFailed() {
 	f.events = append(f.events, "ContextCompactionFailed")
-}
-func (f *recordingFeedback) ModelInfoUnavailable() {
-	f.events = append(f.events, "ModelInfoUnavailable")
 }
 func (f *recordingFeedback) SessionReset()   { f.events = append(f.events, "SessionReset") }
 func (f *recordingFeedback) SessionStarted() { f.events = append(f.events, "SessionStarted") }
@@ -1069,23 +1069,6 @@ func TestProcess(t *testing.T) {
 		assert.NotContains(t, transcript.Content, "the-session-prompt")
 	})
 
-	t.Run("reports every turn the model info stays unavailable", func(t *testing.T) {
-		// given
-		fb := &recordingFeedback{}
-		fake := &fakeLLM{
-			replies: []*llm.AssistantMessage{{Content: "one"}, {Content: "two"}},
-		}
-		agt := agentWithLLM(fake, fb, Config{})
-		agt.StartSession(SessionConfig{Prompt: "sys"})
-		// when
-		_, err1 := agt.Process(t.Context(), "u1")
-		_, err2 := agt.Process(t.Context(), "u2")
-		// then
-		require.NoError(t, err1)
-		require.NoError(t, err2)
-		assert.Equal(t, []string{"SessionStarted", "ModelInfoUnavailable", "ModelInfoUnavailable"}, fb.events)
-	})
-
 	t.Run("feeds a failing tool's error back to the model and continues", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}
@@ -1141,10 +1124,11 @@ func TestProcess(t *testing.T) {
 		assert.Contains(t, fb.events, "ContextCompacted")
 	})
 
-	t.Run("skips compaction when the model info is unavailable", func(t *testing.T) {
+	t.Run("skips compaction when the context size is unknown", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{
 			replies: []*llm.AssistantMessage{{Content: "hi", Stats: llm.Stats{TotalTokens: 9999}}},
+			info:    &llm.ModelInfo{ContextSize: 0},
 		}
 		fb := &recordingFeedback{}
 		agt := agentWithLLM(fake, fb, Config{CompactionThresholdPercent: 1})

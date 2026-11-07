@@ -16,7 +16,6 @@ func exerciseAllEvents(fb Feedback) {
 	fb.InterimTextReceived("checking")
 	fb.ContextCompacted()
 	fb.ContextCompactionFailed()
-	fb.ModelInfoUnavailable()
 	fb.TokensUsed(5, 0)
 	fb.SessionReset()
 	fb.SessionClosed()
@@ -62,11 +61,6 @@ func TestNewWriterFeedback(t *testing.T) {
 			name:     "context compaction failed",
 			fire:     func(fb Feedback) { fb.ContextCompactionFailed() },
 			expected: "Context compaction failed\n",
-		},
-		{
-			name:     "model info unavailable",
-			fire:     func(fb Feedback) { fb.ModelInfoUnavailable() },
-			expected: "Model info unavailable; automatic context compaction is disabled\n",
 		},
 		{
 			name: "tokens used",
@@ -115,7 +109,6 @@ func TestNewWriterFeedback(t *testing.T) {
 			"Interim text received: checking\n" +
 			"Context was compacted\n" +
 			"Context compaction failed\n" +
-			"Model info unavailable; automatic context compaction is disabled\n" +
 			"Tokens used: 5\n" +
 			"Session reset\n" +
 			"Session closed\n"
