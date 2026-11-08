@@ -664,6 +664,29 @@ func TestSessionID(t *testing.T) {
 	})
 }
 
+func TestLLM(t *testing.T) {
+	t.Run("returns the llm.LLM passed to New", func(t *testing.T) {
+		// given
+		expected := &llm.LLM{}
+		agt, err := New(Config{}, expected)
+		require.NoError(t, err)
+		// when
+		result := agt.LLM()
+		// then
+		assert.Same(t, expected, result)
+	})
+
+	t.Run("returns nil for another model", func(t *testing.T) {
+		// given
+		agt, err := New(Config{}, &fakeLLM{})
+		require.NoError(t, err)
+		// when
+		result := agt.LLM()
+		// then
+		assert.Nil(t, result)
+	})
+}
+
 func TestSetFeedback(t *testing.T) {
 	t.Run("routes later events to the new sink, not the old one", func(t *testing.T) {
 		// given

@@ -58,6 +58,13 @@ func New(cfg Config, model Model) (*Agent, error) {
 	}, nil
 }
 
+// LLM returns the [llm.LLM] passed to [New], or nil when New got another
+// [Model]. A model or effort change made on it applies from the next turn.
+func (a *Agent) LLM() *llm.LLM {
+	model, _ := a.llm.(*llm.LLM)
+	return model
+}
+
 // StartSession starts a new conversation, discarding any previous one, and must
 // be called before [Agent.Process]. SessionConfig.Prompt becomes the system
 // message and survives [Agent.ResetSession]. SessionConfig.ToolBox holds the

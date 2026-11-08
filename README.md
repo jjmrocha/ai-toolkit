@@ -324,7 +324,7 @@ fmt.Println(resp.Content)
 - When a tool fails, the agent sends the error text to the model, so the model can recover.
 - Before the context window is full, the agent summarizes the older turns.
 - To save a session, call `Messages`. To resume it, pass those messages in `SessionConfig.Messages`.
-- To change the model, call `ChangeModel` on the `llm.LLM`. The agent uses the new context window from the next turn.
+- To change the model, call `ChangeModel` on the `llm.LLM`. `Agent.LLM` returns the `llm.LLM` passed to `agent.New`. The agent uses the new context window from the next turn.
 - `agent.New` takes any `agent.Model`. An `llm.LLM` is one; a fake model lets you test an agent without a provider.
 - `Feedback` reports tool calls and session events. To handle only some events, embed `NopFeedback` in your type.
 
