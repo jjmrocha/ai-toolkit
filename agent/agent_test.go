@@ -813,6 +813,28 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, []map[string]any{{"text": "hi"}}, fb.toolArgs)
 	})
 
+	t.Run("counts the tool calls of every iteration", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}, {ID: "c2", Name: "echo"}}},
+				{ToolCalls: []llm.ToolCall{{ID: "c3", Name: "echo"}}},
+				{Content: "done"},
+			},
+			info: &llm.ModelInfo{ContextSize: 1000},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		// when
+		result, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.Metadata.ToolCalls)
+		assert.Equal(t, 2, result.Metadata.Iterations)
+	})
+
 	t.Run("fires TokensUsed for each intermediate response, but not the final one", func(t *testing.T) {
 		// given
 		fb := &recordingFeedback{}

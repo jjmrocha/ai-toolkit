@@ -89,20 +89,24 @@ func Files(ctx context.Context, cfg Config) (*Result, error) {
 
 	defer func() { _ = root.Close() }()
 
-	matches, err := walkMatches(ctx, root, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return newResult(matches, cfg.MaxMatches), nil
-}
-
-func walkMatches(ctx context.Context, root *os.Root, cfg Config) ([]Match, error) {
 	limit := 0
 	if cfg.MaxMatches > 0 {
 		limit = cfg.MaxMatches + 1
 	}
 
+	matches, err := walkMatches(ctx, root, cfg, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit > 0 && len(matches) == limit {
+		return &Result{Matches: matches[:cfg.MaxMatches], Truncated: true}, nil
+	}
+
+	return &Result{Matches: matches}, nil
+}
+
+func walkMatches(ctx context.Context, root *os.Root, cfg Config, limit int) ([]Match, error) {
 	var matches []Match
 
 	err := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
@@ -143,14 +147,6 @@ func walkMatches(ctx context.Context, root *os.Root, cfg Config) ([]Match, error
 	})
 
 	return matches, err
-}
-
-func newResult(matches []Match, maxMatches int) *Result {
-	if maxMatches > 0 && len(matches) > maxMatches {
-		return &Result{Matches: matches[:maxMatches], Truncated: true}
-	}
-
-	return &Result{Matches: matches}
 }
 
 func isSearchable(entry fs.DirEntry, glob string) (bool, error) {

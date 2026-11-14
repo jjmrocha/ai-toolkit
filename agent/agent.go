@@ -231,10 +231,15 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 			return nil, ErrMaxIterations
 		}
 
-		response, err := a.callModel(ctx, toolList, &metadata)
+		start := time.Now()
+		response, err := a.llm.Chat(ctx, a.messages, toolList)
+		metadata.LLMDuration += time.Since(start)
+
 		if err != nil {
 			return nil, err
 		}
+
+		a.messages = append(a.messages, *response)
 
 		if len(response.ToolCalls) == 0 {
 			a.compactIfNeeded(ctx, contextSize, response.Stats.TotalTokens)
@@ -242,7 +247,11 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 		}
 
 		a.reportInterimReply(response)
-		a.runToolCalls(ctx, response.ToolCalls, &metadata)
+
+		results, elapsed := a.runToolCalls(ctx, response.ToolCalls)
+		a.messages = append(a.messages, results...)
+		metadata.ToolCalls += len(results)
+		metadata.ToolDuration += elapsed
 
 		metadata.Iterations++
 	}
@@ -250,20 +259,6 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 
 func (a *Agent) reachedMaxIterations(iteration int) bool {
 	return a.config.MaxIterations != 0 && iteration >= a.config.MaxIterations
-}
-
-func (a *Agent) callModel(ctx context.Context, toolList []llm.Tool, metadata *Metadata) (*llm.AssistantMessage, error) {
-	start := time.Now()
-	response, err := a.llm.Chat(ctx, a.messages, toolList)
-	metadata.LLMDuration += time.Since(start)
-
-	if err != nil {
-		return nil, err
-	}
-
-	a.messages = append(a.messages, *response)
-
-	return response, nil
 }
 
 func finalResponse(reply *llm.AssistantMessage, metadata Metadata) *Response {
@@ -284,7 +279,11 @@ func (a *Agent) reportInterimReply(reply *llm.AssistantMessage) {
 	a.fb.TokensUsed(reply.Stats.TotalTokens, reply.Stats.CacheReadTokens)
 }
 
-func (a *Agent) runToolCalls(ctx context.Context, calls []llm.ToolCall, metadata *Metadata) {
+func (a *Agent) runToolCalls(ctx context.Context, calls []llm.ToolCall) ([]llm.Message, time.Duration) {
+	messages := make([]llm.Message, 0, len(calls))
+
+	var total time.Duration
+
 	for _, call := range calls {
 		a.fb.ToolCalled(call.Name, call.Arguments)
 
@@ -292,14 +291,14 @@ func (a *Agent) runToolCalls(ctx context.Context, calls []llm.ToolCall, metadata
 		result, err := a.toolBox.Execute(ctx, call)
 		elapsed := time.Since(start)
 
-		metadata.ToolDuration += elapsed
-		metadata.ToolCalls++
-
 		a.fb.ToolReturned(call.Name, toolResult(result), err, elapsed)
 
 		message := toolMessage(call, result, err)
-		a.messages = append(a.messages, message)
+		messages = append(messages, message)
+		total += elapsed
 	}
+
+	return messages, total
 }
 
 // toolResult is the content of a successful call's message, and empty for a
