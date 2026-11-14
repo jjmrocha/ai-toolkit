@@ -89,19 +89,28 @@ func Files(ctx context.Context, cfg Config) (*Result, error) {
 
 	defer func() { _ = root.Close() }()
 
+	matches, err := walkMatches(ctx, root, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return newResult(matches, cfg.MaxMatches), nil
+}
+
+func walkMatches(ctx context.Context, root *os.Root, cfg Config) ([]Match, error) {
 	limit := 0
 	if cfg.MaxMatches > 0 {
 		limit = cfg.MaxMatches + 1
 	}
 
-	var result Result
+	var matches []Match
 
-	err = fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil && path == "." {
+			return walkErr
+		}
+
 		if walkErr != nil {
-			if path == "." {
-				return walkErr
-			}
-
 			return nil
 		}
 
@@ -109,42 +118,48 @@ func Files(ctx context.Context, cfg Config) (*Result, error) {
 			return ctxErr
 		}
 
-		if entry.IsDir() {
-			if cfg.Recursive || path == "." {
-				return nil
-			}
-
+		if entry.IsDir() && path != "." && !cfg.Recursive {
 			return fs.SkipDir
 		}
 
-		matched, globErr := matchesGlob(cfg.Glob, entry.Name())
-		if globErr != nil {
-			return globErr
-		}
-
-		if !entry.Type().IsRegular() || !matched {
+		if entry.IsDir() {
 			return nil
 		}
 
-		matches := searchFile(root, path, cfg.Pattern, cfg.MaxTextBytes, limit-len(result.Matches))
-		result.Matches = append(result.Matches, matches...)
+		searchable, globErr := isSearchable(entry, cfg.Glob)
+		if globErr != nil || !searchable {
+			return globErr
+		}
 
-		if limit > 0 && len(result.Matches) == limit {
+		budget := limit - len(matches)
+		found := searchFile(root, path, cfg.Pattern, cfg.MaxTextBytes, budget)
+		matches = append(matches, found...)
+
+		if limit > 0 && len(matches) == limit {
 			return fs.SkipAll
 		}
 
 		return nil
 	})
+
+	return matches, err
+}
+
+func newResult(matches []Match, maxMatches int) *Result {
+	if maxMatches > 0 && len(matches) > maxMatches {
+		return &Result{Matches: matches[:maxMatches], Truncated: true}
+	}
+
+	return &Result{Matches: matches}
+}
+
+func isSearchable(entry fs.DirEntry, glob string) (bool, error) {
+	matched, err := matchesGlob(glob, entry.Name())
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	if limit > 0 && len(result.Matches) == limit {
-		result.Matches = result.Matches[:cfg.MaxMatches]
-		result.Truncated = true
-	}
-
-	return &result, nil
+	return matched && entry.Type().IsRegular(), nil
 }
 
 func elide(text string, maxText int) (string, bool) {

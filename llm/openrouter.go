@@ -107,13 +107,7 @@ func isORInFlightBudgetExhausted(resp *resty.Response, _ error) bool {
 }
 
 func readORStream(body io.Reader) (orChatResponse, error) {
-	var (
-		content      strings.Builder
-		toolCalls    []orToolCall
-		finishReason string
-		usage        orUsage
-		sawChoice    bool
-	)
+	var stream orStream
 
 	for data, err := range rest.Events(body) {
 		if err != nil {
@@ -121,13 +115,7 @@ func readORStream(body io.Reader) (orChatResponse, error) {
 		}
 
 		if data == "[DONE]" {
-			if !sawChoice {
-				return orChatResponse{Usage: usage}, nil
-			}
-
-			message := orResponseMessage{Content: content.String(), ToolCalls: toolCalls}
-			choice := orChoice{Message: message, FinishReason: finishReason}
-			return orChatResponse{Choices: []orChoice{choice}, Usage: usage}, nil
+			return stream.response(), nil
 		}
 
 		var chunk orStreamChunk
@@ -136,30 +124,60 @@ func readORStream(body io.Reader) (orChatResponse, error) {
 			return orChatResponse{}, fmt.Errorf("openrouter: reading stream: %w", err)
 		}
 
-		if chunk.Error != nil {
-			return orChatResponse{}, fmt.Errorf("openrouter: api error: %s", chunk.Error.Message)
-		}
-
-		if chunk.Usage != nil {
-			usage = *chunk.Usage
-		}
-
-		for _, choice := range chunk.Choices {
-			sawChoice = true
-			content.WriteString(choice.Delta.Content)
-
-			if choice.FinishReason != "" {
-				finishReason = choice.FinishReason
-			}
-
-			toolCalls, err = mergeORToolCalls(toolCalls, choice.Delta.ToolCalls)
-			if err != nil {
-				return orChatResponse{}, err
-			}
+		err = stream.apply(chunk)
+		if err != nil {
+			return orChatResponse{}, err
 		}
 	}
 
 	return orChatResponse{}, errors.New("openrouter: stream ended before done")
+}
+
+type orStream struct {
+	content      strings.Builder
+	toolCalls    []orToolCall
+	finishReason string
+	usage        orUsage
+	sawChoice    bool
+}
+
+func (s *orStream) response() orChatResponse {
+	if !s.sawChoice {
+		return orChatResponse{Usage: s.usage}
+	}
+
+	message := orResponseMessage{Content: s.content.String(), ToolCalls: s.toolCalls}
+	choice := orChoice{Message: message, FinishReason: s.finishReason}
+
+	return orChatResponse{Choices: []orChoice{choice}, Usage: s.usage}
+}
+
+func (s *orStream) apply(chunk orStreamChunk) error {
+	if chunk.Error != nil {
+		return fmt.Errorf("openrouter: api error: %s", chunk.Error.Message)
+	}
+
+	if chunk.Usage != nil {
+		s.usage = *chunk.Usage
+	}
+
+	for _, choice := range chunk.Choices {
+		s.sawChoice = true
+		s.content.WriteString(choice.Delta.Content)
+
+		if choice.FinishReason != "" {
+			s.finishReason = choice.FinishReason
+		}
+
+		toolCalls, err := mergeORToolCalls(s.toolCalls, choice.Delta.ToolCalls)
+		if err != nil {
+			return err
+		}
+
+		s.toolCalls = toolCalls
+	}
+
+	return nil
 }
 
 func mergeORToolCalls(toolCalls []orToolCall, fragments []orStreamToolCall) ([]orToolCall, error) {

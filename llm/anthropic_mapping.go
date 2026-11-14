@@ -58,34 +58,7 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 			appendBlocks(string(UserRole), []anthropicContentBlock{block})
 		case AssistantRole:
 			msg := messageValue[AssistantMessage](m)
-
-			if blocks, ok := msg.raw.([]anthropicContentBlock); ok {
-				appendBlocks(string(AssistantRole), blocks)
-				break
-			}
-
-			var blocks []anthropicContentBlock
-			if msg.Content != "" {
-				block := anthropicContentBlock{Type: typeText, Text: msg.Content}
-				blocks = append(blocks, block)
-			}
-
-			for _, call := range msg.ToolCalls {
-				input := call.Arguments
-				if input == nil {
-					input = map[string]any{}
-				}
-
-				block := anthropicContentBlock{
-					Type:  typeToolUse,
-					ID:    call.ID,
-					Name:  call.Name,
-					Input: input,
-				}
-				blocks = append(blocks, block)
-			}
-
-			appendBlocks(string(AssistantRole), blocks)
+			appendBlocks(string(AssistantRole), toAnthropicAssistantBlocks(msg))
 		case ToolRole:
 			msg := messageValue[ToolMessage](m)
 			block := anthropicContentBlock{
@@ -98,6 +71,36 @@ func toAnthropicMessages(messages []Message) []anthropicMessage {
 	}
 
 	return result
+}
+
+func toAnthropicAssistantBlocks(msg AssistantMessage) []anthropicContentBlock {
+	if blocks, ok := msg.raw.([]anthropicContentBlock); ok {
+		return blocks
+	}
+
+	var blocks []anthropicContentBlock
+	if msg.Content != "" {
+		block := anthropicContentBlock{Type: typeText, Text: msg.Content}
+		blocks = append(blocks, block)
+	}
+
+	toolUses := fn.Map(msg.ToolCalls, toAnthropicToolUse)
+
+	return append(blocks, toolUses...)
+}
+
+func toAnthropicToolUse(call ToolCall) anthropicContentBlock {
+	input := call.Arguments
+	if input == nil {
+		input = map[string]any{}
+	}
+
+	return anthropicContentBlock{
+		Type:  typeToolUse,
+		ID:    call.ID,
+		Name:  call.Name,
+		Input: input,
+	}
 }
 
 var anthropicEffortLevels = map[Effort]string{

@@ -44,47 +44,36 @@ func New(ctx context.Context, cfg Config) (*LLM, error) {
 		cfg.Models = append([]string{cfg.Model}, cfg.Models...)
 	}
 
-	var provider llmProvider
-
-	switch cfg.Provider {
-	case ProviderOpenRouter:
-		p, err := newOpenRouter(cfg)
-		if err != nil {
-			return nil, err
-		}
-
-		provider = p
-	case ProviderOllama:
-		p, err := newOllama(cfg)
-		if err != nil {
-			return nil, err
-		}
-
-		provider = p
-	case ProviderAnthropic:
-		p, err := newAnthropic(cfg)
-		if err != nil {
-			return nil, err
-		}
-
-		provider = p
-	default:
-		return nil, ErrUnsupportedProvider
-	}
-
-	llm := &LLM{
-		config:   cfg,
-		provider: provider,
-	}
-
-	info, err := llm.provider.modelInfo(ctx)
+	provider, err := newProvider(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	llm.modelInfo = info
+	info, err := provider.modelInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	llm := &LLM{
+		config:    cfg,
+		provider:  provider,
+		modelInfo: info,
+	}
 
 	return llm, nil
+}
+
+func newProvider(cfg Config) (llmProvider, error) {
+	switch cfg.Provider {
+	case ProviderOpenRouter:
+		return newOpenRouter(cfg)
+	case ProviderOllama:
+		return newOllama(cfg)
+	case ProviderAnthropic:
+		return newAnthropic(cfg)
+	default:
+		return nil, ErrUnsupportedProvider
+	}
 }
 
 // Chat sends messages to the model, offering it tools, and returns its reply.

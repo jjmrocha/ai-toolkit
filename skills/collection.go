@@ -56,55 +56,66 @@ func NewCollection() *Collection {
 // when the frontmatter lacks either, and [ErrDuplicateSkill] when the name is
 // taken.
 func (c *Collection) Add(path string) error {
+	s, err := readSkill(path)
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, taken := c.skills[s.name]; taken {
+		return fmt.Errorf("%w: %q", ErrDuplicateSkill, s.name)
+	}
+
+	c.skills[s.name] = s
+
+	return nil
+}
+
+func readSkill(path string) (skill, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
-		return fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
+		return skill{}, fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
 	}
 
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
-		return fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
+		return skill{}, fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
 	}
 
 	root, err := os.OpenRoot(path)
 	if err != nil {
-		return fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
+		return skill{}, fmt.Errorf("%w: %q", ErrSkillFolderNotFound, path)
 	}
 
 	defer func() { _ = root.Close() }()
 
 	content, err := fs.ReadFile(root.FS(), skillFile)
 	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("%w: %q", ErrNoSkillFile, path)
+		return skill{}, fmt.Errorf("%w: %q", ErrNoSkillFile, path)
 	}
 
 	if err != nil {
-		return fmt.Errorf("reading %s in %q: %w", skillFile, path, err)
+		return skill{}, fmt.Errorf("reading %s in %q: %w", skillFile, path, err)
 	}
 
 	name, description, body, err := parseFrontmatter(string(content))
 	if err != nil {
-		return fmt.Errorf("%w: %q", err, path)
+		return skill{}, fmt.Errorf("%w: %q", err, path)
 	}
 
 	if name == "" {
-		return fmt.Errorf("%w: %q", ErrNameRequired, path)
+		return skill{}, fmt.Errorf("%w: %q", ErrNameRequired, path)
 	}
 
 	if description == "" {
-		return fmt.Errorf("%w: %q", ErrDescriptionRequired, path)
+		return skill{}, fmt.Errorf("%w: %q", ErrDescriptionRequired, path)
 	}
 
 	files, err := listFiles(root.FS())
 	if err != nil {
-		return fmt.Errorf("listing files in %q: %w", path, err)
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if _, taken := c.skills[name]; taken {
-		return fmt.Errorf("%w: %q", ErrDuplicateSkill, name)
+		return skill{}, fmt.Errorf("listing files in %q: %w", path, err)
 	}
 
 	s := skill{
@@ -114,9 +125,8 @@ func (c *Collection) Add(path string) error {
 		skillPath:   path,
 		files:       files,
 	}
-	c.skills[name] = s
 
-	return nil
+	return s, nil
 }
 
 // AddClaudeSkill adds the skill in folder skillName of the user's Claude skills

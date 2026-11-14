@@ -224,76 +224,81 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 	toolList := a.toolBox.Tools()
 	contextSize := a.llm.ModelInfo().ContextSize
 
-	var (
-		callCount    int
-		llmDuration  time.Duration
-		toolDuration time.Duration
-		iteration    int
-	)
+	var metadata Metadata
 
 	for {
-		if a.config.MaxIterations != 0 && iteration >= a.config.MaxIterations {
+		if a.reachedMaxIterations(metadata.Iterations) {
 			return nil, ErrMaxIterations
 		}
 
-		t0 := time.Now()
-		response, err := a.llm.Chat(ctx, a.messages, toolList)
-		llmDuration += time.Since(t0)
+		response, err := a.callModel(ctx, toolList, &metadata)
 		if err != nil {
 			return nil, err
 		}
 
-		a.messages = append(a.messages, *response)
-
 		if len(response.ToolCalls) == 0 {
 			a.compactIfNeeded(ctx, contextSize, response.Stats.TotalTokens)
-
-			return &Response{
-				Content: response.Content,
-				Metadata: Metadata{
-					Iterations:      iteration,
-					PromptTokens:    response.Stats.PromptTokens,
-					CacheReadTokens: response.Stats.CacheReadTokens,
-					OutputTokens:    response.Stats.OutputTokens,
-					TotalTokens:     response.Stats.TotalTokens,
-					ToolCalls:       callCount,
-					StopReason:      response.StopReason,
-					LLMDuration:     llmDuration,
-					ToolDuration:    toolDuration,
-				},
-			}, nil
+			return finalResponse(response, metadata), nil
 		}
 
-		if response.Content != "" {
-			a.fb.InterimTextReceived(response.Content)
-		}
+		a.reportInterimReply(response)
+		a.runToolCalls(ctx, response.ToolCalls, &metadata)
 
-		a.fb.TokensUsed(response.Stats.TotalTokens, response.Stats.CacheReadTokens)
+		metadata.Iterations++
+	}
+}
 
-		for _, call := range response.ToolCalls {
-			a.fb.ToolCalled(call.Name, call.Arguments)
+func (a *Agent) reachedMaxIterations(iteration int) bool {
+	return a.config.MaxIterations != 0 && iteration >= a.config.MaxIterations
+}
 
-			t0 := time.Now()
-			result, err := a.toolBox.Execute(ctx, call)
-			elapsed := time.Since(t0)
-			toolDuration += elapsed
-			callCount++
+func (a *Agent) callModel(ctx context.Context, toolList []llm.Tool, metadata *Metadata) (*llm.AssistantMessage, error) {
+	start := time.Now()
+	response, err := a.llm.Chat(ctx, a.messages, toolList)
+	metadata.LLMDuration += time.Since(start)
 
-			a.fb.ToolReturned(call.Name, toolResult(result), err, elapsed)
+	if err != nil {
+		return nil, err
+	}
 
-			if err != nil {
-				a.messages = append(a.messages, llm.ToolMessage{
-					ToolCallID: call.ID,
-					ToolName:   call.Name,
-					Content:    err.Error(),
-				})
-				continue
-			}
+	a.messages = append(a.messages, *response)
 
-			a.messages = append(a.messages, *result)
-		}
+	return response, nil
+}
 
-		iteration++
+func finalResponse(reply *llm.AssistantMessage, metadata Metadata) *Response {
+	metadata.PromptTokens = reply.Stats.PromptTokens
+	metadata.CacheReadTokens = reply.Stats.CacheReadTokens
+	metadata.OutputTokens = reply.Stats.OutputTokens
+	metadata.TotalTokens = reply.Stats.TotalTokens
+	metadata.StopReason = reply.StopReason
+
+	return &Response{Content: reply.Content, Metadata: metadata}
+}
+
+func (a *Agent) reportInterimReply(reply *llm.AssistantMessage) {
+	if reply.Content != "" {
+		a.fb.InterimTextReceived(reply.Content)
+	}
+
+	a.fb.TokensUsed(reply.Stats.TotalTokens, reply.Stats.CacheReadTokens)
+}
+
+func (a *Agent) runToolCalls(ctx context.Context, calls []llm.ToolCall, metadata *Metadata) {
+	for _, call := range calls {
+		a.fb.ToolCalled(call.Name, call.Arguments)
+
+		start := time.Now()
+		result, err := a.toolBox.Execute(ctx, call)
+		elapsed := time.Since(start)
+
+		metadata.ToolDuration += elapsed
+		metadata.ToolCalls++
+
+		a.fb.ToolReturned(call.Name, toolResult(result), err, elapsed)
+
+		message := toolMessage(call, result, err)
+		a.messages = append(a.messages, message)
 	}
 }
 
@@ -306,6 +311,14 @@ func toolResult(msg *llm.ToolMessage) string {
 	}
 
 	return msg.Content
+}
+
+func toolMessage(call llm.ToolCall, result *llm.ToolMessage, err error) llm.ToolMessage {
+	if err != nil {
+		return llm.ToolMessage{ToolCallID: call.ID, ToolName: call.Name, Content: err.Error()}
+	}
+
+	return *result
 }
 
 func (a *Agent) compactIfNeeded(ctx context.Context, contextSize, lastTotalTokens int) {
