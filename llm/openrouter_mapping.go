@@ -3,6 +3,7 @@ package llm
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/jjmrocha/go-algo/fn"
 )
@@ -143,5 +144,10 @@ func fromORToModelInfo(models []orModel, id string) (*ModelInfo, error) {
 		Provider:    ProviderOpenRouter,
 		Name:        id,
 		ContextSize: model.ContextLength,
+		Capabilities: Capabilities{
+			Tools:     slices.Contains(model.SupportedParameters, "tools"),
+			Reasoning: slices.Contains(model.SupportedParameters, "reasoning"),
+			Images:    slices.Contains(model.Architecture.InputModalities, "image"),
+		},
 	}, nil
 }

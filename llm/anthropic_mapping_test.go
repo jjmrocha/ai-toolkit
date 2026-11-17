@@ -393,7 +393,42 @@ func TestFromAnthropicToModelInfo(t *testing.T) {
 		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000}, result)
+		assert.Equal(t, "claude-opus-4-8", result.Name)
+		assert.Equal(t, 1000000, result.ContextSize)
+	})
+
+	t.Run("reports thinking and image input as reasoning and images", func(t *testing.T) {
+		// given
+		expected := &ModelInfo{
+			Provider:     ProviderAnthropic,
+			Name:         "claude-opus-4-8",
+			ContextSize:  1000000,
+			Capabilities: Capabilities{Tools: true, Reasoning: true, Images: true},
+		}
+		model := anthropicModel{
+			ID:             "claude-opus-4-8",
+			MaxInputTokens: 1000000,
+			Capabilities: anthropicModelCapabilities{
+				Thinking:   anthropicSupport{Supported: true},
+				ImageInput: anthropicSupport{Supported: true},
+			},
+		}
+		// when
+		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("reports only tools when thinking and image input are not supported", func(t *testing.T) {
+		// given
+		expected := Capabilities{Tools: true}
+		model := anthropicModel{ID: "claude-opus-4-8", MaxInputTokens: 1000000}
+		// when
+		result, err := fromAnthropicToModelInfo(model, "claude-opus-4-8")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
 	})
 
 	t.Run("returns ErrMissingContextLength when no context size is reported", func(t *testing.T) {

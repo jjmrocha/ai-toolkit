@@ -178,5 +178,10 @@ func fromAnthropicToModelInfo(model anthropicModel, id string) (*ModelInfo, erro
 		Provider:    ProviderAnthropic,
 		Name:        id,
 		ContextSize: model.MaxInputTokens,
+		Capabilities: Capabilities{
+			Tools:     true,
+			Reasoning: model.Capabilities.Thinking.Supported,
+			Images:    model.Capabilities.ImageInput.Supported,
+		},
 	}, nil
 }

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/jjmrocha/go-algo/fn"
 )
@@ -119,5 +120,11 @@ func fromOllamaToModelInfo(resp ollamaShowResponse, model string) (*ModelInfo, e
 	return &ModelInfo{
 		Provider:    ProviderOllama,
 		Name:        model,
-		ContextSize: int(ctxLen)}, nil
+		ContextSize: int(ctxLen),
+		Capabilities: Capabilities{
+			Tools:     slices.Contains(resp.Capabilities, "tools"),
+			Reasoning: slices.Contains(resp.Capabilities, "thinking"),
+			Images:    slices.Contains(resp.Capabilities, "vision"),
+		},
+	}, nil
 }

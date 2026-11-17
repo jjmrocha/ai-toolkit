@@ -260,6 +260,38 @@ func TestFromORToModelInfo(t *testing.T) {
 		assert.Equal(t, &ModelInfo{Provider: ProviderOpenRouter, Name: "openai/gpt-4o", ContextSize: 128000}, result)
 	})
 
+	t.Run("maps tools, reasoning and image input", func(t *testing.T) {
+		// given
+		expected := Capabilities{Tools: true, Reasoning: true, Images: true}
+		capable := []orModel{{
+			ID:                  "moonshotai/kimi-k3",
+			ContextLength:       1048576,
+			SupportedParameters: []string{"max_tokens", "reasoning", "tools"},
+			Architecture:        orArchitecture{InputModalities: []string{"text", "image", "video"}},
+		}}
+		// when
+		result, err := fromORToModelInfo(capable, "moonshotai/kimi-k3")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
+	})
+
+	t.Run("reports no capabilities when the model lists none", func(t *testing.T) {
+		// given
+		expected := Capabilities{}
+		plain := []orModel{{
+			ID:                  "some/text-model",
+			ContextLength:       8192,
+			SupportedParameters: []string{"max_tokens", "temperature"},
+			Architecture:        orArchitecture{InputModalities: []string{"text"}},
+		}}
+		// when
+		result, err := fromORToModelInfo(plain, "some/text-model")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
+	})
+
 	t.Run("returns ErrModelNotFound when the id is absent", func(t *testing.T) {
 		// when
 		result, err := fromORToModelInfo(models, "missing/model")

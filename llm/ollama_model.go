@@ -60,6 +60,7 @@ type ollamaShowRequest struct {
 }
 
 type ollamaShowResponse struct {
-	ModelInfo map[string]any `json:"model_info"`
-	Error     string         `json:"error,omitempty"`
+	ModelInfo    map[string]any `json:"model_info"`
+	Capabilities []string       `json:"capabilities"`
+	Error        string         `json:"error,omitempty"`
 }

@@ -190,6 +190,39 @@ func TestFromOllamaToModelInfo(t *testing.T) {
 		assert.Equal(t, &ModelInfo{Provider: ProviderOllama, Name: "llama3.2", ContextSize: 8192}, result)
 	})
 
+	t.Run("maps the tools, thinking and vision capabilities", func(t *testing.T) {
+		// given
+		expected := Capabilities{Tools: true, Reasoning: true, Images: true}
+		resp := ollamaShowResponse{
+			ModelInfo: map[string]any{
+				"general.architecture":  "qwen35",
+				"qwen35.context_length": float64(262144),
+			},
+			Capabilities: []string{"completion", "vision", "tools", "thinking"},
+		}
+		// when
+		result, err := fromOllamaToModelInfo(resp, "qwen3.5:9b")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
+	})
+
+	t.Run("does not report images for a model that only generates them", func(t *testing.T) {
+		// given
+		resp := ollamaShowResponse{
+			ModelInfo: map[string]any{
+				"general.architecture": "flux",
+				"flux.context_length":  float64(512),
+			},
+			Capabilities: []string{"image"},
+		}
+		// when
+		result, err := fromOllamaToModelInfo(resp, "flux")
+		// then
+		require.NoError(t, err)
+		assert.False(t, result.Capabilities.Images)
+	})
+
 	t.Run("returns an error when the context length key is absent", func(t *testing.T) {
 		// given
 		resp := ollamaShowResponse{ModelInfo: map[string]any{"general.architecture": "llama"}}

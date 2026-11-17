@@ -102,7 +102,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("valid anthropic config returns a configured LLM", func(t *testing.T) {
 		// given
-		expected := &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000}
+		expected := &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000, Capabilities: Capabilities{Tools: true}}
 		url := newModelInfoServer(t, `{"id":"claude-opus-4-8","max_input_tokens":1000000}`)
 		cfg := Config{Provider: ProviderAnthropic, Model: "claude-opus-4-8", APIKey: "sk-test", BaseURL: url}
 		// when
@@ -161,8 +161,8 @@ func TestLLMChat(t *testing.T) {
 func TestLLMModelInfo(t *testing.T) {
 	t.Run("returns the info fetched when the client was created", func(t *testing.T) {
 		// given
-		expected := &ModelInfo{Provider: ProviderOllama, Name: "m1", ContextSize: 1000}
-		llm := &LLM{modelInfo: &ModelInfo{Provider: ProviderOllama, Name: "m1", ContextSize: 1000}}
+		expected := &ModelInfo{Provider: ProviderOllama, Name: "m1", ContextSize: 1000, Capabilities: Capabilities{Tools: true}}
+		llm := &LLM{modelInfo: &ModelInfo{Provider: ProviderOllama, Name: "m1", ContextSize: 1000, Capabilities: Capabilities{Tools: true}}}
 		// when
 		result := llm.ModelInfo()
 		// then
@@ -225,14 +225,14 @@ func TestLLMChangeModel(t *testing.T) {
 	t.Run("switches to a configured model via the provider and returns its info", func(t *testing.T) {
 		// given
 		var changed string
-		expected := &ModelInfo{Name: "m2", ContextSize: 2000}
+		expected := &ModelInfo{Name: "m2", ContextSize: 2000, Capabilities: Capabilities{Images: true}}
 		llm := &LLM{
 			config:    Config{Models: []string{"m1", "m2"}},
 			modelInfo: &ModelInfo{Name: "m1", ContextSize: 1000},
 			provider: fakeProvider{
 				changeModelFunc: func(_ context.Context, m string) (*ModelInfo, error) {
 					changed = m
-					return &ModelInfo{Name: "m2", ContextSize: 2000}, nil
+					return &ModelInfo{Name: "m2", ContextSize: 2000, Capabilities: Capabilities{Images: true}}, nil
 				},
 			},
 		}

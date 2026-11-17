@@ -353,7 +353,20 @@ func TestAnthropicModelInfo(t *testing.T) {
 		result, err := a.modelInfo(t.Context())
 		// then
 		require.NoError(t, err)
-		assert.Equal(t, &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000}, result)
+		assert.Equal(t, &ModelInfo{Provider: ProviderAnthropic, Name: "claude-opus-4-8", ContextSize: 1000000, Capabilities: Capabilities{Tools: true}}, result)
+	})
+
+	t.Run("decodes the thinking and image input capabilities", func(t *testing.T) {
+		// given
+		expected := Capabilities{Tools: true, Reasoning: true, Images: true}
+		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"id":"claude-opus-4-8","max_input_tokens":1000000,"capabilities":{"thinking":{"supported":true},"image_input":{"supported":true}}}`)
+		})
+		// when
+		result, err := a.modelInfo(t.Context())
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
 	})
 
 	t.Run("returns ErrModelNotFound when the model is not found", func(t *testing.T) {
@@ -399,7 +412,7 @@ func TestAnthropicChangeModel(t *testing.T) {
 	t.Run("switches to the model and returns its info", func(t *testing.T) {
 		// given
 		var gotPath string
-		expected := &ModelInfo{Provider: ProviderAnthropic, Name: "claude-haiku-4-5", ContextSize: 200000}
+		expected := &ModelInfo{Provider: ProviderAnthropic, Name: "claude-haiku-4-5", ContextSize: 200000, Capabilities: Capabilities{Tools: true}}
 		a := newTestAnthropic(t, func(w http.ResponseWriter, r *http.Request) {
 			gotPath = r.URL.Path
 			writeJSON(t, w, `{"id":"claude-haiku-4-5","max_input_tokens":200000}`)

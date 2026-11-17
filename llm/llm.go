@@ -95,17 +95,18 @@ func (l *LLM) Chat(ctx context.Context, messages []Message, tools []Tool) (*Assi
 	return l.provider.chat(ctx, messages, tools)
 }
 
-// ModelInfo returns the provider, id and context window of the model the
-// client uses. [New] and [LLM.ChangeModel] fetch it, so ModelInfo sends no
+// ModelInfo returns the provider, id, context window and [Capabilities] of the
+// model the client uses. [New] and [LLM.ChangeModel] fetch it, so ModelInfo sends no
 // request. Each call returns a new copy.
 func (l *LLM) ModelInfo() *ModelInfo {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	return &ModelInfo{
-		Provider:    l.modelInfo.Provider,
-		Name:        l.modelInfo.Name,
-		ContextSize: l.modelInfo.ContextSize,
+		Provider:     l.modelInfo.Provider,
+		Name:         l.modelInfo.Name,
+		ContextSize:  l.modelInfo.ContextSize,
+		Capabilities: l.modelInfo.Capabilities,
 	}
 }
 
@@ -149,9 +150,10 @@ func (l *LLM) ChangeModel(ctx context.Context, model string) (*ModelInfo, error)
 	l.modelInfo = info
 
 	return &ModelInfo{
-		Provider:    info.Provider,
-		Name:        info.Name,
-		ContextSize: info.ContextSize,
+		Provider:     info.Provider,
+		Name:         info.Name,
+		ContextSize:  info.ContextSize,
+		Capabilities: info.Capabilities,
 	}, nil
 }
 

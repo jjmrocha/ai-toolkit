@@ -116,6 +116,12 @@ type orModelsResponse struct {
 }
 
 type orModel struct {
-	ID            string `json:"id"`
-	ContextLength int    `json:"context_length"`
+	ID                  string         `json:"id"`
+	ContextLength       int            `json:"context_length"`
+	SupportedParameters []string       `json:"supported_parameters"`
+	Architecture        orArchitecture `json:"architecture"`
+}
+
+type orArchitecture struct {
+	InputModalities []string `json:"input_modalities"`
 }

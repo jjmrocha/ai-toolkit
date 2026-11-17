@@ -92,6 +92,16 @@ type anthropicUsage struct {
 }
 
 type anthropicModel struct {
-	ID             string `json:"id"`
-	MaxInputTokens int    `json:"max_input_tokens"`
+	ID             string                     `json:"id"`
+	MaxInputTokens int                        `json:"max_input_tokens"`
+	Capabilities   anthropicModelCapabilities `json:"capabilities"`
+}
+
+type anthropicModelCapabilities struct {
+	Thinking   anthropicSupport `json:"thinking"`
+	ImageInput anthropicSupport `json:"image_input"`
+}
+
+type anthropicSupport struct {
+	Supported bool `json:"supported"`
 }

@@ -455,6 +455,19 @@ func TestOpenRouterModelInfo(t *testing.T) {
 		assert.Equal(t, &ModelInfo{Provider: ProviderOpenRouter, Name: "openai/gpt-4o", ContextSize: 128000}, result)
 	})
 
+	t.Run("decodes the supported parameters and input modalities", func(t *testing.T) {
+		// given
+		expected := Capabilities{Tools: true, Reasoning: true, Images: true}
+		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"data":[{"id":"openai/gpt-4o","context_length":128000,"supported_parameters":["tools","reasoning"],"architecture":{"input_modalities":["text","image"]}}]}`)
+		})
+		// when
+		result, err := o.modelInfo(t.Context())
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
+	})
+
 	t.Run("returns an error when the configured model is not listed", func(t *testing.T) {
 		// given
 		o := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {

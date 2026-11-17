@@ -120,7 +120,7 @@ fmt.Println(reply.Content)
 - To use a different provider, change `Provider` and `Model`. Ollama needs no API key.
 - `Effort` sets how much the model reasons, from `EffortOff` to `EffortMax`. Each provider gets its equivalent setting.
 - `New` asks the provider for the model's context window, so it fails when the provider cannot be reached or does not offer the model.
-- `ModelInfo` returns the provider, model id and context window without a new request.
+- `ModelInfo` returns the provider, model id, context window and capabilities without a new request. The capabilities tell whether the model supports tool calling, reasoning and image input.
 - To change the effort during a conversation, call `ChangeEffort`. To change the model, call `ChangeModel` with a model from `Config.Models`. It returns the new model's info, and keeps the current model when that info cannot be fetched.
 - Each reply contains the token usage, the prompt-cache reads and writes, and the provider's stop reason.
 

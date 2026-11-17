@@ -280,6 +280,19 @@ func TestOllamaModelInfo(t *testing.T) {
 		assert.Equal(t, "llama3.2", sent.Model)
 	})
 
+	t.Run("decodes the capabilities list", func(t *testing.T) {
+		// given
+		expected := Capabilities{Tools: true, Reasoning: true, Images: true}
+		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"model_info":{"general.architecture":"llama","llama.context_length":8192},"capabilities":["completion","tools","thinking","vision"]}`)
+		})
+		// when
+		result, err := o.modelInfo(t.Context())
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result.Capabilities)
+	})
+
 	t.Run("returns ErrModelNotFound on a 404", func(t *testing.T) {
 		// given
 		o := newTestOllama(t, func(w http.ResponseWriter, r *http.Request) {
