@@ -198,6 +198,9 @@ func (a *Agent) SetFeedback(fb Feedback) {
 // reported to the model as its error text, so the model can recover and the
 // round goes on.
 //
+// When Config.Interceptor is set, Process appends the interceptor's text in
+// place of userInput; see [Interceptor].
+//
 // The tools offered to the model are read from the session's ToolBox once,
 // before the first model call, and stay fixed for the round. A tool registered
 // during the round, by an MCP server changing its tool list, say, is offered
@@ -218,7 +221,8 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 	}
 
 	if userInput != "" {
-		a.messages = append(a.messages, llm.UserMessage{Content: userInput})
+		message := llm.UserMessage{Content: a.intercept(ctx, userInput)}
+		a.messages = append(a.messages, message)
 	}
 
 	toolList := a.toolBox.Tools()
@@ -255,6 +259,18 @@ func (a *Agent) Process(ctx context.Context, userInput string) (*Response, error
 
 		metadata.Iterations++
 	}
+}
+
+func (a *Agent) intercept(ctx context.Context, userInput string) string {
+	if a.config.Interceptor == nil {
+		return userInput
+	}
+
+	if text := a.config.Interceptor(ctx, userInput); text != "" {
+		return text
+	}
+
+	return userInput
 }
 
 func (a *Agent) reachedMaxIterations(iteration int) bool {

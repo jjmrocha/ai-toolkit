@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/jjmrocha/ai-toolkit/llm"
 	"github.com/jjmrocha/ai-toolkit/skills"
 	"github.com/jjmrocha/ai-toolkit/tools"
@@ -27,8 +29,16 @@ type SessionConfig struct {
 	ID string
 }
 
-// Config tunes an [Agent]. The zero value works: no iteration limit and the
-// default compaction threshold.
+// Interceptor sets the text the model sees for a user message. [Agent.Process]
+// calls it once per round, before the first model call, with its own ctx and
+// the user's text. The returned text becomes the user message, in the model's
+// input and in the conversation. An empty result keeps userInput. It is not
+// called when userInput is empty. It runs inside [Agent.Process], so it should
+// respect ctx and limit its own time.
+type Interceptor func(ctx context.Context, userInput string) string
+
+// Config tunes an [Agent]. The zero value works: no iteration limit, the
+// default compaction threshold and no [Interceptor].
 type Config struct {
 	// MaxIterations caps the model/tool rounds in one [Agent.Process] call, after
 	// which it returns [ErrMaxIterations]. Zero means no limit.
@@ -37,4 +47,7 @@ type Config struct {
 	// at which [Agent.Process] summarizes the older turns. Zero means 85. Outside
 	// 0 to 100, [New] returns [ErrInvalidThreshold].
 	CompactionThresholdPercent int
+	// Interceptor sets the text the model sees for each user message. Nil means
+	// the model sees the user's text as given.
+	Interceptor Interceptor
 }

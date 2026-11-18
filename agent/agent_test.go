@@ -1186,6 +1186,118 @@ func TestProcess(t *testing.T) {
 		assert.NotContains(t, fb.events, "ContextCompacted")
 		assert.Equal(t, 1, fake.chatCalls)
 	})
+
+	t.Run("sends the interceptor's text to the model as the user message", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
+		interceptor := func(_ context.Context, userInput string) string { return userInput + " with advice" }
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		expected := llm.UserMessage{Content: "hi with advice"}
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		require.Len(t, fake.calls, 1)
+		assert.Equal(t, expected, fake.calls[0][len(fake.calls[0])-1])
+	})
+
+	t.Run("sends the original text when the interceptor returns empty", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
+		interceptor := func(context.Context, string) string { return "" }
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		expected := llm.UserMessage{Content: "hi"}
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		require.Len(t, fake.calls, 1)
+		assert.Equal(t, expected, fake.calls[0][len(fake.calls[0])-1])
+	})
+
+	t.Run("keeps the interceptor's text in the conversation", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
+		interceptor := func(_ context.Context, userInput string) string { return userInput + " with advice" }
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		_, err := agt.Process(t.Context(), "hi")
+		require.NoError(t, err)
+		expected := llm.UserMessage{Content: "hi with advice"}
+		// when
+		result := agt.Messages()
+		// then
+		require.Len(t, result, 3)
+		assert.Equal(t, expected, result[1])
+	})
+
+	t.Run("passes the user's text and the context to the interceptor", func(t *testing.T) {
+		// given
+		type ctxKey string
+		key := ctxKey("k")
+		ctx := context.WithValue(t.Context(), key, "v")
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
+		var gotInput string
+		var gotValue any
+		interceptor := func(ctx context.Context, userInput string) string {
+			gotInput = userInput
+			gotValue = ctx.Value(key)
+			return ""
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		_, err := agt.Process(ctx, "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "hi", gotInput)
+		assert.Equal(t, "v", gotValue)
+	})
+
+	t.Run("does not call the interceptor when the user text is empty", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
+		calls := 0
+		interceptor := func(context.Context, string) string {
+			calls++
+			return "advice"
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		// when
+		_, err := agt.Process(t.Context(), "")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, 0, calls)
+	})
+
+	t.Run("calls the interceptor once per round, not once per model call", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{
+			replies: []*llm.AssistantMessage{
+				{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "echo"}}},
+				{Content: "done"},
+			},
+		}
+		tb := tools.NewToolBox()
+		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
+		calls := 0
+		interceptor := func(context.Context, string) string {
+			calls++
+			return ""
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys", ToolBox: tb})
+		expected := 1
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		require.Equal(t, 2, fake.chatCalls)
+		assert.Equal(t, expected, calls)
+	})
 }
 
 func TestCompactContext(t *testing.T) {
