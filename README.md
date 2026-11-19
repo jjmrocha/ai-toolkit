@@ -325,7 +325,7 @@ fmt.Println(resp.Content)
 - Before the context window is full, the agent summarizes the older turns.
 - To save a session, call `Messages`. To resume it, pass those messages in `SessionConfig.Messages`.
 - To change the model, call `ChangeModel` on the `llm.LLM`. `Agent.LLM` returns the `llm.LLM` passed to `agent.New`. The agent uses the new context window from the next turn.
-- To change what the model sees for each user message, set `Config.Interceptor`. For example, it can add the skill to load. An empty result keeps the user's text.
+- To change what the model sees for each user message, set `Config.Interceptor`. It gets a copy of the conversation so far and the user's text. For example, it can add the skill to load. An empty result keeps the user's text.
 - `agent.New` takes any `agent.Model`. An `llm.LLM` is one; a fake model lets you test an agent without a provider.
 - `Feedback` reports tool calls and session events. To handle only some events, embed `NopFeedback` in your type.
 

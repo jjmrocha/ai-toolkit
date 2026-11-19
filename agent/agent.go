@@ -266,7 +266,7 @@ func (a *Agent) intercept(ctx context.Context, userInput string) string {
 		return userInput
 	}
 
-	if text := a.config.Interceptor(ctx, userInput); text != "" {
+	if text := a.config.Interceptor(ctx, slices.Clone(a.messages), userInput); text != "" {
 		return text
 	}
 

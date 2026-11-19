@@ -190,6 +190,18 @@ func (c *Collection) Skills() []string {
 	return slices.Sorted(maps.Keys(c.skills))
 }
 
+// Description returns the description of the skill called name, as its
+// SKILL.md front matter gives it. It reports false when the collection has no
+// skill of that name.
+func (c *Collection) Description(name string) (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	s, ok := c.skills[name]
+
+	return s.description, ok
+}
+
 func (c *Collection) lookup(name string) (skill, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

@@ -226,6 +226,30 @@ func TestCollectionSkills(t *testing.T) {
 	})
 }
 
+func TestCollectionDescription(t *testing.T) {
+	t.Run("returns the description of an added skill", func(t *testing.T) {
+		// given
+		collection := NewCollection()
+		require.NoError(t, collection.Add(writeSkill(t, validSkill)))
+		expected := "Draft release notes"
+		// when
+		result, found := collection.Description(validSkillName)
+		// then
+		assert.True(t, found)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("reports false for a skill not in the collection", func(t *testing.T) {
+		// given
+		collection := NewCollection()
+		// when
+		result, found := collection.Description(validSkillName)
+		// then
+		assert.False(t, found)
+		assert.Empty(t, result)
+	})
+}
+
 func TestCollectionConcurrentUse(t *testing.T) {
 	t.Run("adds and renders from several goroutines", func(t *testing.T) {
 		// given

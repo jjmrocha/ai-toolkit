@@ -30,12 +30,14 @@ type SessionConfig struct {
 }
 
 // Interceptor sets the text the model sees for a user message. [Agent.Process]
-// calls it once per round, before the first model call, with its own ctx and
-// the user's text. The returned text becomes the user message, in the model's
-// input and in the conversation. An empty result keeps userInput. It is not
-// called when userInput is empty. It runs inside [Agent.Process], so it should
-// respect ctx and limit its own time.
-type Interceptor func(ctx context.Context, userInput string) string
+// calls it once per round, before the first model call, with its own ctx, the
+// conversation so far and the user's text. history is a copy of the messages
+// before the new one, as [Agent.Messages] returns them, so changing it does not
+// change the conversation. The returned text becomes the user message, in the
+// model's input and in the conversation. An empty result keeps userInput. It is
+// not called when userInput is empty. It runs inside [Agent.Process], so it
+// should respect ctx and limit its own time.
+type Interceptor func(ctx context.Context, history []llm.Message, userInput string) string
 
 // Config tunes an [Agent]. The zero value works: no iteration limit, the
 // default compaction threshold and no [Interceptor].

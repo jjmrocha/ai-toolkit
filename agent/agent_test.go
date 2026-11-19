@@ -1190,7 +1190,7 @@ func TestProcess(t *testing.T) {
 	t.Run("sends the interceptor's text to the model as the user message", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
-		interceptor := func(_ context.Context, userInput string) string { return userInput + " with advice" }
+		interceptor := func(_ context.Context, _ []llm.Message, userInput string) string { return userInput + " with advice" }
 		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
 		expected := llm.UserMessage{Content: "hi with advice"}
@@ -1205,7 +1205,7 @@ func TestProcess(t *testing.T) {
 	t.Run("sends the original text when the interceptor returns empty", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
-		interceptor := func(context.Context, string) string { return "" }
+		interceptor := func(context.Context, []llm.Message, string) string { return "" }
 		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
 		expected := llm.UserMessage{Content: "hi"}
@@ -1220,7 +1220,7 @@ func TestProcess(t *testing.T) {
 	t.Run("keeps the interceptor's text in the conversation", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
-		interceptor := func(_ context.Context, userInput string) string { return userInput + " with advice" }
+		interceptor := func(_ context.Context, _ []llm.Message, userInput string) string { return userInput + " with advice" }
 		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
 		agt.StartSession(SessionConfig{Prompt: "sys"})
 		_, err := agt.Process(t.Context(), "hi")
@@ -1241,7 +1241,7 @@ func TestProcess(t *testing.T) {
 		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
 		var gotInput string
 		var gotValue any
-		interceptor := func(ctx context.Context, userInput string) string {
+		interceptor := func(ctx context.Context, _ []llm.Message, userInput string) string {
 			gotInput = userInput
 			gotValue = ctx.Value(key)
 			return ""
@@ -1256,11 +1256,48 @@ func TestProcess(t *testing.T) {
 		assert.Equal(t, "v", gotValue)
 	})
 
+	t.Run("passes the conversation before the new message to the interceptor", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "first"}, {Content: "second"}}}
+		var result []llm.Message
+		interceptor := func(_ context.Context, history []llm.Message, _ string) string {
+			result = history
+			return ""
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		_, err := agt.Process(t.Context(), "hi")
+		require.NoError(t, err)
+		expected := agt.Messages()
+		// when
+		_, err = agt.Process(t.Context(), "again")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("keeps its own conversation when the interceptor changes the history", func(t *testing.T) {
+		// given
+		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
+		interceptor := func(_ context.Context, history []llm.Message, _ string) string {
+			history[0] = llm.UserMessage{Content: "changed"}
+			return ""
+		}
+		agt := agentWithLLM(fake, &recordingFeedback{}, Config{Interceptor: interceptor})
+		agt.StartSession(SessionConfig{Prompt: "sys"})
+		expected := agt.Messages()[0]
+		// when
+		_, err := agt.Process(t.Context(), "hi")
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, expected, agt.Messages()[0])
+	})
+
 	t.Run("does not call the interceptor when the user text is empty", func(t *testing.T) {
 		// given
 		fake := &fakeLLM{replies: []*llm.AssistantMessage{{Content: "done"}}}
 		calls := 0
-		interceptor := func(context.Context, string) string {
+		interceptor := func(context.Context, []llm.Message, string) string {
 			calls++
 			return "advice"
 		}
@@ -1284,7 +1321,7 @@ func TestProcess(t *testing.T) {
 		tb := tools.NewToolBox()
 		require.NoError(t, tb.Add(llm.Tool{Name: "echo"}, func(context.Context, map[string]any) (string, error) { return "ok", nil }))
 		calls := 0
-		interceptor := func(context.Context, string) string {
+		interceptor := func(context.Context, []llm.Message, string) string {
 			calls++
 			return ""
 		}
